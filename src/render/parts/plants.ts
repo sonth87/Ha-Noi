@@ -8,18 +8,19 @@
      bougain     hoa giấy           a mass of leaves and flowers spilling forward over the rail
      flower      bụi hoa            a clump dotted with flowers                                  */
 import type { Ctx } from '@render/parts/ctx';
+import type { PlantChoice, PlantKind } from '@core/types';
 import { f } from '@render/svg';
 import { blade, clump } from '@render/parts/foliage';
 
-export type PlantKind = 'bush' | 'money' | 'bamboo' | 'palm' | 'bougain' | 'flower';
 const KINDS: PlantKind[] = ['bush', 'money', 'bamboo', 'palm', 'bougain', 'flower'];
 
 /** tallest a potted plant gets above its pot's foot (keep balconies' item boxes above this) */
 export const PLANT_MAX_H = 16;
 
-export function plant(c: Ctx, a: number, b: number, z: number, size: number, kind?: PlantKind): string {
+export function plant(c: Ctx, a: number, b: number, z: number, size: number, kind: PlantChoice = 'mixed'): string {
   const r = () => c.r.next();
-  const k = kind ?? KINDS[Math.floor(r() * KINDS.length)]!;
+  const pick = KINDS[Math.floor(r() * KINDS.length)]!;   // drawn either way, so a choice never shifts the seed
+  const k: PlantKind = kind === 'mixed' ? pick : kind;
   const [x, y] = c.D.P(a, b, z + 4), s = size;   // pot rim
   let out = '';
   switch (k) {
@@ -81,6 +82,6 @@ export function plant(c: Ctx, a: number, b: number, z: number, size: number, kin
 }
 
 /** a pot with its plant, standing at (a, b, z); taller plants get a bigger pot */
-export function pot(c: Ctx, a: number, b: number, z: number, size: number, kind?: PlantKind): string {
+export function pot(c: Ctx, a: number, b: number, z: number, size: number, kind: PlantChoice = 'mixed'): string {
   return c.D.box(a - 2, b - 2, z, 4, 4, 4, 1) + plant(c, a, b, z, size, kind);
 }

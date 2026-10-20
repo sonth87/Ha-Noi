@@ -12,7 +12,7 @@ export const DEFAULTS: Defaults = {
   x: 0, y: 0, w: SIZE.tubeW, d: SIZE.tubeD, facing: 'S',
   floors: 3, basement: 0, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0, wall: 'plain', bays: 0,
   ground: 'fold', shop: true, awning: 'none', goods: 'none', trees: 'none', treeSize: 'medium', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
-  roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, stairHut: false, roofShelter: 'none', laundry: false, roofPlants: 0,
+  roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, stairHut: false, roofShelter: 'none', laundry: false, roofPlants: 0, roofPlantKind: 'mixed',
   roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0, sideAd: '', sideWindows: false,
 };
 
@@ -39,7 +39,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     const n = i + 2;   // floor number: ground = 1
     const on = merged.balconyFloors === 'all' || (merged.balconyFloors === 'odd' && n % 2 === 1) || (merged.balconyFloors === 'even' && n % 2 === 0);
     return {
-      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false, canopy: 'none', laundry: false, balconyWidth: 'full',
+      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false, canopy: 'none', laundry: false, balconyWidth: 'full', plantKind: 'mixed',
       ...preset.upper?.[i], ...input.upper?.[i],
     } as FloorSpec;
   });
@@ -55,7 +55,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     signs: [...merged.signs], stickers: clampInt(merged.stickers, 0, 4, 'stickers', warn),
     upper,
     roof: merged.roof, topRoom: merged.topRoom, topSetback: merged.topSetback, parapet: merged.parapet, stairHut: merged.stairHut, roofShelter: merged.roofShelter,
-    laundry: merged.laundry, roofPlants: clampInt(merged.roofPlants, 0, 3, 'roofPlants', warn),
+    laundry: merged.laundry, roofPlants: clampInt(merged.roofPlants, 0, 3, 'roofPlants', warn), roofPlantKind: merged.roofPlantKind,
     roofItems: [...merged.roofItems], sideAC: clampInt(merged.sideAC, 0, 3, 'sideAC', warn),
     sideEnd: merged.sideEnd, sideClear: Math.max(0, merged.sideClear), sideAd: merged.sideAd, sideWindows: merged.sideWindows,
   };

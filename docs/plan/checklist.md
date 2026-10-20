@@ -138,6 +138,8 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý: thêm ban công mặt kính → `balcony: 'glass'`
 - [x] Góp ý: cây vỉa hè "như chùm bóng bay" → tán là đống cụm lá viền múi mây, thân thon + cành, cây to hơn hẳn; tự soát hình bằng `qlmanage` qua 3 vòng trước khi gửi
 - [x] Sửa: biển tròn hiện cả tên quán tràn ra ngoài → 1 ký tự
+- [x] Góp ý: cây vỉa hè "tán 1 thể, đừng tròn tròn mấy cục" → `canopy()` một viền liền; cây ban công "ok rồi"
+- [x] Góp ý: chọn được loại cây ban công → `plantKind` theo tầng, `roofPlantKind` cho sân thượng / mái; ô chọn trong Xưởng nhà
 - [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 

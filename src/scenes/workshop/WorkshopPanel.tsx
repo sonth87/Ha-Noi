@@ -5,7 +5,7 @@ import { useController } from '@hooks/useController';
 import { PRESETS, PRESET_IDS, type PresetId } from '@core/presets';
 import { LIMITS } from '@core/spec';
 import type {
-  AwningKind, BalconyKind, Canopy, Goods, GroundKind, RoofItem, RoofKind, RoofShelter, SignKind, SignSpec, WallFinish, WindowKind,
+  AwningKind, BalconyKind, Canopy, Goods, PlantChoice, GroundKind, RoofItem, RoofKind, RoofShelter, SignKind, SignSpec, WallFinish, WindowKind,
 } from '@core/types';
 import type { SceneController } from '@scenes/controller';
 import type { WorkshopController } from '@scenes/workshop/workshopController';
@@ -24,6 +24,7 @@ const SIGNS: [SignKind, string, string][] = [
   ['projecting-vertical', 'Biển dọc chìa', 'chữ dọc'], ['projecting-round', 'Biển tròn chìa', 'ký hiệu'],
   ['standee', 'Biển đứng (standee)', 'MENU'], ['barber-pole', 'Cột xoắn barber', ''], ['billboard', 'Biển lớn trên cao', 'DÒNG 1|DÒNG 2'],
 ];
+const PLANTS: [PlantChoice, string][] = [['mixed', 'Hỗn hợp (ngẫu nhiên)'], ['bush', 'Bụi lá'], ['money', 'Kim tiền'], ['bamboo', 'Trúc'], ['palm', 'Cau cảnh'], ['bougain', 'Hoa giấy rủ'], ['flower', 'Bụi hoa']];
 const ITEMS: [RoofItem, string][] = [['tank-h', 'Bồn inox nằm'], ['tank-v', 'Bồn đứng'], ['solar', 'Máy NLMT'], ['antenna', 'Ăng-ten'], ['ac', 'Cục nóng'], ['flag', 'Cột cờ']];
 
 const m = (u: number) => `${(u / 10).toFixed(1)} m`;
@@ -154,6 +155,7 @@ export function WorkshopPanel({ controller }: { controller: SceneController }) {
               {fl.balcony !== 'none' && <Select label="Độ dài" value={fl.balconyWidth} options={[['full', 'Dài hết mặt tiền'], ['short', 'Ngắn, quanh cửa']]} onChange={balconyWidth => c.patchFloor(i, { balconyWidth })} />}
               <Select label="Che cửa sổ" value={fl.canopy} options={CANOPY} onChange={canopy => c.patchFloor(i, { canopy })} />
               <Range label="Chậu cây" value={fl.plants} min={0} max={3} onChange={plants => c.patchFloor(i, { plants })} />
+              {fl.plants > 0 && fl.balcony !== 'none' && <Select label="Loại cây" value={fl.plantKind} options={PLANTS} onChange={plantKind => c.patchFloor(i, { plantKind })} />}
               <Check label="Phơi quần áo ở ban công" checked={fl.laundry} onChange={laundry => c.patchFloor(i, { laundry })} />
               <Check label="Cục nóng mặt tiền (khi không có ban công)" checked={fl.ac} onChange={ac => c.patchFloor(i, { ac })} />
             </div>
@@ -170,6 +172,7 @@ export function WorkshopPanel({ controller }: { controller: SceneController }) {
         <Range label="Tường chắn" value={s.parapet} min={0} max={12} fmt={m} onChange={parapet => c.patch({ parapet })} />
         <Check label="Dây phơi trên sân thượng" checked={s.laundry} onChange={laundry => c.patch({ laundry })} />
         <Range label="Chậu cây" value={s.roofPlants} min={0} max={3} onChange={roofPlants => c.patch({ roofPlants })} />
+        {s.roofPlants > 0 && <Select label="Loại cây" value={s.roofPlantKind} options={PLANTS} onChange={roofPlantKind => c.patch({ roofPlantKind })} />}
         <div className="ws-grid">
           {ITEMS.map(([k, t]) => (
             <Check key={k} label={t} checked={s.roofItems.includes(k)} onChange={on => c.patch({ roofItems: toggle(s.roofItems, k, on) })} />

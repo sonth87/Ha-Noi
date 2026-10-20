@@ -15,7 +15,7 @@ describe('resolveSpec', () => {
   it('applies preset, then input, per floor too', () => {
     const { spec } = resolveSpec({ id: 'h2', preset: 'nha-mau', upper: [{ plants: 0 }] });
     expect(spec.shopName).toBe('CÀ PHÊ');
-    expect(spec.upper[0]).toEqual({ window: 'glass-doors', balcony: 'rail', plants: 0, ac: false, canopy: 'none', laundry: false, balconyWidth: 'full' });
+    expect(spec.upper[0]).toEqual({ window: 'glass-doors', balcony: 'rail', plants: 0, ac: false, canopy: 'none', laundry: false, balconyWidth: 'full', plantKind: 'mixed' });
     expect(spec.upper[1]!.balcony).toBe('cage');
     expect(spec.upper[2]!.ac).toBe(true);
   });

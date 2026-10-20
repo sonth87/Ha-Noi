@@ -26,7 +26,7 @@ function flat(c: Ctx): void {
     wall('parapet-l', 0, T, T, L - 2 * T);
     wall('parapet-r', W - T, T, T, L - 2 * T);
     wall('parapet-front', 0, L - T, W, T);
-    for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 2, L - 10, z, 4, 4, 20, pot(c, T + 3 + i * 8, L - 8, z, 3));
+    for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 2, L - 10, z, 4, 4, 20, pot(c, T + 3 + i * 8, L - 8, z, 3, s.roofPlantKind));
     // tum thang: a small stair hut in the back corner
     const hut = s.stairHut ? { a: T + 0.6, b: T + 0.6, la: Math.min(14, W - 2 * T - 3), lb: 20 } : null;   // its cap overhangs 0.6, up to the parapets
     if (hut) {
@@ -65,7 +65,7 @@ function flat(c: Ctx): void {
   const spots: [number, number, number][] = [[7, 9, 3.4], [14, 17, 2.6], [8, 4, 2.4]];
   for (let i = 0; i < s.roofPlants; i++) {
     const [pa, pb, sz] = spots[i]!;
-    if (rb1 + pb + 2.5 < L - T) c.add(`terrace-pot-${i}`, pa - 2, rb1 + pb - 2, z, 4, 4, 20, pot(c, pa, rb1 + pb, z, sz + 0.4));
+    if (rb1 + pb + 2.5 < L - T) c.add(`terrace-pot-${i}`, pa - 2, rb1 + pb - 2, z, 4, 4, 20, pot(c, pa, rb1 + pb, z, sz + 0.4, s.roofPlantKind));
   }
   if (s.laundry) {
     const lb = rb1 + 9, x0 = W * 0.55, x1 = W * 0.9, zt = z + 15;

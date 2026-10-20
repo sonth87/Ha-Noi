@@ -38,6 +38,7 @@
 | Quảng cáo sơn tường | `sideAd` | Chữ sơn trên tường hồi |
 | Cây trước nhà | `trees`, `treeSize` | Cây ở mép vỉa hè trước mỗi nhà: trái / phải / hai bên, nhỏ / vừa / to |
 | Ban công ngắn | `balconyWidth: 'short'` | Ban công chỉ rộng hơn ô cửa một chút |
+| Loại cây chậu | `plantKind` | Bụi lá, kim tiền, trúc, cau cảnh, hoa giấy, bụi hoa |
 | Tường hồi | `side wall` (`back.ts`) | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
 | Mặt tiền | `facade` | Mặt nhà quay ra phố |
 | Vỉa hè / bó vỉa | `sidewalk` / `curb` | |

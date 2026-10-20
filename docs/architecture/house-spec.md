@@ -84,7 +84,8 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `balconyWidth` | `'full'\|'short'` | `'full'` | Ban công dài hết mặt tiền, hoặc **ngắn**: rộng hơn ô cửa một chút, mỗi gian một cái (áp cho lan can sắt, lan can xây, chuồng cọp) |
 | `canopy` | `'none'\|'concrete'\|'metal'` | `'none'` | Ô văng bê tông hoặc mái tôn nhỏ che cửa sổ (không đi với chuồng cọp) |
 | `laundry` | bool | false | Quần áo phơi ở ban công (cần ban công) |
-| `plants` | int 0–3 | 1 | Số chậu cây trên ban công. Cây cao vượt lan can, loại cây chọn theo seed: bụi lá, kim tiền, trúc, cau cảnh, hoa giấy rủ, bụi hoa |
+| `plants` | int 0–3 | 1 | Số chậu cây trên ban công. Cây cao vượt lan can |
+| `plantKind` | `'mixed'\|'bush'\|'money'\|'bamboo'\|'palm'\|'bougain'\|'flower'` | `'mixed'` | Loại cây: hỗn hợp theo seed, hoặc một loại: bụi lá, kim tiền, trúc, cau cảnh, hoa giấy rủ, bụi hoa |
 | `ac` | bool | false | Cục nóng điều hòa treo ngoài mặt tiền. **Chỉ vẽ khi tầng không có ban công** |
 
 Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plants`, và `balconyFloors: 'all' | 'odd' | 'even' | 'none'`. Số tầng được đánh từ tầng 1, nên `'odd'` nghĩa là các tầng 3, 5, 7.
@@ -100,6 +101,7 @@ Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plan
 | `roofShelter` | `'none'\|'terrace'\|'full'` | `'none'` | **Mái tôn tam giác** (2 dốc, nóc chạy dọc chiều sâu, đầu hồi tam giác hướng ra phố, để hở thấy khung vì kèo) trên cột sắt mảnh. `terrace`: che sân thượng trước phòng tum, **cao hơn trần tum một chút**, 4 cột trên tường chắn hai bên sân thượng. `full`: che toàn bộ mái bằng khi không có tum (4 cột), chừa dải phía sau cho bồn nước/ăng-ten. Nhiều nhà ống có, nhiều nhà không |
 | `laundry` | bool | false | Dây phơi quần áo trên sân thượng (cần `topRoom`) |
 | `roofPlants` | int 0–3 | 0 | Chậu cây trên sân thượng hoặc mái |
+| `roofPlantKind` | như `plantKind` | `'mixed'` | Loại cây trên sân thượng / mái |
 | `roofItems` | `RoofItem[]` | `['tank-h']` | `'tank-h'` bồn inox nằm, `'tank-v'` bồn đứng, `'solar'` máy NLMT, `'antenna'` ăng-ten, `'ac'` cục nóng, `'flag'` cột cờ. Một bộ xếp chỗ đặt từng thứ: thử vị trí quen trước, rồi tìm chỗ trống, hết chỗ thì bỏ. Dưới mái tôn che cả mái chỉ đặt vật thấp hơn mép mái. Có `topRoom` thì vật đặt trên mái phòng tum |
 
 ### 2.6 Tường hồi

@@ -81,3 +81,41 @@ export function blade(x: number, y: number, l: number, deg: number, w = 0.32): s
 export function trunk(x: number, y0: number, x2: number, y1: number, w0: number, w1: number): string {
   return `<path class="face trunk" d="M${f(x - w0)} ${f(y0)}L${f(x2 - w1)} ${f(y1)}L${f(x2 + w1)} ${f(y1)}L${f(x + w0)} ${f(y0)}Z"/>`;
 }
+
+/** One-piece tree canopy (user feedback: "one mass, not round lumps"): a single organic outline —
+    an ellipse with a flatter underside, bent by a few gentle low-frequency waves so every crown is
+    a little lopsided, its edge finely serrated like leaves — then an underside shadow line and
+    leaf strokes that thicken toward the shaded lower right. */
+export function canopy(cx: number, cy: number, rx: number, ryTop: number, ryBot: number, r: Rand): string {
+  const N = 72, ph = [r() * 6.3, r() * 6.3, r() * 6.3], amp = [0.07 + r() * 0.03, 0.05 + r() * 0.03, 0.035];
+  const at = (t: number, k = 1): [number, number] => {
+    const m = 1 + amp[0]! * Math.sin(2 * t + ph[0]!) + amp[1]! * Math.sin(3 * t + ph[1]!) + amp[2]! * Math.sin(5 * t + ph[2]!);
+    const sy = Math.sin(t), ry = sy > 0 ? ryBot : ryTop;
+    return [cx + Math.cos(t) * rx * m * k, cy + sy * ry * m * k];
+  };
+  // outline: fine serration, alternating a hair in and out
+  let d = '';
+  for (let i = 0; i < N; i++) {
+    const [x, y] = at((i / N) * Math.PI * 2, i % 2 ? 0.975 : 1.012);
+    d += `${i ? 'L' : 'M'}${f(x)} ${f(y)}`;
+  }
+  let s = `<path class="face crown" d="${d}Z"/>`;
+  // underside shadow: a wavy line following the lower edge, inside it
+  let sh = '';
+  for (let i = 0; i <= 18; i++) {
+    const t = 0.12 * Math.PI + (i / 18) * 0.78 * Math.PI, [x, y] = at(t, 0.8 + 0.03 * Math.sin(i * 1.7));
+    sh += `${i ? 'L' : 'M'}${f(x)} ${f(y)}`;
+  }
+  s += `<path class="leaf-line" d="${sh}"/>`;
+  // leaf strokes: small open arcs, denser toward the lower right (away from the light)
+  let ticks = '';
+  const n = Math.round((rx * (ryTop + ryBot)) / 7);
+  for (let i = 0; i < n; i++) {
+    const t = r() * Math.PI * 2, d0 = Math.sqrt(r()) * 0.85, [x, y] = at(t, d0);
+    const shade = (Math.cos(t) + Math.sin(t)) * d0;   // > 0 on the lower right
+    if (shade < -0.2 && r() < 0.55) continue;
+    const l = 0.6 + r() * 0.9;
+    ticks += `M${f(x - l)} ${f(y)}q${f(l * 0.5)} ${f(l * 0.7)} ${f(l * 2)} ${f(-l * 0.1)}`;
+  }
+  return s + `<path class="leaf-line" d="${ticks}"/>`;
+}

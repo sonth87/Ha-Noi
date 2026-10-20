@@ -30,6 +30,9 @@ export type RoofKind = 'flat' | 'metal2' | 'metal1' | 'tile';
 export type WallFinish = 'plain' | 'tile' | 'paint-old' | 'stone-base';
 /** ô văng: a small concrete or metal canopy over a floor's window */
 export type Canopy = 'none' | 'concrete' | 'metal';
+/** kinds of potted plant (render/parts/plants.ts); 'mixed' = picked by the seed */
+export type PlantKind = 'bush' | 'money' | 'bamboo' | 'palm' | 'bougain' | 'flower';
+export type PlantChoice = 'mixed' | PlantKind;
 /** what the shop puts out on the sidewalk */
 export type Goods = 'none' | 'stools' | 'bikes' | 'crates';
 /** corrugated metal sheet on thin posts over a flat roof: over the terrace in front of the roof room, or over the whole roof */
@@ -49,6 +52,8 @@ export interface FloorSpec {
   balcony: BalconyKind;
   /** pots on this floor's balcony, 0–3 */
   plants: number;
+  /** which plant grows in them */
+  plantKind: PlantChoice;
   /** outdoor AC unit on the facade below this floor's window */
   ac: boolean;
   /** balcony across the whole frontage, or short: a little wider than the window, one per bay */
@@ -117,6 +122,7 @@ export interface HouseSpec {
   laundry: boolean;
   /** pots on the terrace / roof, 0–3 */
   roofPlants: number;
+  roofPlantKind: PlantChoice;
   roofItems: RoofItem[];
 
   /** AC units hung on the exposed side wall, 0–3 */

@@ -2,14 +2,14 @@
    large, on the left, right or both ends of the frontage as seen from the street. They stand past
    the house's REACH (1.9 m), on the curb side of the sidewalk, so they never meet balconies or
    signs; a large tree's crown spreads along the street and out over the road edge instead.
-   Drawn as a tapered trunk with branches showing under a crown of one to three big leafy clumps
-   (user feedback: separate round circles looked like a bunch of balloons). Two habits, by seed:
+   Drawn as a tapered trunk with branches showing under ONE canopy (user feedback: separate round
+   circles looked like balloons, a heap of clumps like round lumps). Two habits, by seed:
      dome    bàng, sấu        wide rounded crown
      tall    xà cừ, dầu       taller, narrower crown on a long trunk                          */
 import type { Ctx } from '@render/parts/ctx';
 import { TREE } from '@core/units';
 import { f } from '@render/svg';
-import { clump, trunk } from '@render/parts/foliage';
+import { canopy, trunk } from '@render/parts/foliage';
 
 type Size = 'small' | 'medium' | 'large';
 
@@ -41,15 +41,7 @@ function tree(c: Ctx, a: number, b: number, size: Size, i: number): void {
     const dx = (j - (nb - 1) / 2) * crx * 0.55, by = top + cry * 0.15;
     svg += `<path class="mast branch" d="M${f(cx)} ${f(top + cry * 0.25)}Q${f(cx + dx * 0.4)} ${f(by)} ${f(cx + dx)} ${f(cy - cry * 0.2)}"/>`;
   }
-  // the crown is a heap of clumps, not one disc: top and back ones first, the lower front ones last,
-  // each jittered so no two trees share a silhouette (x, y as fractions of the crown; rx, ry of it too)
-  const heap: [number, number, number, number][] = size === 'small'
-    ? [[-0.35, -0.2, 0.6, 0.55], [0.35, -0.25, 0.6, 0.55], [0, 0.15, 0.7, 0.55]]
-    : [[-0.5, -0.2, 0.5, 0.45], [0.5, -0.25, 0.5, 0.45], [-0.15, -0.55, 0.55, 0.45], [0.3, -0.5, 0.48, 0.42],
-       [0, -0.05, 0.62, 0.52], [-0.4, 0.3, 0.48, 0.38], [0.38, 0.28, 0.5, 0.38]];
-  for (const [hx, hy, hrx, hry] of heap) {
-    const jx = (r() - 0.5) * 0.12, jy = (r() - 0.5) * 0.1;
-    svg += clump(cx + (hx + jx) * crx, cy + (hy + jy) * cry, hrx * crx, hry * cry, r);
-  }
+  // one canopy: dome trees spread wide with a flat underside, tall ones rise narrower
+  svg += tall ? canopy(cx, cy - cry * 0.15, crx, cry * 1.0, cry * 0.6, r) : canopy(cx, cy - cry * 0.1, crx * 1.05, cry * 0.95, cry * 0.5, r);
   c.add(`tree-${i}`, a - k.ra, b - k.rb, z0, 2 * k.ra, 2 * k.rb, k.zc + k.rz - z0, svg);
 }

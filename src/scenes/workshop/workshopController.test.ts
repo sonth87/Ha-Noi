@@ -63,6 +63,18 @@ describe('workshop controller', () => {
     expect(c.getSnapshot().svg).not.toMatch(/NaN|undefined/);
   });
 
+  it('grows the chosen plant on a balcony, leaving everything else as it was', () => {
+    const c = new WorkshopController();
+    c.patchFloor(0, { plants: 2, plantKind: 'bamboo' });
+    const bamboo = c.getSnapshot().svg;
+    c.patchFloor(0, { plantKind: 'palm' });
+    const palm = c.getSnapshot().svg;
+    expect(bamboo).not.toBe(palm);
+    // the choice never shifts the seed: the roof (drawn after the balconies) is identical
+    const roof = (svg: string) => svg.slice(svg.indexOf('class="cylinder') >= 0 ? svg.indexOf('class="cylinder') : svg.length - 2000);
+    expect(roof(bamboo)).toBe(roof(palm));
+  });
+
   it('switches preset and makes random houses', () => {
     const c = new WorkshopController();
     c.setPreset('cap4-metal');

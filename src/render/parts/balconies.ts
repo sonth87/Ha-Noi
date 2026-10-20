@@ -67,7 +67,7 @@ function balconySpan(c: Ctx, n: number, fl: FloorSpec, a0: number, w: number, ta
   if (fl.balcony === 'rail' || fl.balcony === 'solid' || fl.balcony === 'glass') {
     const rh = 11, ra = a0 + 2, rw = w - 4;
     let svg = D.box(ra, b, z, rw, OUT, 2);
-    for (let i = 0; i < plants; i++) { const [pa, sz] = spots[i]!; svg += pot(c, ra + pa, b + OUT - 3.5, z + 2, sz); }
+    for (let i = 0; i < plants; i++) { const [pa, sz] = spots[i]!; svg += pot(c, ra + pa, b + OUT - 3.5, z + 2, sz, fl.plantKind); }
     svg += dry;
     if (fl.balcony === 'rail') svg += onOpenSides(c, ra, b, z + 2, rw, OUT, rh, len => railBars(len, rh));
     else if (fl.balcony === 'glass') svg += onOpenSides(c, ra, b, z + 2, rw, OUT, rh, len => glassPanels(len, rh));
@@ -81,7 +81,7 @@ function balconySpan(c: Ctx, n: number, fl: FloorSpec, a0: number, w: number, ta
   } else {
     const h = s.floorH - 2, ca = a0 + 1, cw = w - 2;
     let svg = D.box(ca, b, z, cw, OUT, 2);
-    if (fl.plants > 0) svg += pot(c, ca + cw - 6, b + 4, z + 2, 2.4);
+    if (fl.plants > 0) svg += pot(c, ca + cw - 6, b + 4, z + 2, 2.4, fl.plantKind);
     svg += dry;
     svg += onOpenSides(c, ca, b, z + 2, cw, OUT, h - 2, len => cageGrid(len, h - 4));
     svg += D.box(ca - 0.8, b, z + h - 1.5, cw + 1.6, OUT + 1.2, 1.5);
