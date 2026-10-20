@@ -140,6 +140,7 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Sửa: biển tròn hiện cả tên quán tràn ra ngoài → 1 ký tự
 - [x] Góp ý: cây vỉa hè "tán 1 thể, đừng tròn tròn mấy cục" → `canopy()` một viền liền; cây ban công "ok rồi"
 - [x] Góp ý: chọn được loại cây ban công → `plantKind` theo tầng, `roofPlantKind` cho sân thượng / mái; ô chọn trong Xưởng nhà
+- [x] Góp ý: tán "như cục cơm nắm" → tán ghép từ mảng lá theo cành, hợp thành một viền (kỹ thuật viền dày + nền đè); tán hạ thấp, to và rộng hơn; khe đáy tán cho thấy chỗ chia cành; tự soát bằng bảng thử cây + ảnh phố
 - [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 

@@ -2,14 +2,14 @@
    large, on the left, right or both ends of the frontage as seen from the street. They stand past
    the house's REACH (1.9 m), on the curb side of the sidewalk, so they never meet balconies or
    signs; a large tree's crown spreads along the street and out over the road edge instead.
-   Drawn as a tapered trunk with branches showing under ONE canopy (user feedback: separate round
-   circles looked like balloons, a heap of clumps like round lumps). Two habits, by seed:
-     dome    bàng, sấu        wide rounded crown
-     tall    xà cừ, dầu       taller, narrower crown on a long trunk                          */
+   Drawn as a tapered trunk forking into limbs under ONE canopy built from leaf masses on the
+   limbs (foliage.ts → crown). Two habits, by seed:
+     spread  bàng, xà cừ      wide, lower tier drooping
+     round   sấu, nhội        a little narrower and fuller                                     */
 import type { Ctx } from '@render/parts/ctx';
 import { TREE } from '@core/units';
 import { f } from '@render/svg';
-import { canopy, trunk } from '@render/parts/foliage';
+import { crown, trunk } from '@render/parts/foliage';
 
 type Size = 'small' | 'medium' | 'large';
 
@@ -24,24 +24,18 @@ export function streetTrees(c: Ctx): void {
 
 function tree(c: Ctx, a: number, b: number, size: Size, i: number): void {
   const { D } = c, k = TREE[size], z0 = 2, r = () => c.r.next();
-  const habit = r() < 0.55 ? 'dome' : 'tall';
+  const habit = r() < 0.6 ? 'spread' : 'round';
   const [fx, fy] = D.P(a, b, z0 + 0.6), [cx, cy] = D.P(a, b, k.zc);
-  // crown size on screen from the world half-extents (an ellipsoid seen from the iso direction)
-  const rx = 0.85 * k.ra + 0.5 * k.rb, ry = k.rz * 0.95;
-  const w0 = size === 'large' ? 2.2 : size === 'medium' ? 1.5 : 1;
-
-  let svg = D.box(a - 2.5, b - 2.5, z0, 5, 5, 0.6);
-
-  const tall = habit === 'tall', crx = tall ? rx * 0.78 : rx, cry = tall ? ry * 1.12 : ry * 0.88;
-  const top = cy + cry * 0.35;
-  svg += trunk(fx, fy, cx, top, w0, w0 * 0.45);
-  // branches fanning up into the crown, visible below its edge
-  const nb = size === 'small' ? 2 : 3;
-  for (let j = 0; j < nb; j++) {
-    const dx = (j - (nb - 1) / 2) * crx * 0.55, by = top + cry * 0.15;
-    svg += `<path class="mast branch" d="M${f(cx)} ${f(top + cry * 0.25)}Q${f(cx + dx * 0.4)} ${f(by)} ${f(cx + dx)} ${f(cy - cry * 0.2)}"/>`;
-  }
-  // one canopy: dome trees spread wide with a flat underside, tall ones rise narrower
-  svg += tall ? canopy(cx, cy - cry * 0.15, crx, cry * 1.0, cry * 0.6, r) : canopy(cx, cy - cry * 0.1, crx * 1.05, cry * 0.95, cry * 0.5, r);
+  // crown size on screen from the world half-extents
+  const rx = 0.95 * k.ra + 0.5 * k.rb, ry = k.rz * 0.92;
+  const w0 = size === 'large' ? 2.6 : size === 'medium' ? 1.8 : 1.2;
+  const { svg: crownSvg, limbs } = crown(cx, cy, rx * (habit === 'spread' ? 1 : 0.86), ry, r, habit === 'spread' ? 1.05 : 0.9);
+  // trunk up to the fork, low in the crown; limbs fan out into it (mostly hidden, they show under the canopy)
+  const forkY = cy + ry * 0.55;   // in the bay under the crown, so the fork shows
+  let svg = D.box(a - 2.5, b - 2.5, z0, 5, 5, 0.6) + trunk(fx, fy, cx, forkY, w0, w0 * 0.6);
+  svg += `<path class="limb" d="${limbs.map(([lx, ly]) => `M${f(cx)} ${f(forkY + 0.5)}Q${f((cx + lx) / 2)} ${f(forkY - (forkY - ly) * 0.2)} ${f(lx)} ${f(ly)}`).join('')}"/>`;
+  svg += crownSvg;
+  // the fork stays visible: the first stretch of each limb drawn over the underside of the crown
+  svg += `<path class="limb" d="${limbs.map(([lx, ly]) => { const ex = cx + (lx - cx) * 0.38, ey = forkY + (ly - forkY) * 0.38; return `M${f(cx)} ${f(forkY + 0.5)}Q${f((cx + ex) / 2)} ${f(forkY - (forkY - ey) * 0.3)} ${f(ex)} ${f(ey)}`; }).join('')}"/>`;
   c.add(`tree-${i}`, a - k.ra, b - k.rb, z0, 2 * k.ra, 2 * k.rb, k.zc + k.rz - z0, svg);
 }

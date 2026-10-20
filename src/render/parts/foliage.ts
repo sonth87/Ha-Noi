@@ -119,3 +119,67 @@ export function canopy(cx: number, cy: number, rx: number, ryTop: number, ryBot:
   }
   return s + `<path class="leaf-line" d="${ticks}"/>`;
 }
+
+/** A street-tree crown the way illustrators draw them: leaf masses hung on the branch ends (a
+    wide, slightly drooping lower tier, a middle tier, a small top), joined into ONE silhouette —
+    every mass is drawn twice, first with a thick edge, then fill-only on top, so only the outer
+    boundary of the union survives. The result is one canopy with notches and bays, not a ball
+    (user feedback on earlier tries: balloons, lollipop, lumps, "a rice ball").
+    `spread` > 1 widens the crown (bàng), < 1 narrows it (sấu). Returns the crown and the points
+    where the limbs should end, so the trunk can branch into it. */
+export function crown(cx: number, cy: number, rx: number, ry: number, r: Rand, spread = 1): { svg: string; limbs: [number, number][] } {
+  const J = (k: number) => (r() - 0.5) * k;
+  type Mass = [number, number, number, number];
+  const masses: Mass[] = [];
+  const tier = (n: number, y: number, xSpan: number, rad: number, droop: number) => {
+    for (let i = 0; i < n; i++) {
+      const u = n === 1 ? 0 : (i / (n - 1)) * 2 - 1;                    // −1 … 1 across the tier
+      const x = cx + (u * xSpan + J(0.14)) * rx * spread;
+      const yy = cy + (y + Math.abs(u) * droop + J(0.1)) * ry;
+      const rr = rad * (0.85 + r() * 0.3);
+      masses.push([x, yy, rr * rx * (0.9 + r() * 0.25), rr * ry * (0.75 + r() * 0.2)]);
+    }
+  };
+  tier(3, -0.52, 0.32, 0.34, 0.12);   // top
+  tier(4, -0.12, 0.6, 0.4, 0.1);      // middle
+  // lower tier in two halves, leaving a bay in the middle of the underside where the trunk forks
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 2; i++) {
+      const u = side * (0.38 + i * 0.42), x = cx + (u + J(0.1)) * rx * spread, yy = cy + (0.3 + Math.abs(u) * 0.14 + J(0.08)) * ry;
+      const rr = 0.34 * (0.85 + r() * 0.3);
+      masses.push([x, yy, rr * rx * (0.9 + r() * 0.25), rr * ry * (0.75 + r() * 0.2)]);
+    }
+  }
+  const edge = (m: Mass) => {
+    const [x, y, a, b] = m, N = 26;
+    let d = '';
+    for (let i = 0; i < N; i++) {
+      const t = (i / N) * Math.PI * 2, k = i % 2 ? 0.965 : 1.02;
+      d += `${i ? 'L' : 'M'}${f(x + Math.cos(t) * a * k)} ${f(y + Math.sin(t) * b * k)}`;
+    }
+    return d + 'Z';
+  };
+  const paths = masses.map(edge);
+  let svg = `<g class="crown-union">${paths.map(d => `<path class="crown-edge" d="${d}"/>`).join('')}${paths.map(d => `<path class="crown-fill" d="${d}"/>`).join('')}</g>`;
+  // volume: short scalloped shadow arcs under the lower masses, leaf strokes denser low and right
+  let shade = '', ticks = '';
+  for (const [x, y, a, b] of masses.slice(7)) {
+    const t0 = 0.25, t1 = 2.6;
+    shade += `M${f(x + Math.cos(t0) * a * 0.82)} ${f(y + Math.sin(t0) * b * 0.82)}`;
+    for (let i = 1; i <= 4; i++) { const t = t0 + (t1 - t0) * i / 4, tm = t - (t1 - t0) / 8; shade += `Q${f(x + Math.cos(tm) * a * 0.92)} ${f(y + Math.sin(tm) * b * 0.92)} ${f(x + Math.cos(t) * a * 0.82)} ${f(y + Math.sin(t) * b * 0.82)}`; }
+  }
+  for (const [x, y, a, b] of masses) {
+    const n = Math.round((a * b) / 9) + 1;
+    for (let i = 0; i < n; i++) {
+      const t = r() * Math.PI * 2, d0 = Math.sqrt(r()) * 0.8;
+      if (Math.sin(t) + Math.cos(t) < -0.4 && r() < 0.6) continue;
+      const px = x + Math.cos(t) * a * d0, py = y + Math.sin(t) * b * d0, l = 0.5 + r() * 0.8;
+      ticks += `M${f(px - l)} ${f(py)}q${f(l * 0.5)} ${f(l * 0.7)} ${f(l * 2)} ${f(-l * 0.1)}`;
+    }
+  }
+  svg += `<path class="leaf-line" d="${shade}${ticks}"/>`;
+  // limbs: into the inner masses of each lower half, and up through the middle
+  const lower = masses.slice(7);
+  const limbs: [number, number][] = [[lower[0]![0], lower[0]![1]], [cx + J(rx * 0.15), cy - ry * 0.2], [lower[2]![0], lower[2]![1]]];
+  return { svg, limbs };
+}

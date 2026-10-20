@@ -54,7 +54,7 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `shop` | bool | true | Đang mở hàng: cửa mở, lòng nhà sáng. `false` thì cửa xếp hoặc cửa cuốn đóng kín |
 | `awning` | `'none'\|'fabric'\|'metal'` | `'none'` | Mái hiên bạt có diềm lượn sóng / mái hiên tôn |
 | `trees` | `'none'\|'left'\|'right'\|'both'` | `'none'` | **Cây trước nhà** ở mép vỉa hè (trái / phải nhìn từ phố, hoặc hai bên). Đứng ngoài tầm 1.9 m của nhà nên không đụng ban công, biển |
-| `treeSize` | `'small'\|'medium'\|'large'` | `'medium'` | Nhỏ (tán ~0.8 m, cao ~2.6 m) / vừa (tán ~1.2 m, cao ~4.2 m) / to (tán dài 2.4 m dọc phố, vươn ra mép đường, cao ~6.2 m) |
+| `treeSize` | `'small'\|'medium'\|'large'` | `'medium'` | Tán bắt đầu thấp và chiếm phần lớn chiều cao. Nhỏ: tán 1.6 m, cao ~3 m. Vừa: tán 2.6 m, cao ~4.8 m. To: tán 4.4 m dọc phố, từ ~2 m lên ~6.8 m (dưới dây điện) |
 | `goods` | `'none'\|'stools'\|'bikes'\|'crates'` | `'none'` | Bày ra vỉa hè: bàn ghế nhựa / xe máy dựng vuông góc lề / két bia, thùng hàng. Chỉ ở 60% mặt tiền bên trái, trong tầm 1.9 m |
 | `shopName` | string | `'TẠP HÓA'` | Chữ mặc định trên biển. Chữ tự đặt, không thương hiệu |
 | `signs` | `SignSpec[]` | `[{ type: 'facade' }]` | Danh sách biển, theo [components](components.md) mục A9 |

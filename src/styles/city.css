@@ -98,3 +98,9 @@
   .fl .win, .sign-board, .lamp .bulb, .bb-face, .bb-text { transition:none; }
   .fl.on .barber-stripes { animation:none; }
 }
+
+/* street-tree crown: masses drawn edge-first then fill-only, so only the union's outline shows;
+   the edge is 2 px wide so the 1 px outer half stays (non-scaling) */
+.crown-edge { fill:var(--deck); stroke:var(--ink); stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.crown-fill { fill:var(--deck); stroke:none; }
+.limb { fill:none; stroke:var(--ink); stroke-width:1.2; vector-effect:non-scaling-stroke; stroke-linecap:round; }
