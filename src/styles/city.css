@@ -1,0 +1,68 @@
+/* Shared classes for city scenes (docs/ai/conventions.md §7). Colours only through tokens;
+   every stroke non-scaling. Only what is live gets the accent. */
+
+/* ---------- floors and windows ---------- */
+.fl { cursor:pointer; }
+.fl .win { fill:var(--recess); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .25s, opacity .25s; }
+.fl:hover .win { stroke:var(--ink); }
+.fl.on .win { fill:var(--accent); stroke:var(--accent-hi); }
+.fl.on .win.hi { fill:var(--accent-hi); }
+.fl.on .win.dim { opacity:.45; }
+.fl.on .win.off { fill:var(--recess); stroke:var(--detail); }
+.fl.on .lights { filter:url(#soft); }
+.fl.on .halo { opacity:.38; }
+.house { cursor:pointer; }
+.mull { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+
+/* ---------- shop signs: lightboxes, solid accent when their shop is lit ----------
+   A sign inside a floor group lights with that floor (.fl.on); a sign drawn elsewhere carries
+   data-for="<floor id>" and gets .on from the controller (.lightbox.on). */
+.sign-board { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .3s; }
+:root { --sign-font:"Be Vietnam Pro", system-ui, sans-serif; }
+.sign-text { fill:var(--ink); font-family:var(--sign-font); font-weight:700; }
+.sign-ink { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.fl.on .sign, .lightbox.on { filter:url(#soft); }
+.fl.on .sign-board, .lightbox.on .sign-board { fill:var(--accent); stroke:var(--accent-hi); }
+.fl.on .sign-text, .lightbox.on .sign-text { fill:var(--panel); }
+.lightbox.on .sign-ink { stroke:var(--panel); }
+
+/* high billboard: lit by its spotlights at night */
+.bb-face { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .4s, stroke .4s; }
+.bb-text { fill:var(--line); font-family:var(--sign-font); font-weight:700; transition:fill .4s; }
+.billboard.on .bb-face { fill:var(--glass-on); stroke:var(--accent); }
+.billboard.on .bb-text { fill:var(--accent-hi); filter:url(#soft); }
+
+/* A5 paper ads stuck on walls and poles */
+.sticker { fill:var(--detail); }
+.sticker-ink { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+
+/* barber pole: stripes spiral while the shop is lit */
+.stripe { fill:none; stroke:var(--line); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+.fl.on .stripe { stroke:var(--accent); }
+.fl.on .barber-stripes { animation:barber-spin .9s linear infinite; }
+@keyframes barber-spin { from { transform:translateY(0); } to { transform:translateY(2.4px); } }
+
+/* ---------- house parts ---------- */
+.rail { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+.mast { fill:none; stroke:var(--line); stroke-width:1.2; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+.pipe { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.stain { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.8; }
+.face.plant { fill:var(--deck); }
+.face.solar { fill:var(--recess); }
+.face.awning { fill:var(--deck); }
+
+/* ---------- street ---------- */
+.road { fill:var(--recess); }
+.lane { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; stroke-dasharray:8 7; }
+.wheel { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+
+/* lamps, headlights and light pools: on at night */
+.lamp .bulb { fill:var(--detail); transition:fill .3s; }
+.lamp.on .bulb { fill:var(--accent-hi); filter:url(#glow); }
+.lamp.on .halo, .lamp-pool.on .halo { opacity:.32; }
+.spill.on .halo { opacity:.3; }
+
+@media (prefers-reduced-motion:reduce) {
+  .fl .win, .sign-board, .lamp .bulb, .bb-face, .bb-text { transition:none; }
+  .fl.on .barber-stripes { animation:none; }
+}
