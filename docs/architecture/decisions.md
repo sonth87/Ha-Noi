@@ -107,6 +107,18 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
 - **Lý do**: Có đủ tiếng Việt; là font sans đậm, gần với chữ biển hiệu thật; đóng gói sẵn nên không cần mạng lúc chạy (NFR-01).
 - **Hệ quả**: Thêm khoảng vài chục KB font (chỉ tải weight 700). Chữ biển giờ viết được đầy đủ tiếng Việt (CẮT TÓC, IN ẤN, CHO THUÊ BIỂN…).
 
+### ADR-018 · Hệ tọa độ cục bộ cho mỗi căn nhà
+- **Trạng thái**: Đã chốt (2026-10-20)
+- **Bối cảnh**: Mỗi căn có thể quay mặt tiền về 4 hướng, và góc nhìn xoay được. Nếu vẽ trực tiếp theo trục x/y thì mỗi bộ phận phải viết 4 lần.
+- **Quyết định**: Mọi bộ phận vẽ trong hệ cục bộ của căn nhà: `a` dọc mặt tiền (trái → phải nhìn từ phố), `b` từ tường sau ra phố, `z` lên. `core/view.ts → localFrame` ánh xạ sang thế giới cho từng hướng; `render/local.ts → LocalDraw` chỉ trả về mặt đứng khi nó là một trong hai mặt nhìn thấy (+x hoặc +y), với trục u luôn chạy trái → phải nhìn từ ngoài vào.
+- **Lý do**: Viết một lần, đúng cho mọi hướng; xoay góc nhìn chỉ là đổi `x, y, facing`. Có test xác nhận "xoay thế giới = tính lại căn nhà" cho mọi hướng × mọi góc.
+- **Hệ quả**: Mặt sau có cửa sổ nhỏ cùng id tầng, nên tầng nào cũng bật đèn được dù mặt tiền đang khuất. Mỗi bộ phận là một item có hộp bao riêng; **bất biến**: các item của cùng một căn không được lồng vào nhau (test với 300 nhà ngẫu nhiên × 4 hướng).
+
+### ADR-019 · Catalog xếp một hàng như dãy phố
+- **Trạng thái**: Đã chốt (2026-10-20). Thay lưới 3 × 2 trong roadmap.
+- **Lý do**: Ở lưới 2 hàng, nhà hàng trước (cao tới 20 m) che mặt tiền nhà hàng sau. Một hàng với mặt tiền thẳng một đường thì không căn nào che căn nào, và trông giống một dãy phố thật.
+- **Hệ quả**: Khi lên 12 preset (P2), hàng dài gấp đôi; nếu quá rộng thì chia 2 hàng cách xa nhau hoặc phân trang.
+
 ---
 
 ## Câu hỏi mở

@@ -66,9 +66,13 @@ My City/
     │   └── layout.ts                 # streetRow, crossroads
     ├── render/
     │   ├── hello.ts                  # P0: một căn nhà hộp để kiểm pipeline (thay bằng house.ts ở P1)
-    │   ├── house.ts                  # renderHouse(K, spec, opts) → { svg, items }
-    │   ├── parts/                    # facade · ground · windows · balconies · roofs · roof-items · back
-    │   ├── props/                    # sidewalk · poles-wires · lamps · trees · bikes · traffic-light
+    │   ├── house.ts                  # renderHouse(K, spec) → Item[] · floorIds(spec)
+    │   ├── local.ts                  # LocalDraw: vẽ trong hệ cục bộ của nhà (a dọc mặt tiền, b ra phố) cho mọi hướng
+    │   ├── scene.ts                  # composeScene: depthSort + khung hình
+    │   ├── geom.ts · svg.ts          # trụ nằm, vòng tròn mặt đất, dây võng · helper chuỗi SVG
+    │   ├── reference-house.ts        # P1a: nhà mẫu vẽ tay (giữ làm hình tham chiếu)
+    │   ├── parts/                    # ctx · windows · ground · signs · balconies · walls · roofs · roof-items
+    │   ├── props/                    # lot (P1b) · sidewalk · poles-wires · lamps · trees · bikes · traffic-light (P3+)
     │   └── landmarks/                # tower-thai-binh · tower-novotel · garden
     ├── scenes/
     │   ├── SceneSvg.tsx              # host <svg>: innerHTML từ render, ủy quyền click, aria
@@ -76,7 +80,8 @@ My City/
     │   ├── controller.ts             # lớp cơ sở SceneController (subscribe/getSnapshot, attach/detach, after/loop)
     │   ├── registry.ts               # danh sách cảnh trong sidebar
     │   ├── hello/                    # P0
-    │   ├── catalog/                  # CatalogScene.tsx · catalogController.ts
+    │   ├── catalog/                  # catalogController.ts (dùng SceneView chung)
+    │   ├── reference/                # P1a: referenceController.ts
     │   ├── street/
     │   └── crossroads/
     ├── ui/                           # Shell · Sidebar · Readout · PalettePicker · ThemeToggle · ParamPanel · KeyHints

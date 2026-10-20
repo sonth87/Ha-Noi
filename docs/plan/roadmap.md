@@ -58,16 +58,16 @@ P0 Khung ──► P1 Nhà cơ bản + Catalog ──► P2 Thư viện chi ti�
 | | |
 |---|---|
 | **Mục tiêu** | Chứng minh ý tưởng cốt lõi: nhà dựng từ dữ liệu, xoay góc nhìn đúng, bật đèn được |
-| **Bàn giao** | `core/{spec,presets,view,depth}.ts`; `render/house.ts`; `render/parts/{facade,ground,windows,roofs,back}.ts` (bản đầu); 6 preset; `scenes/catalog/` (CatalogScene + catalogController) |
+| **Bàn giao** | `core/{types,spec,presets,view,depth,layout}.ts`; `render/{local,house,scene}.ts`; `render/parts/{ctx,windows,ground,signs,balconies,walls,roofs,roof-items}.ts`; `render/props/lot.ts`; 6 preset; `scenes/catalog/` |
 | **Phụ thuộc** | P0 |
 | **Yêu cầu** | FR-01, 02, 03 (một phần), 04 (một phần), 12, 13, 20, 22, 30, 37 |
 
 **DoD**
-- [ ] Catalog hiển thị 6 preset trên lưới 3 × 2, mỗi căn trên ô đất riêng, nhìn khác nhau rõ rệt.
+- [ ] Catalog hiển thị 6 preset, mỗi căn trên ô đất riêng (xếp thành 1 hàng như dãy phố, thay cho lưới 3 × 2 để không căn nào che mặt tiền căn khác), nhìn khác nhau rõ rệt. *(code xong, chờ kiểm bằng mắt)*
 - [ ] `Q`/`E` xoay 4 hướng: mặt tiền (cửa hàng, cửa sổ) luôn nằm đúng phía; mặt lưng hiện khi mặt tiền khuất.
-- [ ] Click căn → bật/tắt đèn; `←`/`→` chọn căn; `Space` bật đèn căn đang chọn; `R` sinh căn ngẫu nhiên ở ô đang chọn.
-- [ ] Readout: `view S · 3/6 lit · tube-5f-cage`.
-- [ ] Test: `view.rotate` 4 lần về lại ban đầu; facing đúng ở 4 hướng; `depthSort` đúng 4 ca mẫu; snapshot SVG ổn định.
+- [x] Click căn → bật/tắt đèn; `←`/`→` chọn căn; `Space` bật đèn căn đang chọn; `R` sinh căn ngẫu nhiên ở ô đang chọn (thêm `P` về preset, `N` ngày/đêm).
+- [x] Readout: `view S · 3/27 lit · 01 Nhà mẫu · cà phê`.
+- [x] Test: xoay 4 lần về lại ban đầu; facing đúng ở 4 hướng; `depthSort` đúng các ca mẫu; snapshot SVG ổn định; không bộ phận lồng nhau (77 test).
 - [ ] Không lỗi che khuất khi xoay (kiểm bằng mắt, 4 hướng).
 
 ---

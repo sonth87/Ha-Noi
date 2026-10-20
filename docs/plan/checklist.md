@@ -2,7 +2,7 @@
 
 Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật file này **mỗi khi** một việc đổi trạng thái. Mã trong ngoặc tham chiếu [requirements](../product/requirements.md) và [decisions](../architecture/decisions.md).
 
-**Phase hiện tại: P1a xong → chuẩn bị P1b (generator + catalog).**
+**Phase hiện tại: P1b — code xong, chờ người dùng kiểm bằng mắt.**
 
 ## Lập kế hoạch
 - [x] Đánh giá ý tưởng, chốt phạm vi ngã tư Thái Hà – Tây Sơn – Chùa Bộc
@@ -70,30 +70,27 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 
 ## P1b · Generator + Catalog
 ### Dữ liệu & hình học (`core/`)
-- [ ] `types.ts`: `HouseSpec` đầy đủ theo [house-spec](../architecture/house-spec.md)
-- [ ] `spec.ts`: `DEFAULTS`, `resolveSpec()` gộp preset ⊕ override (FR-13)
-- [ ] `spec.ts`: `validateSpec()` theo luật hợp lệ ([house-spec](../architecture/house-spec.md) mục 4)
-- [ ] `view.ts`: `rotate(item, k, center)`, xoay `facing`, `visibleFace(facing)` → `front | side | hidden`
-- [ ] `depth.ts`: `depthSort(items)` topo + phá chu trình + cảnh báo (FR-22)
-- [ ] Test: `spec`, `view` (4 lần xoay = ban đầu, facing 4 hướng), `depth` (hàng x, hàng y, cao-cạnh-thấp, ô lưới)
+- [x] `types.ts`: `HouseSpec`, `HouseInput`, `FloorSpec`, `SignSpec`, `Issue` (đồng bộ [house-spec](../architecture/house-spec.md))
+- [x] `presets.ts`: 6 preset — `nha-mau` (dựng lại nhà mẫu), `cap4-metal`, `2f-balcony`, `3f-tank`, `tube-5f-cage`, `tube-6f-photo`
+- [x] `spec.ts`: `resolveSpec` (DEFAULTS ⊕ preset ⊕ input, theo từng tầng), luật hợp lệ, `sceneIssues`, `randomHouse` có seed (FR-12, FR-13)
+- [x] `view.ts`: xoay điểm/khối/hướng, `rotateSpec`, **hệ tọa độ cục bộ của nhà** (a dọc mặt tiền, b ra phố) cho 4 hướng, `visible(side)` (FR-20)
+- [x] `depth.ts`: `depthSort` — kiểm chồng hình bằng 3 trục lục giác (x−y, x−z, y−z), sắp topo, ổn định, phá chu trình + cảnh báo (FR-22)
+- [x] `layout.ts`: lô catalog, `placeInLot`
+- [x] Test: 38 test lõi (xoay 4 lần = ban đầu; xoay thế giới = tính lại nhà ở mọi hướng × mọi góc; thứ tự vẽ hàng x, hàng y, hai bên phố, chồng tầng, bài học mái hiên → biển treo → sàn ban công; 600 khối nhanh; 200 nhà ngẫu nhiên hợp lệ)
 ### Renderer (`render/`)
-- [ ] `house.ts`: khung thân, chia tầng, gọi parts, trả `{ svg, items }`
-- [ ] `parts/facade.ts`: chia tầng và khe cửa sổ, nhóm `data-floor`
-- [ ] `parts/ground.ts`: `fold`, `roll` (đóng/mở)
-- [ ] `parts/windows.ts`: `tall`, `wide` + biến thể seed `off/dim/hi` (FR-12)
-- [ ] `parts/roofs.ts`: `flat` (+ parapet), `metal2`, `tile`
-- [ ] `parts/back.ts`: mặt lưng tối thiểu
-- [ ] Mặt tiền vẽ đúng trên `FRONT` / `SIDE` theo facing; mặt lưng khi khuất (FR-20)
-- [ ] `styles/city.css`: `.fl`, `.win`, `.shop`… chỉ dùng token màu (NFR-07, NFR-08)
-- [ ] Escape chữ đưa vào SVG (ADR-013)
-- [ ] Test snapshot `renderHouse()` (NFR-06)
-### Preset & cảnh
-- [ ] `core/presets.ts`: 6 preset `cap4-tile`, `1f-flat`, `2f-balcony` (tạm chưa ban công), `3f-tank`, `tube-5f-cage` (tạm), `tube-6f-hut` (tạm)
-- [ ] `scenes/catalog/catalogController.ts`: state đèn, căn đang chọn, góc nhìn; áp lại đèn sau khi dựng lại
-- [ ] `scenes/catalog/CatalogScene.tsx`: lưới 3 × 2, ô đất, nhãn tên preset (FR-30)
-- [ ] Điều khiển: click bật đèn, `←/→` chọn, `Space`, `R`, `Q/E` (FR-20, FR-30)
-- [ ] Readout (FR-37), `aria` (NFR-10), `?demo`
-- [ ] Kiểm bằng mắt 4 hướng xoay, không lỗi che khuất
+- [x] `local.ts`: vẽ trong hệ cục bộ của nhà (box, face hiển thị, plane, path, trụ nằm)
+- [x] `geom.ts`: `cylinderH` (trụ nằm theo trục bất kỳ — bồn nước xoay đúng hướng)
+- [x] `parts/`: `windows`, `ground` (+ mái hiên), `signs` (7 kiểu + tờ dán), `balconies` (lan can, chuồng cọp, chậu cây, cục nóng mặt tiền), `walls` (tường hồi, cục nóng treo), `roofs` (mái bằng + tường chắn, phòng tum + sân thượng + dây phơi, mái tôn 2 dốc), `roof-items` (bồn nằm, bồn đứng, ăng-ten, NLMT) — bóc từ nhà mẫu theo [components](../architecture/components.md) mục E
+- [x] `house.ts`: `renderHouse` → các item sắp được; `floorIds`; mặt sau có cửa sổ cùng id tầng nên bật đèn được từ mọi hướng
+- [x] `scene.ts`: `composeScene` (sắp thứ tự, khung hình, dịch gốc)
+- [x] `props/lot.ts`: ô đất + vỉa hè + nhãn + viền chọn
+- [x] Test: mọi preset × 4 hướng không có bộ phận lồng nhau, đủ id tầng; 300 nhà ngẫu nhiên × 4 hướng không lồng nhau; snapshot từng preset (NFR-06); catalog 4 góc xoay + 40 lần ngẫu nhiên không cảnh báo thứ tự vẽ; dựng catalog < 100 ms
+- [x] Sửa 5 chỗ chồng lấn do test phát hiện (ăng-ten/tường chắn, biển dọc/chuồng cọp, biển tròn/khối đua, NLMT/chậu cây, cục nóng/biển lớn)
+### Cảnh
+- [x] `scenes/catalog/`: 6 lô; `Q/E` xoay, `←/→` chọn, `Space` đèn căn đang chọn, `R` nhà ngẫu nhiên, `P` về preset, `N` ngày/đêm, click tầng/lô; readout `view S · 3/27 lit · 01 Nhà mẫu…` (FR-20, FR-30, FR-37)
+- [x] Đăng ký "Catalog" làm Fig 2
+- [x] Cập nhật [house-spec](../architecture/house-spec.md) theo code (A3); tách phần dự kiến P2
+- [~] **Người dùng kiểm bằng mắt**: 4 góc xoay đúng mặt tiền, không lỗi che khuất, nhà `nha-mau` giống bản vẽ tay
 - [ ] Đánh dấu DoD P1
 
 ## P2 · Thư viện chi tiết

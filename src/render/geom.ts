@@ -44,6 +44,31 @@ export function cylinderX(K: Kernel, x0: number, x1: number, yc: number, zc: num
   return s;
 }
 
+/** A cylinder with a horizontal axis from p0 to p1 (any direction in x/y): body silhouette,
+    the end cap that faces the viewer, hoop bands on the visible half. */
+export function cylinderH(K: Kernel, p0: Vec3, p1: Vec3, R: number, bands = 2): string {
+  const N = 28;
+  const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+  const ux = (p1[0] - p0[0]) / len, uy = (p1[1] - p0[1]) / len;
+  const nx = -uy, ny = ux;                                   // horizontal, perpendicular to the axis
+  const ring = (c: Vec3, t0 = 0, t1 = Math.PI * 2, n = N) =>
+    Array.from({ length: n + 1 }, (_, i) => {
+      const t = t0 + (t1 - t0) * i / n, cs = Math.cos(t), sn = Math.sin(t);
+      return K.P(c[0] + R * cs * nx, c[1] + R * cs * ny, c[2] + R * sn);
+    });
+  const hull = convexHull([...ring(p0), ...ring(p1)]);
+  const capAt = ux + uy > 0 ? p1 : p0;                      // the end whose outward axis points toward +x/+y
+  let s = `<path class="face" d="${d2(hull)}"/><path class="face top" d="${d2(ring(capAt))}"/>`;
+  // visible half: (cos t · n + sin t · z) · (1, 1, 1) > 0, centred on atan2(1, nx + ny)
+  const mid = Math.atan2(1, nx + ny);
+  for (let i = 1; i <= bands; i++) {
+    const k = i / (bands + 1);
+    const c: Vec3 = [p0[0] + (p1[0] - p0[0]) * k, p0[1] + (p1[1] - p0[1]) * k, p0[2]];
+    s += `<path class="detail" d="${d2(ring(c, mid - Math.PI / 2, mid + Math.PI / 2, 14), false)}"/>`;
+  }
+  return s;
+}
+
 /** Projected circle lying in a horizontal plane (e.g. a light pool on the ground). */
 export function groundCircle(K: Kernel, cx: number, cy: number, z: number, r: number, cls: string, extra = ''): string {
   return `<g transform="${K.TOP(cx, cy, z)}"><circle class="${cls}" cx="0" cy="0" r="${r}" ${extra}/></g>`;
