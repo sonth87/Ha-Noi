@@ -58,15 +58,19 @@ export function signItems(c: Ctx): void {
         break;
       }
       case 'projecting-vertical': {
-        // clear of a floor-2 cage, which reaches the facade's edges: brackets then start at the cage's front
+        // clear of a floor-2 cage, which reaches the facade's edges: brackets then start at the cage's front.
+        // Like everything a house puts out over the sidewalk it stays within REACH of the facade; the
+        // curb side belongs to trees, poles and wires. No room left → no sign.
         const cage = s.upper[0]?.balcony === 'cage', bm = cage ? c.fy + 11.2 : c.fy;
-        const a0 = W - 1.6, b0 = c.fy + (cage ? 12 : 1.5), z0 = H + 6, side = D.endSide();
-        const face = D.face(a0, b0, z0, 0.6, 12, 24, side);
+        const a0 = W - 1.6, b0 = c.fy + (cage ? 12 : 1.5), b1 = Math.min(b0 + 12, s.d + REACH), z0 = H + 6, side = D.endSide();
+        if (b1 - b0 < 5) break;
+        const sw = b1 - b0;
+        const face = D.face(a0, b0, z0, 0.6, sw, 24, side);
         const n = Math.max(1, [...text].length), step = Math.min(4.4, 21 / n);
         const brackets = `<path class="mast" d="${D.path([[a0 + 0.3, bm, H + 28], [a0 + 0.3, b0, H + 28]])}${D.path([[a0 + 0.3, bm, H + 8], [a0 + 0.3, b0, H + 8]])}"/>`;
-        const svg = brackets + lightbox(D.boxc(a0, b0, z0, 0.6, 12, 24, 'sign-board') +
-          (face ? g(face.t, stacked(6, 1.5 + step * 0.9, step, step * 0.82, text)) : ''));
-        c.add('sign-vertical', a0, bm, z0, 0.6, b0 + 12 - bm, 24, svg);
+        const svg = brackets + lightbox(D.boxc(a0, b0, z0, 0.6, sw, 24, 'sign-board') +
+          (face ? g(face.t, stacked(sw / 2, 1.5 + step * 0.9, step, Math.min(step * 0.82, sw * 0.8), text)) : ''));
+        c.add('sign-vertical', a0, bm, z0, 0.6, b1 - bm, 24, svg);
         break;
       }
       case 'projecting-round': {
@@ -122,3 +126,5 @@ export function signItems(c: Ctx): void {
 
 /** sidewalk top height the standee stands on (matches props/sidewalk) */
 export const SIDEWALK = 2;
+/** how far past the ground-floor facade a house may reach over the sidewalk (1.9 m) */
+export const REACH = 19;

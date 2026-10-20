@@ -13,6 +13,8 @@ export interface Ctx {
   v(): string;
   /** facade b of the upper floors: d + overhang */
   fy: number;
+  /** semi-basement height under the ground floor (s.groundH already includes it) */
+  base: number;
   /** top of the upper floors (= groundH when there are none) */
   topZ: number;
   /** SVG-safe house id, for clip-path ids */

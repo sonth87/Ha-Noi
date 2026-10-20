@@ -102,7 +102,7 @@ export class StreetController extends SceneController<SceneSnapshot> {
     const L = STREET.length, [ux, uy] = this.unit;
     for (const b of this.bikes) {
       const a = (((b.a0 + b.dir * b.v * now / 1000) % L) + L) % L;
-      const edge = Math.min(a, L - 16 - a);
+      const edge = Math.min(a, L - 18 - a);
       b.el.setAttribute('transform', `translate(${(ux * a).toFixed(2)} ${(uy * a).toFixed(2)})`);
       b.el.style.opacity = edge < 0 ? '0' : edge < 24 ? (edge / 24).toFixed(2) : '';
     }

@@ -103,19 +103,29 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
   STREET.lanes.forEach((ln, i) => {
     const mid = (ln.y0 + ln.y1) / 2;
     const bikes = lay.bikes.filter(b => b.lane === i).map(bk => bike(D, mid + bk.track, ln.dir, bk.a0, bk.v)).join('');
-    add(`lane-${i}`, 0, ln.y0, 0, len, ln.y1 - ln.y0, 17, `<g class="lane" data-lane="${i}">${bikes}</g>`);
+    add(`lane-${i}`, 0, ln.y0, 0, len, ln.y1 - ln.y0, 21, `<g class="lane" data-lane="${i}">${bikes}</g>`);
   });
 
   return items;
 }
 
-/** a motorbike with rider at a = 0…16 along the lane (front toward dir); the controller slides it to a(t) */
+/** a scooter with its rider, side-on like the reference house's parked bike, at a = 0…18 along the lane
+    (front toward dir); the controller slides it to a(t). Wheels and the body profile sit in the vertical
+    plane along the lane; seat and rider are small boxes so they read from any view. */
 function bike(D: LocalDraw, b: number, dir: 1 | -1, a0: number, v: number): string {
-  const front = dir > 0 ? 15.4 : 0.6, back = dir > 0 ? 1.2 : 14.8;
-  const head = D.P(7.4, b, 15.6), hl = D.P(front, b, 6.2), tl = D.P(back, b, 6.2);
+  const L = 18, x = (u: number) => (dir > 0 ? u : L - u);            // u measured from the tail
+  const side = D.plane([0, b, 8], [1, 0, 0], [0, 0, -1]);           // vertical, along the lane; v down from z = 8
+  const wheel = (u: number) => `<circle class="wheel" cx="${f(x(u))}" cy="5" r="3"/><circle class="detail" cx="${f(x(u))}" cy="5" r="1"/>`;
+  // body: rear hump over the back wheel, low floorboard, front shield rising to the handlebar
+  const prof: [number, number][] = [[1.5, 4.6], [2.5, 1.2], [7.5, 0.4], [9, 3.2], [12, 3.6], [14.5, -1.6], [15.6, -1.4], [16.2, 3.8], [13.2, 5.6], [4, 5.6]];
+  const body = `<path class="face" d="M${prof.map(([u, z]) => `${f(x(u))} ${f(z)}`).join('L')}Z"/>`;
+  const head = D.P(x(7.6), b, 18.2), hl = D.P(x(16.4), b, 7.4), tl = D.P(x(1.2), b, 6.8);
   return `<g class="bike" data-a0="${f(a0)}" data-v="${v}" data-dir="${dir}">` +
-    D.box(1, b - 1.6, 1.4, 14.5, 3.2, 5, 1.2) + D.box(5, b - 1.5, 6.4, 4.8, 3, 7.2, 1.2) +
-    `<circle class="face" cx="${f(head[0])}" cy="${f(head[1])}" r="1.7"/>` +
-    `<g class="lamp" data-night="1"><circle class="bulb" cx="${f(hl[0])}" cy="${f(hl[1])}" r="0.9"/><circle class="bulb tail" cx="${f(tl[0])}" cy="${f(tl[1])}" r="0.6"/></g>` +
+    g(side, wheel(3.4) + wheel(15) + body) +
+    D.box(Math.min(x(4), x(9.5)), b - 1.6, 8.2, 5.5, 3.2, 1.4, 0.8) +                    // seat
+    D.box(Math.min(x(5.8), x(9.6)), b - 1.5, 9.6, 3.8, 3, 6.4, 1.2) +                    // rider
+    `<path class="mast" d="${D.path([[x(9.6), b, 13.8], [x(14.4), b, 10.2]])}${D.path([[x(14.8), b - 2.6, 10.2], [x(14.8), b + 2.6, 10.2]])}"/>` +
+    `<circle class="face" cx="${f(head[0])}" cy="${f(head[1])}" r="1.9"/>` +
+    `<g class="lamp" data-night="1"><circle class="bulb" cx="${f(hl[0])}" cy="${f(hl[1])}" r="1"/><circle class="bulb tail" cx="${f(tl[0])}" cy="${f(tl[1])}" r="0.7"/></g>` +
     `</g>`;
 }

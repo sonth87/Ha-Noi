@@ -108,7 +108,7 @@ Ghi chú:
 | **Dây điện** `wires` | 3–6 dây/khoảng, võng (catenary xấp xỉ bằng bezier bậc 2), thêm **bó dây rối** (cuộn tròn) ở vài cột | độ võng, số dây | **Xung sáng** chạy dọc dây (`.pulse.go`), ngẫu nhiên theo thời gian; đêm thì nhiều hơn |
 | **Đèn đường** `lamp` | Cột + cần cong + chao | khoảng cách | Đêm: bóng `accent-hi` + `halo` bloom hắt xuống vỉa hè |
 | **Cây** `tree` | Bồn gốc + thân + tán (circle chồng) — như office-tower | cỡ tán | — |
-| **Xe máy** `bike` | Hình rất đơn giản: thân + người (2–3 box nhỏ) | làn, tốc độ, chiều | Đèn pha (trước) + đèn hậu là chấm `accent`; chạy bằng `api.loop` |
+| **Xe máy** `bike` | Xe tay ga nhìn ngang trên mặt phẳng đứng dọc làn: 2 bánh, thân + yếm, yên, tay lái; người lái (khối + đầu) | làn, tốc độ, chiều, vệt trái/phải | Đèn pha + đèn hậu `accent` ban đêm (không filter vì chạy liên tục); controller trượt theo thời gian, mờ dần ở 2 đầu phố |
 | **Đèn giao thông** `traffic-light` | Cột + hộp 3 đèn (mặt nhìn thấy) | chu kỳ (xanh 20 s / vàng 3 s / đỏ 23 s, tua nhanh ×4) | Đèn đang bật `accent` + glow; xe dừng ở vạch khi đỏ |
 
 ---
@@ -179,3 +179,12 @@ Mỗi hàm trong `src/render/reference-house.ts` (nhà mẫu đã được duy�
 1. Biển treo dưới mép phần đua ra phải vẽ **sau** mái hiên và **trước** sàn ban công tầng 2.
 2. Bộ phận gắn tường hồi (cục nóng) nằm cao hơn mái nhà bên cạnh thì không chồng hình với nhà bên, nên thứ tự nào cũng được.
 3. Biển lớn trên tường hồi nhà cao vẽ sau phòng tum của nhà thấp hơn, và trước các vật trên mái của nhà thấp nằm ở x lớn hơn.
+
+---
+
+## F. Nửa hầm để xe (`basement`)
+
+| Phần | Hình | Sáng |
+|---|---|---|
+| Dải ga-ra dưới tầng 1 (trên mặt tiền tầng 1) | Gờ sàn, cửa cuốn rộng ~60% mặt tiền, hộp cuốn; mở nửa khi `shop` | Lòng ga-ra sáng cùng tầng 1 |
+| Bậc tam cấp (item) | 3 bậc từ mặt vỉa hè lên sàn tầng 1, ở ~64% mặt tiền, sâu 3 × 0.26 m | — |

@@ -8,7 +8,8 @@ import { f, g } from '@render/svg';
 
 /** lights + fixed extras for the ground floor's street face, width W */
 export function groundFace(c: Ctx, W: number): { lights: string; extra: string } {
-  const { s } = c, H = s.groundH, v = () => c.v();
+  // H: the ground floor proper; a semi-basement band (c.base) sits below it on the same face
+  const { s } = c, H = s.groundH - c.base, v = () => c.v();
   const panels = s.signs.find(x => x.type === 'side-panels');
   const x0 = panels ? 8 : 0, x1 = W - x0, ow = x1 - x0, top = 11, bot = H - 0.5;
   let lights = '', extra = '';
@@ -58,6 +59,15 @@ export function groundFace(c: Ctx, W: number): { lights: string; extra: string }
   if (s.signs.some(x => x.type === 'barber-pole')) extra += barberPole(c.uid, s.ground === 'glass' ? x0 + ow * 0.52 : x1 - 6);
   const spots: [number, number][] = [[0.3, 19], [W - 2.9, 21], [0.4, 24.5], [W - 2.8, 14.5]];
   for (let i = 0; i < s.stickers; i++) extra += sticker(...spots[i]!);
+
+  // semi-basement garage: a wide roll shutter under the raised floor, half up while the shop is open
+  if (c.base > 0) {
+    const B = c.base, gx = 3, gw = W * 0.6 - 4, cut = s.shop ? H + B * 0.5 : H + B - 0.3;
+    if (s.shop) lights += win(v, gx, cut, gw, H + B - 0.3 - cut);
+    extra += `<line class="detail" x1="0" y1="${f(H)}" x2="${f(W)}" y2="${f(H)}"/>` +
+      `<rect class="face recess" x="${gx}" y="${f(H + 1.6)}" width="${f(gw)}" height="${f(cut - H - 1.6)}"/>${slits(H + 2.8, cut - 0.8, 1.3, gx, gx + gw, false)}` +
+      `<rect class="face" x="${gx - 0.5}" y="${f(H + 0.6)}" width="${f(gw + 1)}" height="1.6"/>`;
+  }
   return { lights, extra };
 }
 

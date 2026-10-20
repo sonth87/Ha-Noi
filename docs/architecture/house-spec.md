@@ -29,7 +29,7 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `id` | string | bắt buộc | Duy nhất trong cảnh. Dùng làm tiền tố cho id tầng `data-floor="<id>/<n>"` |
 | `preset` | string | — | Tên preset ở mục 3 |
 | `x`, `y` | number | 0 | Góc nhỏ nhất của footprint thân nhà tầng 1 (hệ dữ liệu, trước khi xoay) |
-| `w` | number | 40 | Bề rộng **mặt tiền** (dọc theo phố) |
+| `w` | number 25–140 | 40 | Bề rộng **mặt tiền** (dọc theo phố). Nhà rộng (≥ 6 m) chia mặt tiền các tầng trên thành nhiều gian ~4 m, mỗi gian một bộ cửa sổ |
 | `d` | number | 150 | Chiều sâu tầng 1 (vuông góc với phố, chưa tính phần đua ra) |
 | `facing` | `'N'\|'E'\|'S'\|'W'` | `'S'` | Hướng mặt tiền ra phố |
 | `seed` | int | `hash(id)` | Seed cho biến thể nhỏ (độ sáng cửa sổ, vệt ố…) |
@@ -40,6 +40,7 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
 | `floors` | int 0–8 | 3 | Số tầng **trên** tầng 1. `0` = nhà một tầng / cấp 4 |
+| `basement` | 0 hoặc 10–20 | 0 | **Nửa hầm để xe**: tầng 1 nâng cao lên đúng bằng chừng này; dưới là cửa cuốn ga-ra (mở nửa khi `shop`), bên cạnh có 3 bậc tam cấp từ vỉa hè lên. Hay gặp ở nhà mặt tiền rộng |
 | `groundH` | number | 38 | Cao tầng 1 |
 | `floorH` | number | 32 | Cao mỗi tầng trên |
 | `overhang` | number 0–12 | 0 | Tầng 2 trở lên đua ra phía phố |
@@ -112,6 +113,8 @@ Kích thước ghi theo mét (nhân 10 khi vào code).
 | `2f-balcony` | 2 tầng ban công | 4 × 14 | 1 | Cửa cuốn, biển TẠP HÓA, cửa kính và ban công có 2 chậu cây, bồn nằm |
 | `3f-tank` | 3 tầng bồn nước | 4 × 15 | 2 | Nhà ở, không bán hàng (cửa cuốn đóng), ban công tầng lẻ, bồn nằm + NLMT, 2 tờ dán |
 | `tube-5f-cage` | Nhà ống 5 tầng chuồng cọp | 3.8 × 18 | 4 | Đua ra, quán PHỞ BÒ có mái hiên + standee. Tầng 2 lan can 3 chậu, tầng 3 chuồng cọp, tầng 4 chuồng cọp + cửa chớp, tầng 5 cặp cửa nhỏ, có ăng-ten, **mái tôn che toàn bộ mái** |
+| `wide-basement` | Nhà rộng · tầng hầm | 10 × 16 | 4 | Tầng 1 nâng cao trên nửa hầm để xe (1.4 m), cửa kính, NHÀ HÀNG + biển dọc QUÁN, 5 gian cửa mỗi tầng, phòng tum + mái tôn che sân thượng, bồn nằm + NLMT |
+| `wide-plain` | Nhà rộng · thường | 8 × 14 | 3 | Rộng nhưng kết cấu bình thường: cửa xếp + mái hiên, ĐIỆN MÁY, ban công tầng chẵn, mái tôn che cả mái, 2 bồn + ăng-ten |
 | `tube-6f-photo` | Nhà ống 6 tầng · photo | 3.6 × 15 | 5 | Cửa cuốn, 2 biển dọc PHOTO / IN ẤN hai bên cửa, ban công tầng lẻ, biển quảng cáo lớn CHO THUÊ BIỂN trên tường hồi, phòng tum + **mái tôn che sân thượng** + dây phơi, bồn đứng |
 
 Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục tiêu P2 là ≥ 12 preset, dài hạn 20–50.
@@ -120,7 +123,8 @@ Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục ti�
 
 | Luật | Xử lý |
 |---|---|
-| `w ≥ 25` (2.5 m), `d ≥ 60` | `error` |
+| `25 ≤ w ≤ 140` (2.5–14 m), `d ≥ 60` | `error` |
+| `basement` khác 0 mà ngoài 10–20 | Kẹp, `warn` |
 | `preset` không tồn tại | `error` |
 | `floors` ngoài khoảng 0–8 hoặc không nguyên; `stickers`, `roofPlants`, `sideAC` ngoài khoảng | Kẹp lại, `warn` |
 | `floors === 0` → `overhang = 0`, `topRoom = false`, bỏ biển `projecting-vertical` và `billboard` | Tự sửa, `warn` |
@@ -133,6 +137,8 @@ Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục ti�
 | `id` trùng trong cảnh | `error` (do `sceneIssues`) |
 
 Cảnh ghi `error` ra console. Vẽ khối placeholder cho nhà lỗi để dành cho P3, khi dữ liệu phố được nhập tay.
+
+**Tầm với ra vỉa hè**: mọi thứ của một căn nhô ra vỉa hè tối đa **1.9 m** (`REACH`) tính từ mặt tiền tầng 1 (ban công, chuồng cọp, mái hiên, biển, standee, bậc tam cấp). Phần vỉa hè sát lòng đường dành cho cây, cột điện, dây điện. Biển dọc chìa ra tự rút ngắn, hết chỗ thì bỏ.
 
 **Bất biến được test** (`render/house.test.ts`): với mọi preset, 4 hướng và 300 nhà ngẫu nhiên, không có hai bộ phận nào của cùng một căn nhà lồng vào nhau. Chạm nhau thì được. Đây là điều kiện để `depthSort` luôn đúng.
 

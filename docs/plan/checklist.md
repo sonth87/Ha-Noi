@@ -124,7 +124,12 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Phóng to / kéo / nhấp đúp (dùng chung mọi cảnh) — `hooks/useZoomPan.ts`
 - [x] `scenes/street/` + đăng ký "Phố Thái Hà" (Fig 3), `?demo` bật đêm (FR-36)
 - [x] Test: 29 test phố — số căn, mặt tiền thẳng hàng, không chồng nhà, tái tạo theo seed; 3 bố cục × 4 góc × cutaway bật/tắt không item lồng nhau, sắp xếp không cảnh báo; dựng lại < 300 ms (NFR-04)
-- [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
+- [x] Người dùng xem: "giống 1 con phố" (2026-10-21); xe máy chưa rõ lắm
+- [x] Góp ý: xe máy rõ hơn → vẽ dáng xe tay ga nhìn ngang (bánh, thân, yếm, yên, tay lái, người lái)
+- [x] Góp ý: nhà rộng 2–3 lần, có nhà làm **nửa hầm để xe** (tầng 1 cao hơn), có nhà rộng bình thường → `basement`, bậc tam cấp, mặt tiền chia gian, 12% nhà rộng trong random, preset `wide-basement` + `wide-plain`, lô Catalog rộng theo nhà (ADR-021)
+- [x] Quy tắc tầm với ra vỉa hè 1.9 m (lỗi biển dọc đâm cây/dây do test phát hiện)
+- [x] Yêu cầu: **Xưởng nhà** — trang tự nhào nặn một căn (bảng chỉnh mọi tham số, từng tầng, cảnh báo, chép JSON); làm sớm FR-31 của P2; 6 test controller
+- [~] **Người dùng kiểm bằng mắt** (xe máy mới, nhà rộng, Xưởng nhà) + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 
 ## P4 · Ngã tư

@@ -61,6 +61,24 @@ export const PRESETS = {
     topRoom: true, roofShelter: 'terrace', laundry: true,
     roofItems: ['tank-v'], roofPlants: 1, sideAC: 0,
   },
+  /** two-and-a-half frontages, raised ground floor over a semi-basement garage */
+  'wide-basement': {
+    label: 'Nhà rộng · tầng hầm',
+    w: 10 * M, d: 16 * M, floors: 4, basement: 1.4 * M,
+    ground: 'glass', shopName: 'NHÀ HÀNG',
+    signs: [{ type: 'facade' }, { type: 'projecting-vertical', text: 'QUÁN' }],
+    window: 'glass-doors', balcony: 'rail', plants: 3,
+    upper: [{}, { window: 'wide', balcony: 'none', ac: true }, {}, { window: 'pair', balcony: 'none' }],
+    topRoom: true, roofShelter: 'terrace', roofPlants: 3, roofItems: ['tank-h', 'solar'], sideAC: 2,
+  },
+  /** a wide house built like any other */
+  'wide-plain': {
+    label: 'Nhà rộng · thường',
+    w: 8 * M, d: 14 * M, floors: 3,
+    ground: 'fold', awning: 'fabric', shopName: 'ĐIỆN MÁY', signs: [{ type: 'facade' }], stickers: 2,
+    window: 'tall', balcony: 'rail', balconyFloors: 'even', plants: 2,
+    roofItems: ['tank-h', 'tank-v', 'antenna'], roofShelter: 'full', sideAC: 1,
+  },
 } as const satisfies Record<string, Preset>;
 
 export type PresetId = keyof typeof PRESETS;

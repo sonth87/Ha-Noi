@@ -13,10 +13,11 @@ import { composeScene } from '@render/scene';
 const K = kernel(0, 0);
 
 function catalog(inputs: HouseInput[], k: ViewK) {
-  const lots = catalogLots(inputs.length), [cx, cy] = catalogCenter(lots.length), items: Item[] = [];
-  inputs.forEach((input, i) => {
+  const specs = inputs.map(input => resolveSpec(input).spec);
+  const lots = catalogLots(specs.map(s => s.w)), [cx, cy] = catalogCenter(lots), items: Item[] = [];
+  specs.forEach((spec, i) => {
     const lot = rotateSpec(lots[i]!, k, cx, cy);
-    items.push(...renderLot(K, lot, i, 'x'), ...renderHouse(K, placeInLot(lot, resolveSpec(input).spec)));
+    items.push(...renderLot(K, lot, i, 'x'), ...renderHouse(K, placeInLot(lot, spec)));
   });
   return composeScene(items);
 }

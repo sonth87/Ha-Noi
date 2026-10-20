@@ -67,8 +67,12 @@ Thêm vào `src/core/presets.ts`. TypeScript sẽ báo lỗi ngay nếu sai tên
 ```
 Lưu file, trang `pnpm dev` tự cập nhật; xem căn mới trong Catalog. Thêm preset **không cần sửa code vẽ**. Nếu bắt buộc phải sửa code vẽ thì đó là lỗi thiết kế, cần báo lại.
 
-### 4.4 Thử nhanh trong Catalog (từ P2)
-Chọn một căn rồi đổi tham số bằng bảng điều khiển: số tầng, mái, ban công, cửa, tầng 1, vật trên mái. Khi đã ưng ý, chép bộ tham số vào `src/core/presets.ts`.
+### 4.4 Xưởng nhà (Fig 3)
+Một căn nhà ở giữa, bảng bên phải chỉnh mọi tham số: khối (mặt tiền, sâu, số tầng, cao tầng, đua ra, **nửa hầm để xe**), tầng 1 (cửa, mở hàng, mái hiên, tên quán, 7 loại biển, tờ dán), **từng tầng trên** (cửa sổ, ban công, chậu cây, cục nóng), mái (loại, phòng tum, mái tôn, dây phơi, vật trên mái), tường hồi.
+- **Preset**: chọn kiểu có sẵn; **Ngẫu nhiên** (hoặc `R`); **Bỏ chỉnh** về preset gốc.
+- Ô **Cảnh báo** liệt kê những gì hệ thống tự sửa (ví dụ mái tôn 2 dốc thì không có phòng tum).
+- **Chép JSON** rồi dán vào `src/core/presets.ts` (thêm `label`) để thành preset mới.
+- `Q`/`E` xoay, `Space` bật đèn cả nhà, `N` ngày/đêm, click tầng để bật đèn.
 
 ## 5. Kiểm tra
 ```bash

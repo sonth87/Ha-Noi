@@ -110,11 +110,14 @@ export class CatalogController extends SceneController<SceneSnapshot> {
   // ---------- drawing ----------
 
   private build(): void {
-    const lots = catalogLots(this.inputs.length), [cx, cy] = catalogCenter(lots.length);
-    const items: Item[] = [];
-    this.specs = this.inputs.map((input, i) => {
+    const resolved = this.inputs.map(input => {
       const { spec, issues } = resolveSpec(input);
       for (const is of issues) if (is.level === 'error') console.error(`[catalog] ${input.id}: ${is.field} — ${is.message}`);
+      return spec;
+    });
+    const lots = catalogLots(resolved.map(s => s.w)), [cx, cy] = catalogCenter(lots);
+    const items: Item[] = [];
+    this.specs = resolved.map((spec, i) => {
       const lot = rotateSpec(lots[i]!, this.k, cx, cy);
       const placed = placeInLot(lot, spec);
       items.push(...renderLot(K0, lot, i, this.label(placed)), ...renderHouse(K0, placed));

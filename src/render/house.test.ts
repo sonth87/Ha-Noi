@@ -60,7 +60,12 @@ describe('renderHouse', () => {
   });
 
   it('composes a scene with no depth warnings', () => {
-    const items = PRESET_IDS.flatMap((p, i) => renderHouse(K, resolveSpec({ id: p, preset: p, x: i * 90, y: 190 - 150 }).spec));
+    let x = 0;
+    const items = PRESET_IDS.flatMap(p => {
+      const s = resolveSpec({ id: p, preset: p, x, y: 40 }).spec;
+      x += s.w + 50;
+      return renderHouse(K, s);
+    });
     const c = composeScene(items);
     expect(c.warnings).toEqual([]);
     expect(c.viewBox).toMatch(/^0 0 [\d.]+ [\d.]+$/);

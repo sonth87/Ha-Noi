@@ -10,7 +10,7 @@ type Defaults = Omit<HouseSpec, 'id' | 'seed' | 'upper' | 'preset'>;
 
 export const DEFAULTS: Defaults = {
   x: 0, y: 0, w: SIZE.tubeW, d: SIZE.tubeD, facing: 'S',
-  floors: 3, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0,
+  floors: 3, basement: 0, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0,
   ground: 'fold', shop: true, awning: 'none', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
   roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, roofShelter: 'none', laundry: false, roofPlants: 0,
   roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0,
@@ -18,7 +18,7 @@ export const DEFAULTS: Defaults = {
 
 const FLOOR_DEFAULT = { window: 'tall' as WindowKind, balcony: 'rail' as BalconyKind, balconyFloors: 'all' as const, plants: 1 };
 
-export const LIMITS = { minW: 2.5 * M, maxFloors: 8, maxOverhang: 1.2 * M } as const;
+export const LIMITS = { minW: 2.5 * M, maxW: 14 * M, maxFloors: 8, maxOverhang: 1.2 * M, basement: [1 * M, 2 * M] } as const;
 
 export function isPreset(id: string | undefined): id is PresetId {
   return !!id && (PRESET_IDS as string[]).includes(id);
@@ -49,7 +49,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     preset: input.preset,
     x: merged.x, y: merged.y, w: merged.w, d: merged.d, facing: merged.facing,
     seed: input.seed ?? hash(input.id),
-    floors, groundH: merged.groundH, floorH: merged.floorH, overhang: merged.overhang,
+    floors, basement: merged.basement, groundH: merged.groundH, floorH: merged.floorH, overhang: merged.overhang,
     ground: merged.ground, shop: merged.shop, awning: merged.awning, shopName: merged.shopName,
     signs: [...merged.signs], stickers: clampInt(merged.stickers, 0, 4, 'stickers', warn),
     upper,
@@ -61,10 +61,15 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
 
   // consistency rules (house-spec §4)
   if (spec.w < LIMITS.minW) error('w', `frontage ${spec.w} is below the minimum ${LIMITS.minW}`);
+  if (spec.w > LIMITS.maxW) error('w', `frontage ${spec.w} is above the maximum ${LIMITS.maxW}`);
   if (spec.d < 6 * M) error('d', `depth ${spec.d} is below 6 m`);
   if (spec.floors === 0) {
     if (spec.overhang) { spec.overhang = 0; warn('overhang', 'a single-storey house cannot overhang; set to 0'); }
     if (spec.topRoom) { spec.topRoom = false; warn('topRoom', 'needs at least one upper floor; removed'); }
+  }
+  if (spec.basement !== 0 && (spec.basement < LIMITS.basement[0] || spec.basement > LIMITS.basement[1])) {
+    const b = Math.min(LIMITS.basement[1], Math.max(LIMITS.basement[0], spec.basement));
+    warn('basement', `${spec.basement} adjusted to ${b} (1–2 m, or 0 for none)`); spec.basement = b;
   }
   if (spec.overhang > LIMITS.maxOverhang) { spec.overhang = LIMITS.maxOverhang; warn('overhang', `clamped to ${LIMITS.maxOverhang}`); }
   if (spec.roof !== 'flat') {
@@ -100,7 +105,7 @@ function clampInt(v: number, lo: number, hi: number, field: string, warn: (f: st
 }
 
 /** Top of the house's solid mass (upper floors; roof room and roof items not included). */
-export const topZ = (s: Pick<HouseSpec, 'groundH' | 'floors' | 'floorH'>) => s.groundH + s.floors * s.floorH;
+export const topZ = (s: Pick<HouseSpec, 'groundH' | 'floors' | 'floorH' | 'basement'>) => s.basement + s.groundH + s.floors * s.floorH;
 
 /** heights of roof items above the roof they stand on (render/parts/roof-items.ts) */
 const ITEM_H: Record<string, number> = { 'tank-h': 16, 'tank-v': 18, solar: 24, antenna: 32 };
@@ -145,6 +150,8 @@ export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}):
   const preset = r.pick(PRESET_IDS);
   const p = PRESETS[preset] as Partial<HouseInput>;
   const pitched = p.roof === 'metal2' || r.chance(0.12);
+  const wide = r.chance(0.12);
+  const w = wide ? r.int(40, 60) * 2 : Math.round(r.int(32, 46) / 2) * 2;
   const floors = pitched ? 0 : r.int(1, 6);
   const shopName = r.pick(SHOP_NAMES);
   const signs: SignSpec[] = [{ type: 'facade' }];
@@ -163,8 +170,10 @@ export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}):
     id,
     preset,
     seed: r.int(1, 1e6),
-    w: Math.round(r.int(32, 46) / 2) * 2, d: r.int(12, 18) * M,
-    floors, overhang: floors > 0 && r.chance(0.4) ? 0.8 * M : 0,
+    w, d: r.int(12, 18) * M,
+    // wide houses (2–3 frontages) often raise the ground floor over a semi-basement garage; some don't
+    floors, basement: (wide ? r.chance(0.6) : r.chance(0.06)) ? r.int(12, 16) : 0,
+    overhang: floors > 0 && r.chance(0.4) ? 0.8 * M : 0,
     ground: r.pick(['fold', 'roll', 'glass', 'wood'] as const), shop: r.chance(0.85),
     awning: r.chance(0.4) ? 'fabric' : 'none', shopName, signs, stickers: r.int(0, 3),
     upper: Array.from({ length: floors }, () => ({ window: r.pick(WINDOWS), balcony: r.pick(BALCONIES), plants: r.int(0, 3), ac: r.chance(0.25) })),

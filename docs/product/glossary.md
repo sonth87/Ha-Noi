@@ -25,6 +25,9 @@
 | Bồn nước inox nằm / đứng | `'tank-h'` / `'tank-v'` | |
 | Máy nước nóng NLMT | `'solar'` | Năng lượng mặt trời: dàn ống nghiêng + bồn |
 | Cục nóng điều hòa | `'ac'` | Dàn nóng máy lạnh |
+| Nửa hầm / tầng hầm để xe | `basement` | Tầng 1 nâng cao, dưới là ga-ra; lên bằng bậc tam cấp |
+| Gian (khoang mặt tiền) | bay | Nhà rộng chia mặt tiền thành các gian ~4 m |
+| Tầm với ra vỉa hè | `REACH` | Đồ của nhà nhô ra vỉa hè tối đa 1.9 m |
 | Tường hồi | `side wall` (`back.ts`) | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
 | Mặt tiền | `facade` | Mặt nhà quay ra phố |
 | Vỉa hè / bó vỉa | `sidewalk` / `curb` | |

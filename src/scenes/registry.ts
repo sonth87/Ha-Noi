@@ -1,5 +1,8 @@
 /* The scenes listed in the sidebar, in order (Fig 1, 2, …). */
+import type { ComponentType } from 'react';
 import type { SceneController } from '@scenes/controller';
+import { WorkshopController } from '@scenes/workshop/workshopController';
+import { WorkshopPanel } from '@scenes/workshop/WorkshopPanel';
 import { HelloController } from '@scenes/hello/helloController';
 import { ReferenceController } from '@scenes/reference/referenceController';
 import { CatalogController } from '@scenes/catalog/catalogController';
@@ -13,6 +16,8 @@ export interface SceneDef {
   /** what it is and how to operate it, for screen readers (NFR-10) */
   aria: string;
   create(): SceneController;
+  /** optional side panel bound to the scene's controller */
+  Panel?: ComponentType<{ controller: SceneController }>;
 }
 
 export const SCENES: readonly SceneDef[] = [
@@ -29,6 +34,14 @@ export const SCENES: readonly SceneDef[] = [
     hint: 'q e rotate · ← → pick · space lights · r random · p preset · n night',
     aria: 'Isometric catalog of Hà Nội house types, each on its own lot along a street. Q and E rotate the view; left and right arrows pick a lot; space switches the picked house\'s lights; R replaces it with a random house; P restores its preset; N switches day and night; click a floor to light it or a lot to pick it.',
     create: () => new CatalogController(),
+  },
+  {
+    id: 'xuong',
+    name: 'Xưởng nhà',
+    hint: 'chỉnh ở bảng bên phải · q e rotate · space lights · n night · r random',
+    aria: 'Isometric house workshop: one Hà Nội house on a lot, shaped by the controls in the side panel. Q and E rotate the view; space switches the house lights; N switches day and night; R makes a random house; click a floor to light it.',
+    create: () => new WorkshopController(),
+    Panel: WorkshopPanel,
   },
   {
     id: 'pho-thai-ha',

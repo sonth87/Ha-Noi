@@ -63,6 +63,8 @@ export interface HouseSpec {
 
   /** storeys above the ground floor; 0 = single-storey house */
   floors: number;
+  /** semi-basement garage under a raised ground floor (0 = none); the ground floor sits this much higher */
+  basement: number;
   groundH: number;
   floorH: number;
   /** upper floors jut out over the sidewalk by this much */

@@ -27,13 +27,23 @@ export const LOT = {
 
 export const lotDepth = () => LOT.facade + LOT.sidewalk + LOT.label;
 
-export function catalogLots(count: number): Lot[] {
-  return Array.from({ length: count }, (_, i) => ({ id: `lot${i}`, x: i * (LOT.W + LOT.gap), y: 0, w: LOT.W, d: lotDepth(), facing: 'S' as Facing }));
+/** a lot wide enough for its house plus room for side-hung parts (AC units, billboard) */
+export const lotWidth = (houseW: number) => Math.max(LOT.W, houseW + 40);
+
+/** one lot per house frontage, side by side along x */
+export function catalogLots(houseWidths: readonly number[]): Lot[] {
+  let x = 0;
+  return houseWidths.map((hw, i) => {
+    const w = lotWidth(hw), lot = { id: `lot${i}`, x, y: 0, w, d: lotDepth(), facing: 'S' as Facing };
+    x += w + LOT.gap;
+    return lot;
+  });
 }
 
 /** centre of the unrotated catalog, the pivot for view rotation */
-export function catalogCenter(count: number): [number, number] {
-  return [(count * (LOT.W + LOT.gap) - LOT.gap) / 2, lotDepth() / 2];
+export function catalogCenter(lots: readonly Lot[]): [number, number] {
+  const last = lots[lots.length - 1];
+  return [last ? (last.x + last.w) / 2 : 0, lotDepth() / 2];
 }
 
 /** place a house in a (possibly rotated) lot: centred along the street, facade on the lot's facade line */

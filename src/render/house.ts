@@ -10,18 +10,21 @@ import { LocalDraw } from '@render/local';
 import { band, type Ctx } from '@render/parts/ctx';
 import { backWindow, windowSet, win } from '@render/parts/windows';
 import { awning, groundFace } from '@render/parts/ground';
-import { signItems } from '@render/parts/signs';
+import { SIDEWALK, signItems } from '@render/parts/signs';
 import { balcony, facadeAC } from '@render/parts/balconies';
 import { endWall, sideACs } from '@render/parts/walls';
 import { roof } from '@render/parts/roofs';
 import { g, safeId } from '@render/svg';
 
-export function renderHouse(K: Kernel, s: HouseSpec): Item[] {
+export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
+  // a semi-basement raises the ground floor: parts measure from the ground floor's top, so they
+  // see one taller ground floor (groundH + basement); only the ground face draws the garage band
+  const s = spec.basement > 0 ? { ...spec, groundH: spec.groundH + spec.basement } : spec;
   const L = localFrame(s), D = new LocalDraw(K, L), r = rng(s.seed);
   const W = s.w, H = s.groundH, FH = s.floorH, fy = s.d + (s.floors > 0 ? s.overhang : 0);
   const items: Item[] = [];
   const c: Ctx = {
-    K, D, s, r, fy, items,
+    K, D, s, r, fy, items, base: spec.basement,
     v: () => { const x = r.next(); return x < 0.2 ? ' dim' : x < 0.38 ? ' hi' : ''; },
     topZ: H + s.floors * FH,
     uid: safeId(s.id),
@@ -47,7 +50,7 @@ export function renderHouse(K: Kernel, s: HouseSpec): Item[] {
     s.upper.forEach((fl, i) => {
       const n = i + 2, z = H + i * FH;
       const front = D.face(0, 0, z, W, fy, FH, '+b'), back = D.face(0, 0, z, W, fy, FH, '-b');
-      if (front) svg += band(c.floorId(n), front.t, front.w, FH, windowSet(c.v, fl.window, front.w, FH));
+      if (front) svg += band(c.floorId(n), front.t, front.w, FH, bays(c, fl.window, front.w, FH));
       if (back) svg += band(c.floorId(n), back.t, back.w, FH, backWindow(c.v, back.w, FH));
     });
     const front = D.face(0, 0, H, W, fy, UH, '+b');
@@ -57,6 +60,7 @@ export function renderHouse(K: Kernel, s: HouseSpec): Item[] {
   }
 
   // ---- things on and off the facade ----
+  if (c.base > 0) entranceSteps(c);
   if (s.awning !== 'none') awning(c);
   signItems(c);
   s.upper.forEach((fl, i) => {
@@ -66,6 +70,22 @@ export function renderHouse(K: Kernel, s: HouseSpec): Item[] {
   sideACs(c);
   roof(c);
   return items;
+}
+
+/** a wide facade is split into bays of about 4 m, each with the floor's window set */
+function bays(c: Ctx, kind: Parameters<typeof windowSet>[1], W: number, H: number): string {
+  const n = Math.max(1, Math.round(W / 40)), bw = W / n;
+  if (n === 1) return windowSet(c.v, kind, W, H);
+  return Array.from({ length: n }, (_, i) => `<g transform="translate(${(i * bw).toFixed(2)} 0)">${windowSet(c.v, kind, bw, H)}</g>`).join('');
+}
+
+/** steps up to a raised ground floor, beside the garage */
+function entranceSteps(c: Ctx): void {
+  const { s, D } = c, B = c.base, n = 3, a0 = s.w * 0.64, aw = Math.min(12, s.w * 0.3), depth = 2.6;
+  let svg = '';
+  const z0 = SIDEWALK, rise = (B - z0) / n;   // from the sidewalk's top up to the raised floor
+  for (let k = 0; k < n; k++) svg += D.box(a0, s.d, z0 + k * rise, aw, (n - k) * depth, rise);
+  c.add('steps', a0, s.d, z0, aw, n * depth, B - z0, svg);
 }
 
 /** every floor id a house exposes (for "all floors" toggles and cascades), ground first */

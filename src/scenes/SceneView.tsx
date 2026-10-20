@@ -32,7 +32,7 @@ export function SceneView({ def, index, onPage }: Props) {
 
   useEffect(() => { document.title = `Fig ${index + 1} · ${def.name} · My City`; }, [index, def.name]);
 
-  return (
+  const figure = (
     <figure className="figure">
       <div className="cap"><span className="hi">Fig {index + 1}</span><span>{def.name}</span></div>
       <div className={power ? 'stage-holder glow' : 'stage-holder'}>
@@ -41,4 +41,6 @@ export function SceneView({ def, index, onPage }: Props) {
       <div className="cap"><span>{def.hint}</span><span className="hi" aria-live="polite">{readout}</span></div>
     </figure>
   );
+  const { Panel } = def;
+  return Panel ? <div className="scene-with-panel">{figure}<Panel controller={controller} /></div> : figure;
 }

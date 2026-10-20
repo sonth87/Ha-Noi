@@ -22,10 +22,10 @@ function interpenetrating(items: { id: string; box: Box3 }[]): string[] {
 describe('street layout', () => {
   const lay = streetLayout(1);
 
-  it('lines both sides with 20–26 houses, facades on their lines', () => {
+  it('lines both sides with 16–26 houses (fewer when some are wide), facades on their lines', () => {
     for (const row of ['far', 'near'] as const) {
       const hs = lay.houses.filter(h => h.row === row);
-      expect(hs.length).toBeGreaterThanOrEqual(20);
+      expect(hs.length).toBeGreaterThanOrEqual(16);
       expect(hs.length).toBeLessThanOrEqual(26);
       for (const h of hs) {
         const s = resolveSpec(h.input).spec;

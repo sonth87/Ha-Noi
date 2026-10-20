@@ -131,6 +131,16 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
   6. Cảnh phố mở ra ở chế độ **cutaway bật** (dãy gần chỉ còn tầng 1), vì nếu không dãy gần che hết lòng phố.
 - **Hệ quả**: Test: 3 bố cục × 4 góc × bật/tắt cutaway không có item lồng nhau, không cảnh báo thứ tự vẽ, dựng lại < 300 ms (NFR-04). Ở Catalog, cục nóng/biển lớn giờ cũng cố định bên `+a` (ẩn khi bên đó khuất).
 
+### ADR-021 · Xưởng nhà, nhà rộng có nửa hầm, tầm với ra vỉa hè
+- **Trạng thái**: Đã chốt (2026-10-21, theo yêu cầu người dùng)
+- **Quyết định**:
+  1. **Xưởng nhà** (`scenes/workshop/`): một căn trên một lô, bảng điều khiển React bên phải chỉnh mọi trường của spec. Bảng đọc snapshot của controller (`input`, `spec` đã gộp, `issues`) và ghi qua `patch()` / `patchFloor()` / `setPreset()` / `random()`; hiển thị giá trị đã gộp, mọi thay đổi là một ghi đè. Chép JSON để thêm preset. Cảnh khai báo bảng qua `SceneDef.Panel`. Đây là FR-31 (vốn ở P2) làm sớm.
+  2. **Nửa hầm** (`basement`): tầng 1 nâng lên đúng chiều cao hầm. Renderer coi như tầng 1 cao hơn (`groundH + basement`) để mọi bộ phận đo từ đỉnh tầng 1 tự đúng; riêng mặt tiền tầng 1 vẽ thêm dải ga-ra phía dưới, và có item bậc tam cấp. `topZ` / `peakZ` cộng cả hầm.
+  3. **Nhà rộng**: `randomHouse` cho 12% nhà rộng 8–12 m (60% trong đó có nửa hầm); mặt tiền tầng trên chia gian ~4 m. Lô ở Catalog rộng theo nhà (`lotWidth`).
+  4. **Tầm với ra vỉa hè** `REACH = 1.9 m`: đồ của nhà không vượt quá, để không đụng cây, cột, dây (lỗi do test phát hiện khi nhà có hầm + chuồng cọp đẩy biển dọc ra xa).
+  5. **Xe máy** vẽ dáng xe tay ga nhìn ngang (bánh xe, thân, yếm, yên, tay lái, người lái) thay cho 2 khối hộp.
+- **Hệ quả**: Phố có ít căn hơn khi gặp nhà rộng (test chấp nhận 16–26 căn/dãy). Biển dọc của nhà mẫu ngắn lại 1.2 → 0.95 m.
+
 ---
 
 ## Câu hỏi mở
