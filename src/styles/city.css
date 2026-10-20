@@ -50,6 +50,7 @@
 .face.plant { fill:var(--deck); }
 .face.solar { fill:var(--recess); }
 .face.awning { fill:var(--deck); }
+.face.metal { fill:var(--deck); }
 
 /* ---------- street ---------- */
 .road { fill:var(--recess); }

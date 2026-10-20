@@ -41,6 +41,14 @@ describe('resolveSpec', () => {
     expect(resolveSpec({ id: 'e', preset: 'nope' }).issues[0]!.field).toBe('preset');
   });
 
+  it('fits the metal roof shelter to the roof', () => {
+    expect(resolveSpec({ id: 's1', floors: 4, topRoom: true, roofShelter: 'full' }).spec.roofShelter).toBe('terrace');
+    expect(resolveSpec({ id: 's2', floors: 4, roofShelter: 'terrace' }).spec.roofShelter).toBe('full');
+    expect(resolveSpec({ id: 's3', floors: 0, roof: 'metal2', roofShelter: 'full' }).spec.roofShelter).toBe('none');
+    const s4 = resolveSpec({ id: 's4', floors: 3, roofShelter: 'full', roofItems: ['tank-h', 'solar'] }).spec;
+    expect(s4.roofItems).toEqual(['tank-h']);   // no solar heater under the sheet
+  });
+
   it('resolves every preset without errors', () => {
     for (const p of PRESET_IDS) {
       const { issues } = resolveSpec({ id: p, preset: p });

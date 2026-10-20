@@ -26,6 +26,8 @@ export type AwningKind = 'none' | 'fabric';
 export type WindowKind = 'tall' | 'louver' | 'glass-doors' | 'pair' | 'wide';
 export type BalconyKind = 'none' | 'rail' | 'cage';
 export type RoofKind = 'flat' | 'metal2';
+/** corrugated metal sheet on thin posts over a flat roof: over the terrace in front of the roof room, or over the whole roof */
+export type RoofShelter = 'none' | 'terrace' | 'full';
 export type RoofItem = 'tank-h' | 'tank-v' | 'solar' | 'antenna';
 export type SignKind = 'facade' | 'side-panels' | 'projecting-vertical' | 'projecting-round' | 'standee' | 'barber-pole' | 'billboard';
 
@@ -84,6 +86,8 @@ export interface HouseSpec {
   /** distance from the upper facade to the roof room's front wall */
   topSetback: number;
   parapet: number;
+  /** mái tôn: 'terrace' needs a roof room, 'full' a flat roof without one */
+  roofShelter: RoofShelter;
   laundry: boolean;
   /** pots on the terrace / roof, 0–3 */
   roofPlants: number;

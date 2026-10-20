@@ -90,7 +90,8 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] `scenes/catalog/`: 6 lô; `Q/E` xoay, `←/→` chọn, `Space` đèn căn đang chọn, `R` nhà ngẫu nhiên, `P` về preset, `N` ngày/đêm, click tầng/lô; readout `view S · 3/27 lit · 01 Nhà mẫu…` (FR-20, FR-30, FR-37)
 - [x] Đăng ký "Catalog" làm Fig 2
 - [x] Cập nhật [house-spec](../architecture/house-spec.md) theo code (A3); tách phần dự kiến P2
-- [~] **Người dùng kiểm bằng mắt**: 4 góc xoay đúng mặt tiền, không lỗi che khuất, nhà `nha-mau` giống bản vẽ tay
+- [x] Góp ý người dùng: nhà ống cũng hay có **mái tôn** (che sân thượng trước tum, hoặc che cả mái); có nhà không làm → `roofShelter: 'none' | 'terrace' | 'full'`, luật hợp lệ, random 50% (có tum) / 35% (không tum), preset `tube-5f-cage` (full), `tube-6f-photo` (tum + terrace); test luật + 300 nhà ngẫu nhiên vẫn không lồng nhau
+- [~] **Người dùng kiểm bằng mắt**: 4 góc xoay đúng mặt tiền, không lỗi che khuất, nhà `nha-mau` giống bản vẽ tay, mái tôn
 - [ ] Đánh dấu DoD P1
 
 ## P2 · Thư viện chi tiết

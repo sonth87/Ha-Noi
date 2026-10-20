@@ -87,6 +87,7 @@ Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plan
 | `topRoom` | bool | false | Phòng tum trên mái bằng, lùi vào so với mặt tiền, phía trước là sân thượng |
 | `topSetback` | number | 28 | Khoảng cách từ mặt tiền tầng trên đến tường trước của phòng tum |
 | `parapet` | number | 8 | Cao tường chắn mái |
+| `roofShelter` | `'none'\|'terrace'\|'full'` | `'none'` | **Mái tôn** trên khung cột mảnh, dốc ra phía phố. `terrace`: che sân thượng trước phòng tum (tựa vào tường tum, 2 cột trên tường chắn trước). `full`: che toàn bộ mái bằng khi không có tum (4 cột), chừa dải phía sau cho bồn nước/ăng-ten. Nhiều nhà ống có, nhiều nhà không |
 | `laundry` | bool | false | Dây phơi quần áo trên sân thượng (cần `topRoom`) |
 | `roofPlants` | int 0–3 | 0 | Chậu cây trên sân thượng hoặc mái |
 | `roofItems` | `RoofItem[]` | `['tank-h']` | `'tank-h'` bồn inox nằm, `'tank-v'` bồn đứng, `'solar'` máy nước nóng năng lượng mặt trời, `'antenna'` ăng-ten. Vị trí cố định từ sau ra trước nên không chồng nhau. Có `topRoom` thì vật đặt trên mái phòng tum |
@@ -108,8 +109,8 @@ Kích thước ghi theo mét (nhân 10 khi vào code).
 | `cap4-metal` | Cấp 4 mái tôn · cắt tóc | 4.2 × 15 | 0 | Cửa kính, biển CẮT TÓC, cột xoắn barber, biển tròn ✂, mái tôn 2 dốc |
 | `2f-balcony` | 2 tầng ban công | 4 × 14 | 1 | Cửa cuốn, biển TẠP HÓA, cửa kính và ban công có 2 chậu cây, bồn nằm |
 | `3f-tank` | 3 tầng bồn nước | 4 × 15 | 2 | Nhà ở, không bán hàng (cửa cuốn đóng), ban công tầng lẻ, bồn nằm + NLMT, 2 tờ dán |
-| `tube-5f-cage` | Nhà ống 5 tầng chuồng cọp | 3.8 × 18 | 4 | Đua ra, quán PHỞ BÒ có mái hiên + standee. Tầng 2 lan can 3 chậu, tầng 3 chuồng cọp, tầng 4 chuồng cọp + cửa chớp, tầng 5 cặp cửa nhỏ, có ăng-ten |
-| `tube-6f-photo` | Nhà ống 6 tầng · photo | 3.6 × 15 | 5 | Cửa cuốn, 2 biển dọc PHOTO / IN ẤN hai bên cửa, ban công tầng lẻ, biển quảng cáo lớn CHO THUÊ BIỂN trên tường hồi, bồn đứng |
+| `tube-5f-cage` | Nhà ống 5 tầng chuồng cọp | 3.8 × 18 | 4 | Đua ra, quán PHỞ BÒ có mái hiên + standee. Tầng 2 lan can 3 chậu, tầng 3 chuồng cọp, tầng 4 chuồng cọp + cửa chớp, tầng 5 cặp cửa nhỏ, có ăng-ten, **mái tôn che toàn bộ mái** |
+| `tube-6f-photo` | Nhà ống 6 tầng · photo | 3.6 × 15 | 5 | Cửa cuốn, 2 biển dọc PHOTO / IN ẤN hai bên cửa, ban công tầng lẻ, biển quảng cáo lớn CHO THUÊ BIỂN trên tường hồi, phòng tum + **mái tôn che sân thượng** + dây phơi, bồn đứng |
 
 Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục tiêu P2 là ≥ 12 preset, dài hạn 20–50.
 
@@ -124,6 +125,8 @@ Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục ti�
 | `overhang > 12` | Kẹp, `warn` |
 | `roof !== 'flat'` → không `topRoom`, `roofItems` chỉ giữ `antenna`, không chậu cây và dây phơi | Tự sửa, `warn` |
 | `topRoom` và `topSetback < 15` | Nâng lên 15, `warn` |
+| `roofShelter: 'terrace'` mà không có `topRoom` → đổi thành `'full'`; `'full'` mà có `topRoom` → đổi thành `'terrace'`; mái không bằng → `'none'` | Tự sửa, `warn` |
+| `roofShelter: 'full'` → bỏ `solar` (máy NLMT không đặt dưới mái tôn) | Tự sửa, `warn` |
 | `side-panels` và `w < 34` | Bỏ biển, `warn` |
 | `id` trùng trong cảnh | `error` (do `sceneIssues`) |
 
@@ -138,7 +141,7 @@ Cảnh ghi `error` ra console. Vẽ khối placeholder cho nhà lỗi để dàn
 | `window`: `'arch'`, `'glass'` (kính lớn) | Cửa vòm, mảng kính lớn |
 | `balcony`: `'solid'` | Lan can xây đặc |
 | `awning`: `'metal'` | Mái tôn che trước cửa |
-| `roof`: `'metal1'`, `'tile'`, `roofShelter`, `stairHut` | Tôn 1 dốc, mái ngói, mái tôn che tạm, tum thang nhỏ (không phải phòng) |
+| `roof`: `'metal1'`, `'tile'`, `stairHut` | Tôn 1 dốc, mái ngói, tum thang nhỏ (không phải phòng) |
 | `shape`: `'L'`, `'chamfer'` + `shapeParam` | Nhà góc chữ L, nhà vát góc |
 | `wall`: `'plain'\|'tile'\|'paint-old'` | Kiểu hoàn thiện tường |
 | `sideAd` | Mảng quảng cáo sơn trên tường hồi |

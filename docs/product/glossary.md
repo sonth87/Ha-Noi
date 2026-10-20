@@ -21,6 +21,7 @@
 | Tường chắn mái | `parapet` | Tường thấp quanh mép mái bằng |
 | Mái tôn 1 dốc / 2 dốc | `roof: 'metal1' \| 'metal2'` | |
 | Mái ngói | `roof: 'tile'` | |
+| Mái tôn che sân thượng / chống nóng | `roofShelter: 'terrace' \| 'full'` | Tấm tôn trên khung cột mảnh trên mái bằng nhà ống: che sân thượng trước tum, hoặc che cả mái |
 | Bồn nước inox nằm / đứng | `'tank-h'` / `'tank-v'` | |
 | Máy nước nóng NLMT | `'solar'` | Năng lượng mặt trời: dàn ống nghiêng + bồn |
 | Cục nóng điều hòa | `'ac'` | Dàn nóng máy lạnh |

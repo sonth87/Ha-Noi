@@ -49,7 +49,7 @@ export const PRESETS = {
     signs: [{ type: 'facade' }, { type: 'standee', text: 'PHỞ' }],
     window: 'tall', balcony: 'cage', plants: 1,
     upper: [{ balcony: 'rail', plants: 3 }, {}, { window: 'louver', ac: true }, { window: 'pair', balcony: 'none' }],
-    roofItems: ['tank-h', 'antenna'], sideAC: 2,
+    roofItems: ['tank-h', 'antenna'], roofShelter: 'full', roofPlants: 2, sideAC: 2,
   },
   'tube-6f-photo': {
     label: 'Nhà ống 6 tầng · photo',
@@ -58,6 +58,7 @@ export const PRESETS = {
     signs: [{ type: 'side-panels', text: 'PHOTO|IN ẤN' }, { type: 'billboard', text: 'CHO THUÊ BIỂN' }],
     window: 'tall', balcony: 'rail', balconyFloors: 'odd', plants: 1,
     upper: [{}, {}, {}, {}, { window: 'pair', balcony: 'none' }],
+    topRoom: true, roofShelter: 'terrace', laundry: true,
     roofItems: ['tank-v'], roofPlants: 1, sideAC: 0,
   },
 } as const satisfies Record<string, Preset>;

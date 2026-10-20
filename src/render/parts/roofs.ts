@@ -26,6 +26,11 @@ function flat(c: Ctx): void {
     wall('parapet-front', 0, L - T, W, T);
     for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 1.6, L - 9.6, z, 3.2, 3.2, 10, pot(c, T + 3 + i * 8, L - 8, z, 2.8));
     roofItems(c, { a0: T, a1: W - T, b0: T, b1: L - T, z });
+    if (s.roofShelter === 'full') {
+      // leave the back strip open for the tanks and antenna
+      const open = s.roofItems.some(i => i !== 'solar') ? T + 28 : T;
+      shelter(c, open, z + 28, z + 25, true);
+    }
     return;
   }
 
@@ -61,6 +66,25 @@ function flat(c: Ctx): void {
     c.add('laundry', x0, lb - 0.5, z, x1 - x0, 1, 15, l);
   }
   roofItems(c, { a0: 0, a1: W, b0: rb0, b1: rb1, z: z + RH });
+  if (s.roofShelter === 'terrace') shelter(c, rb1, z + RH - 1, z + RH - 6, false);
+}
+
+/** mái tôn: a corrugated sheet sloping down toward the street, from b0 to just past the facade,
+    on thin posts standing on the parapets (or leaning on the roof room's wall). The sheet is one
+    item above everything under it; posts are separate items that stop just below it, and their
+    last bit up to the sheet is drawn with the sheet so nothing interpenetrates. */
+function shelter(c: Ctx, b0: number, zHigh: number, zLow: number, backPosts: boolean): void {
+  const { s, D } = c, W = s.w, L = c.fy, P = s.parapet, z = c.topZ;
+  const run = L + 2 - b0, drop = zHigh - zLow, under = zLow - 0.8;
+  const sheetAt = (b: number) => zHigh - drop * (b - b0) / run;
+  const posts: [number, number][] = [[1, L - 2], [W - 2, L - 2]];
+  if (backPosts) posts.push([1, b0], [W - 2, b0]);
+  let svg = posts.map(([a, b]) => `<path class="mast" d="${D.path([[a + 0.5, b + 0.5, under], [a + 0.5, b + 0.5, sheetAt(b + 0.5)]])}"/>`).join('');
+  svg += g(D.plane([0, b0, zHigh], [1, 0, 0], [0, 1, -drop / run]), `<rect class="face metal" width="${W}" height="${run.toFixed(2)}"/>${slits(2.4, W - 2.4, 2.4, 0, run)}`);
+  const edge = D.face(0, L + 1.99, zLow - 0.8, W, 0.01, 0.8, '+b');
+  if (edge) svg += g(edge.t, `<rect class="face" width="${W}" height="0.8"/>`);
+  c.add('shelter', 0, b0, under, W, run, zHigh - under, svg);
+  posts.forEach(([a, b], i) => c.add(`shelter-post-${i}`, a, b, z + P, 1, 1, under - z - P, D.box(a, b, z + P, 1, 1, under - z - P)));
 }
 
 /** gable metal roof, ridge along the depth; gable triangles on the visible ends */

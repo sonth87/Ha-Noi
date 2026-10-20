@@ -58,7 +58,7 @@ Mô tả từng thành phần: **dựng từ gì**, **tham số**, **trạng th�
 | `metal2` | Hai mặt nghiêng gặp nhau ở nóc dọc theo chiều sâu nhà; đầu hồi tam giác |
 | `tile` | Như `metal2` + lưới nét ngói |
 | `stairHut` (tum) | Box nhỏ ~ `w × 30`, cao 25, sát phía sau mái, có cửa đi |
-| `roofShelter` | Khung cột mảnh + tấm tôn phẳng trên một phần sân thượng |
+| `roofShelter` | Tấm tôn dốc ra phố trên cột mảnh đặt trên tường chắn: `terrace` (tựa tường tum, che sân thượng) hoặc `full` (4 cột, che cả mái, chừa dải sau cho bồn nước). Tấm tôn là một item nằm trên mọi thứ bên dưới; cột là item riêng dừng ngay dưới tấm, đoạn cuối vẽ cùng tấm để không lồng nhau |
 
 ### A7. Vật trên mái (`roof-items.ts`)
 | Vật | Hình | Sáng |
