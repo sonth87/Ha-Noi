@@ -7,7 +7,7 @@ import { STREET, streetLayout } from '@core/layout';
 import { VIEW_LABEL } from '@core/view';
 import type { ViewK } from '@core/types';
 import { floorIds } from '@render/house';
-import { streetFrame } from '@render/props/street';
+import { LANE_PIECE, streetFrame } from '@render/props/street';
 import { buildStreet } from '@render/street-scene';
 import { composeScene } from '@render/scene';
 import { SceneController, type SceneSnapshot } from '@scenes/controller';
@@ -15,7 +15,7 @@ import { SceneController, type SceneSnapshot } from '@scenes/controller';
 const K0 = kernel(0, 0);
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-interface Bike { el: SVGGElement; a0: number; v: number; dir: number }
+interface Bike { el: SVGGElement; a0: number; v: number; dir: number; lane: number; piece: number }
 
 export class StreetController extends SceneController<SceneSnapshot> {
   private readonly lay = streetLayout(20261020);
@@ -26,6 +26,8 @@ export class StreetController extends SceneController<SceneSnapshot> {
   private ids: string[] = [];
   private unit: [number, number] = [0, 0];
   private bikes: Bike[] = [];
+  /** lane piece groups, [lane][piece] */
+  private pieces: SVGGElement[][] = [];
   private readonly lit = new Set<string>();
 
   constructor() {
@@ -34,9 +36,15 @@ export class StreetController extends SceneController<SceneSnapshot> {
   }
 
   protected override onAttach(svg: SVGSVGElement): void {
-    this.bikes = [...svg.querySelectorAll<SVGGElement>('.bike')].map(el => ({
-      el, a0: Number(el.dataset.a0), v: Number(el.dataset.v), dir: Number(el.dataset.dir),
-    }));
+    this.pieces = [];
+    svg.querySelectorAll<SVGGElement>('.lane[data-piece]').forEach(g => {
+      const lane = Number(g.dataset.lane), k = Number(g.dataset.piece);
+      (this.pieces[lane] ??= [])[k] = g;
+    });
+    this.bikes = [...svg.querySelectorAll<SVGGElement>('.bike')].map(el => {
+      const host = el.closest<SVGGElement>('.lane')!;
+      return { el, a0: Number(el.dataset.a0), v: Number(el.dataset.v), dir: Number(el.dataset.dir), lane: Number(host.dataset.lane), piece: Number(host.dataset.piece) };
+    });
     this.apply();
     const still = reducedMotion();
     this.placeBikes(still ? 0 : performance.now());
@@ -104,6 +112,9 @@ export class StreetController extends SceneController<SceneSnapshot> {
       const a = (((b.a0 + b.dir * b.v * now / 1000) % L) + L) % L;
       const edge = Math.min(a, L - 18 - a);
       b.el.setAttribute('transform', `translate(${(ux * a).toFixed(2)} ${(uy * a).toFixed(2)})`);
+      // ride into the next lane piece's group so the bike is drawn at that piece's depth
+      const k = Math.min(this.pieces[b.lane]!.length - 1, Math.floor(a / LANE_PIECE));
+      if (k !== b.piece) { this.pieces[b.lane]![k]!.appendChild(b.el); b.piece = k; }
       b.el.style.opacity = edge < 0 ? '0' : edge < 24 ? (edge / 24).toFixed(2) : '';
     }
   }

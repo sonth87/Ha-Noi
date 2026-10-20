@@ -1,5 +1,6 @@
-/* Roofs (FR-03): flat with parapets, optional set-back roof room with a terrace (pots, laundry),
-   or a gable metal roof. Roof items go on the roof room if there is one. */
+/* Roofs (FR-03): flat with parapets, optional set-back roof room with a terrace (pots, laundry) or
+   a small stair hut; or a pitched roof: metal gable, single-slope metal, or tiles. Roof items go on
+   the roof room if there is one; a full metal shelter leaves headroom only for low things. */
 import { slits } from '@iso/kernel';
 import { sagLine } from '@render/geom';
 import type { Ctx } from '@render/parts/ctx';
@@ -11,7 +12,8 @@ import { roofItems } from '@render/parts/roof-items';
 import { g } from '@render/svg';
 
 export function roof(c: Ctx): void {
-  if (c.s.roof === 'metal2') return gable(c);
+  if (c.s.roof === 'metal1') return monoPitch(c);
+  if (c.s.roof !== 'flat') return gable(c);
   flat(c);
 }
 
@@ -25,12 +27,20 @@ function flat(c: Ctx): void {
     wall('parapet-r', W - T, T, T, L - 2 * T);
     wall('parapet-front', 0, L - T, W, T);
     for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 1.6, L - 9.6, z, 3.2, 3.2, 10, pot(c, T + 3 + i * 8, L - 8, z, 2.8));
-    roofItems(c, { a0: T, a1: W - T, b0: T, b1: L - T, z });
-    if (s.roofShelter === 'full') {
-      // leave the back strip open for the tanks and antenna
-      const open = s.roofItems.some(i => i !== 'solar') ? T + 28 : T;
-      shelter(c, open, z + 24, true);
+    // tum thang: a small stair hut in the back corner
+    const hut = s.stairHut ? { a: T + 0.6, b: T + 0.6, la: Math.min(14, W - 2 * T - 3), lb: 20 } : null;   // its cap overhangs 0.6, up to the parapets
+    if (hut) {
+      let svg = D.box(hut.a, hut.b, z, hut.la, hut.lb, 24) + D.box(hut.a - 0.6, hut.b - 0.6, z + 24, hut.la + 1.2, hut.lb + 1.2, 1.2);
+      const door = D.face(hut.a, hut.b, z, hut.la, hut.lb, 24, '+b');
+      if (door) svg += g(door.t, `<rect class="face recess" x="${(hut.la - 7) / 2}" y="5" width="7" height="19"/>`);
+      c.add('stair-hut', hut.a - 0.6, hut.b - 0.6, z, hut.la + 1.2, hut.lb + 1.2, 25.2, svg);
     }
+    // a full shelter leaves the back strip open for tall things (antenna, flag, the hut)
+    const open = s.roofShelter === 'full' ? (s.roofItems.length || hut ? T + 28 : T) : 0;
+    const reserved = [...(hut ? [{ a: hut.a - 0.6, b: hut.b - 0.6, la: hut.la + 1.2, lb: hut.lb + 1.2 }] : []),
+      ...Array.from({ length: s.roofPlants }, (_, i) => ({ a: T + 1.4 + i * 8, b: L - 9.6, la: 3.2, lb: 3.2 }))];
+    roofItems(c, { a0: T, a1: W - T, b0: T, b1: L - T, z }, s.roofShelter === 'full' ? { from: open, maxH: 22 } : null, reserved);
+    if (s.roofShelter === 'full') shelter(c, open, z + 24, true);
     return;
   }
 
@@ -70,9 +80,11 @@ function flat(c: Ctx): void {
   if (s.roofShelter === 'terrace') shelter(c, rb1, z + RH + 3, true);
 }
 
-/** two corrugated slopes meeting at a ridge along the depth (b0 → b0 + len), eaves at zEave */
+/** two slopes meeting at a ridge along the depth (b0 → b0 + len), eaves at zEave; corrugated
+    metal, or tiles (courses across the slope as well) */
 function ribbedGable(c: Ctx, b0: number, len: number, zEave: number, rise: number, cls: string): string {
-  const { D } = c, half = c.s.w / 2, ribs = slits(2, half - 1, 2.4, 0, len), x = cls ? ` ${cls}` : '', h = +len.toFixed(2);
+  const { D } = c, half = c.s.w / 2, x = cls ? ` ${cls}` : '', h = +len.toFixed(2);
+  const ribs = slits(2, half - 1, 2.4, 0, len) + (cls === 'tile' ? slits(2.5, len - 1, 2.5, 0, half, false) : '');
   return g(D.plane([0, b0, zEave], [1, 0, rise / half], [0, 1, 0]), `<rect class="face top${x}" width="${half}" height="${h}"/>${ribs}`) +
     g(D.plane([half, b0, zEave + rise], [1, 0, -rise / half], [0, 1, 0]), `<rect class="face${x}" width="${half}" height="${h}"/>${ribs}`);
 }
@@ -98,15 +110,29 @@ function shelter(c: Ctx, b0: number, zEave: number, backPosts: boolean): void {
   posts.forEach(([a, b], i) => c.add(`shelter-post-${i}`, a, b, z + P, 1, 1, under - z - P, D.box(a, b, z + P, 1, 1, under - z - P)));
 }
 
-/** gable metal roof on a single-storey house, ridge along the depth; closed gable triangles on the visible ends */
+/** pitched roof (metal gable or tiles), ridge along the depth; closed gable triangles on the visible ends */
 function gable(c: Ctx): void {
   const { s, D } = c, W = s.w, L = c.fy, z = c.topZ, rise = 14, half = W / 2;
-  let svg = ribbedGable(c, 0, L, z, rise, '');
+  let svg = ribbedGable(c, 0, L, z, rise, s.roof === 'tile' ? 'tile' : '');
   if (D.L.visible('+b')) svg += `<path class="face" d="${D.path([[0, L, z], [half, L, z + rise], [W, L, z]])}Z"/>`;
   if (D.L.visible('-b')) svg += `<path class="face" d="${D.path([[0, 0, z], [half, 0, z + rise], [W, 0, z]])}Z"/>`;
   if (s.roofItems.includes('antenna')) {
     const bb = L * 0.3;
     svg += `<path class="mast" d="${D.path([[half, bb, z + rise], [half, bb, z + rise + 26]])}${D.path([[half - 4, bb, z + rise + 21], [half + 4, bb, z + rise + 21]])}"/>`;
+  }
+  c.add('roof', 0, 0, z, W, L, rise + (s.roofItems.includes('antenna') ? 26 : 0), svg);
+}
+
+/** single-slope metal roof: high at the back, low at the street; closed end triangles, back wall */
+function monoPitch(c: Ctx): void {
+  const { s, D } = c, W = s.w, L = c.fy, z = c.topZ, rise = 14;
+  let svg = g(D.plane([0, 0, z + rise], [1, 0, 0], [0, 1, -rise / L]), `<rect class="face top" width="${W}" height="${+L.toFixed(2)}"/>${slits(2.4, W - 2.4, 2.4, 0, L)}`);
+  if (D.L.visible('-b')) svg += `<path class="face" d="${D.path([[0, 0, z], [W, 0, z], [W, 0, z + rise], [0, 0, z + rise]])}Z"/>`;
+  for (const [side, a] of [['+a', W], ['-a', 0]] as const)
+    if (D.L.visible(side)) svg += `<path class="face" d="${D.path([[a, 0, z], [a, 0, z + rise], [a, L, z]])}Z"/>`;
+  if (s.roofItems.includes('antenna')) {
+    const bb = L * 0.3, zr = z + rise * (1 - bb / L);
+    svg += `<path class="mast" d="${D.path([[W / 2, bb, zr], [W / 2, bb, zr + 26]])}${D.path([[W / 2 - 4, bb, zr + 21], [W / 2 + 4, bb, zr + 21]])}"/>`;
   }
   c.add('roof', 0, 0, z, W, L, rise + (s.roofItems.includes('antenna') ? 26 : 0), svg);
 }

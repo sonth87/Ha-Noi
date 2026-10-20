@@ -188,3 +188,25 @@ Mỗi hàm trong `src/render/reference-house.ts` (nhà mẫu đã được duy�
 |---|---|---|
 | Dải ga-ra dưới tầng 1 (trên mặt tiền tầng 1) | Gờ sàn, cửa cuốn rộng ~60% mặt tiền, hộp cuốn; mở nửa khi `shop` | Lòng ga-ra sáng cùng tầng 1 |
 | Bậc tam cấp (item) | 3 bậc từ mặt vỉa hè lên sàn tầng 1, ở ~64% mặt tiền, sâu 3 × 0.26 m | — |
+
+---
+
+## G. Lựa chọn bổ sung (ADR-022)
+
+| Bộ phận | Hình | Ghi chú |
+|---|---|---|
+| Tường `tile` | Lưới gạch men 4.5 × 3 trên mặt tiền tầng trên (dưới cửa sổ) | `finish()` trong `ground.ts` |
+| Tường `paint-old` | Mảng loang lổ, bong tróc ngẫu nhiên theo seed (mặt tiền tầng 1 + tầng trên) | |
+| Tường `stone-base` | Đá ốp chân tường tầng 1, mạch so le | |
+| Cửa `iron` | Khung + song + hoa văn quả trám; mở hàng = 2 cánh gập 2 bên, lòng nhà sáng | |
+| Mái hiên `metal` | Tấm tôn dốc nhẹ + mép | |
+| Bày vỉa hè `goods` | Bàn ghế nhựa / xe máy dựng vuông góc lề (cùng hình với xe chạy) / két bia xếp chồng | Một item, 60% mặt tiền bên trái, ≤ 1.9 m |
+| Cửa sổ `arch` / `french` / `glass` | Vòm đầu tròn / cửa Pháp + 2 cánh chớp mở / mảng kính chia ô | |
+| Ban công `solid` | Sàn + 3 tường mỏng (lan can xây) | |
+| Ô văng `canopy` | Tấm bê tông mỏng hoặc tôn nhỏ dốc ra, ngay trên cửa sổ, sâu 0.6 m | Item riêng; bỏ khi có chuồng cọp |
+| Phơi đồ `laundry` (tầng) | Dây + quần áo treo trên mặt phẳng song song mặt tiền, trong ban công | |
+| Mái `metal1` | Một dốc, cao phía sau, 2 tam giác đầu hồi + tường sau | |
+| Mái `tile` | Như tôn 2 dốc, thêm lớp ngói ngang | |
+| Tum thang `stairHut` | Khối 1.4 × 2 m cao 2.4 m ở góc sau, mái đua, cửa | |
+| Mái: `ac`, `flag` | Cục nóng trên mái; cột cờ với lá cờ (ngôi sao vẽ nét) | Qua bộ xếp chỗ |
+| Tường hồi `sideAd`, `sideWindows` | Khung + 2 dòng chữ sơn; cửa sổ nhỏ theo tầng (chỉ trên phần lộ) | |

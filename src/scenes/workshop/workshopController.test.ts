@@ -46,6 +46,23 @@ describe('workshop controller', () => {
     expect(fields).toContain('roofItems');
   });
 
+  it('draws every new option', () => {
+    const c = new WorkshopController();
+    c.setPreset('');
+    c.patch({ wall: 'tile', goods: 'bikes', ground: 'iron', awning: 'metal', stairHut: true, roofItems: ['tank-h', 'ac', 'flag'], sideAd: 'SƠN NƯỚC|0903', sideWindows: true, w: 70 });
+    c.patchFloor(0, { window: 'arch', balcony: 'solid', canopy: 'concrete', laundry: true });
+    c.patchFloor(1, { window: 'french', canopy: 'metal' });
+    c.patchFloor(2, { window: 'glass' });
+    const { svg, issues } = c.getSnapshot();
+    expect(issues.filter(i => i.level === 'error')).toEqual([]);
+    for (const mark of ['class="finish"', 'class="face cloth"', 'class="face flag"', 'class="ad-paint"', 'class="wheel"', 'A7.00 7.00']) expect(svg).toContain(mark);
+    expect(svg).not.toMatch(/NaN|undefined/);
+    c.patch({ roof: 'tile' });
+    expect(c.getSnapshot().issues.map(i => i.field)).toContain('stairHut');
+    c.patch({ roof: 'metal1' });
+    expect(c.getSnapshot().svg).not.toMatch(/NaN|undefined/);
+  });
+
   it('switches preset and makes random houses', () => {
     const c = new WorkshopController();
     c.setPreset('cap4-metal');

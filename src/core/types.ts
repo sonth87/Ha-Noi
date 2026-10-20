@@ -21,14 +21,20 @@ export interface Item {
 
 // ---------- house spec ----------
 
-export type GroundKind = 'fold' | 'roll' | 'glass' | 'wood' | 'wall';
-export type AwningKind = 'none' | 'fabric';
-export type WindowKind = 'tall' | 'louver' | 'glass-doors' | 'pair' | 'wide';
-export type BalconyKind = 'none' | 'rail' | 'cage';
-export type RoofKind = 'flat' | 'metal2';
+export type GroundKind = 'fold' | 'roll' | 'glass' | 'wood' | 'wall' | 'iron';
+export type AwningKind = 'none' | 'fabric' | 'metal';
+export type WindowKind = 'tall' | 'louver' | 'glass-doors' | 'pair' | 'wide' | 'arch' | 'french' | 'glass';
+export type BalconyKind = 'none' | 'rail' | 'solid' | 'cage';
+export type RoofKind = 'flat' | 'metal2' | 'metal1' | 'tile';
+/** facade finish: plain render, glazed tiles, old peeling paint, stone cladding on the ground floor */
+export type WallFinish = 'plain' | 'tile' | 'paint-old' | 'stone-base';
+/** ô văng: a small concrete or metal canopy over a floor's window */
+export type Canopy = 'none' | 'concrete' | 'metal';
+/** what the shop puts out on the sidewalk */
+export type Goods = 'none' | 'stools' | 'bikes' | 'crates';
 /** corrugated metal sheet on thin posts over a flat roof: over the terrace in front of the roof room, or over the whole roof */
 export type RoofShelter = 'none' | 'terrace' | 'full';
-export type RoofItem = 'tank-h' | 'tank-v' | 'solar' | 'antenna';
+export type RoofItem = 'tank-h' | 'tank-v' | 'solar' | 'antenna' | 'ac' | 'flag';
 export type SignKind = 'facade' | 'side-panels' | 'projecting-vertical' | 'projecting-round' | 'standee' | 'barber-pole' | 'billboard';
 
 export interface SignSpec {
@@ -45,6 +51,10 @@ export interface FloorSpec {
   plants: number;
   /** outdoor AC unit on the facade below this floor's window */
   ac: boolean;
+  /** ô văng over the window (not with a cage, which has its own cap) */
+  canopy: Canopy;
+  /** clothes drying on the balcony */
+  laundry: boolean;
 }
 
 /** A fully resolved house: every field present (after resolveSpec). */
@@ -70,10 +80,17 @@ export interface HouseSpec {
   /** upper floors jut out over the sidewalk by this much */
   overhang: number;
 
+  /** facade finish */
+  wall: WallFinish;
+  /** bays across the upper facade (0 = one per ~4 m) */
+  bays: number;
+
   ground: GroundKind;
   /** shop open: shutter up, interior lit with the ground floor */
   shop: boolean;
   awning: AwningKind;
+  /** set out on the sidewalk in front of the shop */
+  goods: Goods;
   shopName: string;
   signs: SignSpec[];
   /** A5 paper ads stuck at ground-floor height, 0–4 */
@@ -88,6 +105,8 @@ export interface HouseSpec {
   /** distance from the upper facade to the roof room's front wall */
   topSetback: number;
   parapet: number;
+  /** a small stair hut at the back of a flat roof without a roof room */
+  stairHut: boolean;
   /** mái tôn: 'terrace' needs a roof room, 'full' a flat roof without one */
   roofShelter: RoofShelter;
   laundry: boolean;
@@ -101,6 +120,10 @@ export interface HouseSpec {
   sideEnd: '+a' | '-a';
   /** height above which that end wall is free of the neighbour (0 = nothing next to it) */
   sideClear: number;
+  /** painted ad on the exposed end wall ('' = none), "LINE 1|LINE 2" */
+  sideAd: string;
+  /** small windows in the exposed end wall, above the neighbour, lit with their floor */
+  sideWindows: boolean;
 }
 
 /** What a scene or preset writes: an id plus any subset of fields; `upper` may be partial per floor. */

@@ -51,7 +51,7 @@ describe('street layout', () => {
 });
 
 describe('street scene', () => {
-  for (const seed of [1, 2, 3]) {
+  for (const seed of [1, 2, 3, 4, 5, 6]) {
     for (const k of VIEWS) {
       for (const cut of [false, true]) {
         it(`seed ${seed} · view ${k} · ${cut ? 'cutaway' : 'full'}: no interpenetrating items, clean depth sort`, () => {

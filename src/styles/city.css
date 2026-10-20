@@ -51,6 +51,13 @@
 .face.solar { fill:var(--recess); }
 .face.awning { fill:var(--deck); }
 .face.metal { fill:var(--deck); }
+.face.flag { fill:var(--deck); }
+/* facade finishes: drawn under the windows, quieter than structure */
+.finish { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.75; }
+.peel { fill:var(--recess); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.85; }
+/* painted ad on a side wall */
+.ad-box { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+.ad-paint { fill:var(--line); font-family:var(--sign-font); font-weight:700; }
 
 /* ---------- street ---------- */
 .road { fill:var(--recess); }

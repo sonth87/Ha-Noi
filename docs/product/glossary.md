@@ -28,6 +28,14 @@
 | Nửa hầm / tầng hầm để xe | `basement` | Tầng 1 nâng cao, dưới là ga-ra; lên bằng bậc tam cấp |
 | Gian (khoang mặt tiền) | bay | Nhà rộng chia mặt tiền thành các gian ~4 m |
 | Tầm với ra vỉa hè | `REACH` | Đồ của nhà nhô ra vỉa hè tối đa 1.9 m |
+| Ô văng | `canopy: 'concrete'` | Tấm bê tông mỏng che trên cửa sổ |
+| Cửa sắt hoa | `ground: 'iron'` | Cửa sắt nhiều cánh có hoa văn |
+| Lan can xây | `balcony: 'solid'` | Lan can ban công xây đặc |
+| Cửa vòm / cửa Pháp | `window: 'arch'` / `'french'` | Cửa đầu tròn / cửa kính cao có cánh chớp |
+| Mái ngói / tôn 1 dốc | `roof: 'tile'` / `'metal1'` | |
+| Tum thang | `stairHut` | Khối nhỏ trên mái che cầu thang (khác phòng tum) |
+| Cột cờ | `roofItems: 'flag'` | |
+| Quảng cáo sơn tường | `sideAd` | Chữ sơn trên tường hồi |
 | Tường hồi | `side wall` (`back.ts`) | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
 | Mặt tiền | `facade` | Mặt nhà quay ra phố |
 | Vỉa hè / bó vỉa | `sidewalk` / `curb` | |

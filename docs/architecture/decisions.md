@@ -141,6 +141,15 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
   5. **Xe máy** vẽ dáng xe tay ga nhìn ngang (bánh xe, thân, yếm, yên, tay lái, người lái) thay cho 2 khối hộp.
 - **Hệ quả**: Phố có ít căn hơn khi gặp nhà rộng (test chấp nhận 16–26 căn/dãy). Biển dọc của nhà mẫu ngắn lại 1.2 → 0.95 m.
 
+### ADR-022 · Thêm lựa chọn; cắt khối dài theo nhà; bộ xếp chỗ trên mái
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "chưa có nhiều option")
+- **Quyết định**:
+  1. Thêm 14 lựa chọn: `wall`, `bays`, `goods`, `stairHut`, `sideAd`, `sideWindows`; theo tầng `canopy` (ô văng), `laundry`; giá trị mới cho `ground` (`iron`), `awning` (`metal`), `window` (`arch`, `french`, `glass`), `balcony` (`solid`), `roof` (`metal1`, `tile`), `roofItems` (`ac`, `flag`). Tất cả có trong Xưởng nhà và trong nhà ngẫu nhiên.
+  2. **Khối dài gây vòng che khuất.** Test phát hiện vòng lặp thứ tự vẽ (A trước B trước … trước A) khi thêm đồ bày vỉa hè. Nguyên nhân: vỉa hè, dây điện và làn xe là khối dài 100 m, vừa đứng trước vừa đứng sau các thứ dọc phố. Cách chữa: vỉa hè cắt **đúng ranh giới từng căn / ngõ**; dây điện cắt **tại tâm từng cột** (mỗi khoảng có xung riêng); làn xe cắt đoạn 5 m, xe máy được chuyển sang nhóm của đoạn kế tiếp khi chạy qua.
+  3. **Bộ xếp chỗ trên mái** (`roof-items.ts`): mỗi vật thử vị trí quen (giữ nguyên hình các preset cũ), rồi quét tìm chỗ trống; tính cả tum thang, chậu cây và khoảng dưới mái tôn.
+  4. Một vòng che khuất thật (cột cờ – tường chắn – cột đỡ – mái tôn) không có thứ tự vẽ nào thỏa → luật: không cột cờ khi mái tôn che cả mái.
+- **Hệ quả**: Test phố tăng lên 6 bố cục × 4 góc × bật/tắt cutaway; tất cả sạch. Snapshot các preset cũ không đổi.
+
 ---
 
 ## Câu hỏi mở

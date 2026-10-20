@@ -129,7 +129,9 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý: nhà rộng 2–3 lần, có nhà làm **nửa hầm để xe** (tầng 1 cao hơn), có nhà rộng bình thường → `basement`, bậc tam cấp, mặt tiền chia gian, 12% nhà rộng trong random, preset `wide-basement` + `wide-plain`, lô Catalog rộng theo nhà (ADR-021)
 - [x] Quy tắc tầm với ra vỉa hè 1.9 m (lỗi biển dọc đâm cây/dây do test phát hiện)
 - [x] Yêu cầu: **Xưởng nhà** — trang tự nhào nặn một căn (bảng chỉnh mọi tham số, từng tầng, cảnh báo, chép JSON); làm sớm FR-31 của P2; 6 test controller
-- [~] **Người dùng kiểm bằng mắt** (xe máy mới, nhà rộng, Xưởng nhà) + đo fps khi xe chạy (NFR-03) và khi đêm
+- [x] Góp ý: "chưa có nhiều option" → thêm 14 lựa chọn (ADR-022), bảng Xưởng nhà chia nhóm thu gọn + sửa chữ từng biển
+- [x] Chữa vòng lặp thứ tự vẽ do khối dài: vỉa hè theo ranh nhà, dây điện theo cột, làn xe theo đoạn 5 m (ADR-022); test phố 6 bố cục
+- [~] **Người dùng kiểm bằng mắt** (lựa chọn mới, xe máy, nhà rộng, Xưởng nhà) + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 
 ## P4 · Ngã tư

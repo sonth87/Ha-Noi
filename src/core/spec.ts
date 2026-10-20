@@ -10,10 +10,10 @@ type Defaults = Omit<HouseSpec, 'id' | 'seed' | 'upper' | 'preset'>;
 
 export const DEFAULTS: Defaults = {
   x: 0, y: 0, w: SIZE.tubeW, d: SIZE.tubeD, facing: 'S',
-  floors: 3, basement: 0, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0,
-  ground: 'fold', shop: true, awning: 'none', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
-  roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, roofShelter: 'none', laundry: false, roofPlants: 0,
-  roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0,
+  floors: 3, basement: 0, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0, wall: 'plain', bays: 0,
+  ground: 'fold', shop: true, awning: 'none', goods: 'none', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
+  roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, stairHut: false, roofShelter: 'none', laundry: false, roofPlants: 0,
+  roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0, sideAd: '', sideWindows: false,
 };
 
 const FLOOR_DEFAULT = { window: 'tall' as WindowKind, balcony: 'rail' as BalconyKind, balconyFloors: 'all' as const, plants: 1 };
@@ -39,9 +39,9 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     const n = i + 2;   // floor number: ground = 1
     const on = merged.balconyFloors === 'all' || (merged.balconyFloors === 'odd' && n % 2 === 1) || (merged.balconyFloors === 'even' && n % 2 === 0);
     return {
-      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false,
+      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false, canopy: 'none', laundry: false,
       ...preset.upper?.[i], ...input.upper?.[i],
-    };
+    } as FloorSpec;
   });
 
   const spec: HouseSpec = {
@@ -50,13 +50,14 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     x: merged.x, y: merged.y, w: merged.w, d: merged.d, facing: merged.facing,
     seed: input.seed ?? hash(input.id),
     floors, basement: merged.basement, groundH: merged.groundH, floorH: merged.floorH, overhang: merged.overhang,
-    ground: merged.ground, shop: merged.shop, awning: merged.awning, shopName: merged.shopName,
+    wall: merged.wall, bays: clampInt(merged.bays, 0, 6, 'bays', warn),
+    ground: merged.ground, shop: merged.shop, awning: merged.awning, goods: merged.goods, shopName: merged.shopName,
     signs: [...merged.signs], stickers: clampInt(merged.stickers, 0, 4, 'stickers', warn),
     upper,
-    roof: merged.roof, topRoom: merged.topRoom, topSetback: merged.topSetback, parapet: merged.parapet, roofShelter: merged.roofShelter,
+    roof: merged.roof, topRoom: merged.topRoom, topSetback: merged.topSetback, parapet: merged.parapet, stairHut: merged.stairHut, roofShelter: merged.roofShelter,
     laundry: merged.laundry, roofPlants: clampInt(merged.roofPlants, 0, 3, 'roofPlants', warn),
     roofItems: [...merged.roofItems], sideAC: clampInt(merged.sideAC, 0, 3, 'sideAC', warn),
-    sideEnd: merged.sideEnd, sideClear: Math.max(0, merged.sideClear),
+    sideEnd: merged.sideEnd, sideClear: Math.max(0, merged.sideClear), sideAd: merged.sideAd, sideWindows: merged.sideWindows,
   };
 
   // consistency rules (house-spec §4)
@@ -77,6 +78,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     const kept = spec.roofItems.filter(i => i === 'antenna');
     if (kept.length !== spec.roofItems.length) { spec.roofItems = kept; warn('roofItems', 'only an antenna fits on a pitched roof'); }
     spec.roofPlants = 0; spec.laundry = false;
+    if (spec.stairHut) { spec.stairHut = false; warn('stairHut', 'only on a flat roof; removed'); }
     if (spec.roofShelter !== 'none') { spec.roofShelter = 'none'; warn('roofShelter', 'only over a flat roof; removed'); }
   }
   // a terrace shelter needs a roof room to lean on; without one it covers the whole roof, and vice versa
@@ -85,6 +87,15 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
   if (spec.roofShelter === 'full' && spec.roofItems.includes('solar')) {
     spec.roofItems = spec.roofItems.filter(i => i !== 'solar'); warn('roofItems', 'a solar heater cannot sit under a full roof shelter; removed');
   }
+  // a flag beside a full shelter's back edge makes a ring of boxes no draw order can satisfy
+  if (spec.roofShelter === 'full' && spec.roofItems.includes('flag')) {
+    spec.roofItems = spec.roofItems.filter(i => i !== 'flag'); warn('roofItems', 'no flag pole on a fully sheltered roof; removed');
+  }
+  if (spec.stairHut && spec.topRoom) { spec.stairHut = false; warn('stairHut', 'the roof room already holds the stairs; removed'); }
+  spec.upper.forEach((fl, i) => {
+    if (fl.balcony === 'cage' && fl.canopy !== 'none') { fl.canopy = 'none'; warn(`upper[${i}].canopy`, 'a cage has its own cap; canopy removed'); }
+    if (fl.laundry && fl.balcony === 'none') { fl.laundry = false; warn(`upper[${i}].laundry`, 'clothes need a balcony to dry on; removed'); }
+  });
   if (spec.topRoom && spec.topSetback < 1.5 * M) { spec.topSetback = 1.5 * M; warn('topSetback', 'raised to 1.5 m so the terrace fits'); }
   if (spec.floors === 0) spec.signs = spec.signs.filter(s => { const ok = s.type !== 'projecting-vertical' && s.type !== 'billboard'; if (!ok) warn('signs', `${s.type} needs an upper floor; removed`); return ok; });
   if (spec.signs.some(s => s.type === 'side-panels') && spec.w < 3.4 * M) {
@@ -108,14 +119,14 @@ function clampInt(v: number, lo: number, hi: number, field: string, warn: (f: st
 export const topZ = (s: Pick<HouseSpec, 'groundH' | 'floors' | 'floorH' | 'basement'>) => s.basement + s.groundH + s.floors * s.floorH;
 
 /** heights of roof items above the roof they stand on (render/parts/roof-items.ts) */
-const ITEM_H: Record<string, number> = { 'tank-h': 16, 'tank-v': 18, solar: 24, antenna: 32 };
+const ITEM_H: Record<string, number> = { 'tank-h': 16, 'tank-v': 18, solar: 24, antenna: 32, ac: 7, flag: 30 };
 
 /** Highest point of a house: roof, roof room, roof items, shelter (for neighbours' sideClear). */
 export function peakZ(s: HouseSpec): number {
   const top = topZ(s);
-  if (s.roof === 'metal2') return top + 14 + (s.roofItems.includes('antenna') ? 26 : 0);
+  if (s.roof !== 'flat') return top + 14 + (s.roofItems.includes('antenna') ? 26 : 0);
   const base = s.topRoom ? top + s.floorH - 2 : top;
-  let z = Math.max(top + s.parapet, top + 15 /* pots, laundry */, base, ...s.roofItems.map(i => base + (ITEM_H[i] ?? 0)));
+  let z = Math.max(top + s.parapet, top + 15 /* pots, laundry */, base, s.stairHut ? top + 24 : 0, ...s.roofItems.map(i => base + (ITEM_H[i] ?? 0)));
   if (s.roofShelter === 'terrace') z = Math.max(z, top + s.floorH + 1 + Math.round(s.w * 0.3));
   if (s.roofShelter === 'full') z = Math.max(z, top + 24 + Math.round(s.w * 0.3));
   return z;
@@ -143,13 +154,14 @@ export function sceneIssues(inputs: readonly HouseInput[]): Issue[] {
 // ---------- random houses (catalog "R") ----------
 
 const SHOP_NAMES = ['CÀ PHÊ', 'PHỞ BÒ', 'TẠP HÓA', 'SỬA XE', 'BÚN CHẢ', 'CẮT TÓC', 'PHOTO', 'BÁNH MÌ', 'THUỐC', 'ĐIỆN THOẠI'];
-const WINDOWS: WindowKind[] = ['tall', 'tall', 'louver', 'glass-doors', 'pair', 'wide'];
-const BALCONIES: BalconyKind[] = ['rail', 'rail', 'cage', 'none'];
+const WINDOWS: WindowKind[] = ['tall', 'tall', 'louver', 'glass-doors', 'pair', 'wide', 'arch', 'french', 'glass'];
+const BALCONIES: BalconyKind[] = ['rail', 'rail', 'solid', 'cage', 'none'];
 
 export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}): HouseInput {
   const preset = r.pick(PRESET_IDS);
   const p = PRESETS[preset] as Partial<HouseInput>;
   const pitched = p.roof === 'metal2' || r.chance(0.12);
+  const roof = pitched ? r.pick(['metal2', 'metal2', 'metal1', 'tile'] as const) : 'flat';
   const wide = r.chance(0.12);
   const w = wide ? r.int(40, 60) * 2 : Math.round(r.int(32, 46) / 2) * 2;
   const floors = pitched ? 0 : r.int(1, 6);
@@ -164,7 +176,7 @@ export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}):
   // many tube houses roof their terrace (or the whole roof) with corrugated metal; many don't
   const roofShelter = pitched ? 'none' : topRoom ? (r.chance(0.5) ? 'terrace' : 'none') : (r.chance(0.35) ? 'full' : 'none');
   const items: RoofItem[] = pitched ? (r.chance(0.5) ? ['antenna'] : []) :
-    (['tank-h', 'tank-v', 'solar', 'antenna'] as RoofItem[]).filter((_it, i) => i === 0 ? r.chance(0.7) : i === 2 && roofShelter === 'full' ? false : r.chance(0.4));
+    (['tank-h', 'tank-v', 'solar', 'antenna', 'ac', 'flag'] as RoofItem[]).filter((_it, i) => i === 0 ? r.chance(0.7) : i === 2 && roofShelter === 'full' ? false : r.chance(i >= 4 ? 0.25 : 0.4));
   return {
     ...base,
     id,
@@ -176,8 +188,20 @@ export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}):
     overhang: floors > 0 && r.chance(0.4) ? 0.8 * M : 0,
     ground: r.pick(['fold', 'roll', 'glass', 'wood'] as const), shop: r.chance(0.85),
     awning: r.chance(0.4) ? 'fabric' : 'none', shopName, signs, stickers: r.int(0, 3),
-    upper: Array.from({ length: floors }, () => ({ window: r.pick(WINDOWS), balcony: r.pick(BALCONIES), plants: r.int(0, 3), ac: r.chance(0.25) })),
-    roof: pitched ? 'metal2' : 'flat', topRoom, roofShelter,
+    upper: Array.from({ length: floors }, () => {
+      const balcony = r.pick(BALCONIES);
+      return {
+        window: r.pick(WINDOWS), balcony, plants: r.int(0, 3), ac: r.chance(0.25),
+        canopy: balcony === 'cage' ? 'none' as const : r.pick(['none', 'none', 'concrete', 'metal'] as const),
+        laundry: balcony !== 'none' && r.chance(0.3),
+      };
+    }),
+    wall: r.pick(['plain', 'plain', 'tile', 'paint-old', 'stone-base'] as const),
+    goods: r.pick(['none', 'none', 'stools', 'bikes', 'crates'] as const),
+    stairHut: !pitched && !topRoom && floors > 0 && r.chance(0.3),
+    sideAd: r.chance(0.15) ? r.pick(['KHOAN CẮT BÊ TÔNG|0912 345 678', 'CHO THUÊ NHÀ|0987 654 321', 'SƠN NƯỚC|0903 111 222']) : '',
+    sideWindows: r.chance(0.25),
+    roof, topRoom, roofShelter,
     laundry: r.chance(0.5), roofPlants: r.int(0, 2), roofItems: items, sideAC: r.int(0, 3),
   };
 }

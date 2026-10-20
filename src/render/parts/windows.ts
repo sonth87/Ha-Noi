@@ -41,6 +41,24 @@ export function windowSet(v: Variant, kind: WindowKind, W: number, H: number): s
       const w = W * 0.7, x = (W - w) / 2;
       return win(v, x, 8, w, 12) + `<path class="mull" d="M${f(x + w / 3)} 8V20M${f(x + 2 * w / 3)} 8V20"/>` + sill(x, 20.8, w);
     }
+    case 'arch': {
+      // cửa vòm: a tall opening with a round head
+      const w = Math.min(16, Math.max(10, W * 0.4)), x = (W - w) / 2, r = w / 2, top = 4, bot = H - 6;
+      return `<path class="win${v()}" d="M${f(x)} ${f(bot)}V${f(top + r)}A${f(r)} ${f(r)} 0 0 1 ${f(x + w)} ${f(top + r)}V${f(bot)}Z"/>` +
+        `<path class="mull" d="M${f(x + r)} ${f(top)}V${f(bot)}M${f(x)} ${f(top + r)}H${f(x + w)}"/>` + sill(x, bot + 0.8, w);
+    }
+    case 'french': {
+      // cửa Pháp: tall glazed doors with louvred shutters folded open either side
+      const w = Math.min(16, W * 0.38), x = (W - w) / 2, top = 3, h = H - 5, sw = w / 2;
+      const shutter = (sx: number) => `<rect class="face" x="${f(sx)}" y="${top}" width="${f(sw)}" height="${f(h)}"/>${slits(top + 1.6, top + h - 1, 1.4, sx + 0.5, sx + sw - 0.5, false)}`;
+      return win(v, x, top, w, h) + `<path class="mull" d="M${f(x + w / 2)} ${top}V${f(top + h)}M${f(x)} ${f(top + h * 0.28)}H${f(x + w)}"/>` +
+        shutter(x - sw - 0.4) + shutter(x + w + 0.4);
+    }
+    case 'glass': {
+      // a wall of glass across the bay
+      const x = 2, w = W - 4, n = Math.max(2, Math.round(w / 8));
+      return win(v, x, 3, w, H - 6) + `<path class="mull" d="${Array.from({ length: n - 1 }, (_, i) => `M${f(x + (i + 1) * w / n)} 3V${f(H - 3)}`).join('')}M${f(x)} ${f(H * 0.35)}H${f(x + w)}"/>`;
+    }
   }
 }
 

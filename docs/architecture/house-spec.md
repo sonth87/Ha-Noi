@@ -44,13 +44,16 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `groundH` | number | 38 | Cao tầng 1 |
 | `floorH` | number | 32 | Cao mỗi tầng trên |
 | `overhang` | number 0–12 | 0 | Tầng 2 trở lên đua ra phía phố |
+| `wall` | `'plain'\|'tile'\|'paint-old'\|'stone-base'` | `'plain'` | Hoàn thiện mặt tiền: trơn / ốp gạch men (lưới) / sơn cũ loang lổ / ốp đá chân tường tầng 1 |
+| `bays` | int 0–6 | 0 | Số gian mặt tiền các tầng trên; 0 = tự động (~4 m một gian) |
 
 ### 2.3 Tầng 1 và biển hiệu
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `ground` | `'fold'\|'roll'\|'glass'\|'wood'\|'wall'` | `'fold'` | Cửa xếp, cửa cuốn, kính, gỗ 4 cánh, tường kín có cửa đi nhỏ |
+| `ground` | `'fold'\|'roll'\|'glass'\|'wood'\|'iron'\|'wall'` | `'fold'` | Cửa xếp, cửa cuốn, kính, gỗ 4 cánh, sắt hoa (lưới quả trám; mở = gập 2 bên), tường kín có cửa đi nhỏ |
 | `shop` | bool | true | Đang mở hàng: cửa mở, lòng nhà sáng. `false` thì cửa xếp hoặc cửa cuốn đóng kín |
-| `awning` | `'none'\|'fabric'` | `'none'` | Mái hiên bạt có diềm lượn sóng |
+| `awning` | `'none'\|'fabric'\|'metal'` | `'none'` | Mái hiên bạt có diềm lượn sóng / mái hiên tôn |
+| `goods` | `'none'\|'stools'\|'bikes'\|'crates'` | `'none'` | Bày ra vỉa hè: bàn ghế nhựa / xe máy dựng vuông góc lề / két bia, thùng hàng. Chỉ ở 60% mặt tiền bên trái, trong tầm 1.9 m |
 | `shopName` | string | `'TẠP HÓA'` | Chữ mặc định trên biển. Chữ tự đặt, không thương hiệu |
 | `signs` | `SignSpec[]` | `[{ type: 'facade' }]` | Danh sách biển, theo [components](components.md) mục A9 |
 | `stickers` | int 0–4 | 1 | Số tờ quảng cáo A5 dán ở tầng 1 |
@@ -74,8 +77,10 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 
 | Trường của `FloorSpec` | Kiểu | Mặc định (lấy từ khuôn) | Ý nghĩa |
 |---|---|---|---|
-| `window` | `'tall'\|'louver'\|'glass-doors'\|'pair'\|'wide'` | `'tall'` | Cửa sổ đứng 2 cánh, cửa chớp, cửa kính 2 cánh ra ban công, cặp cửa nhỏ, cửa ngang 3 ô |
-| `balcony` | `'none'\|'rail'\|'cage'` | `'rail'` | Không có / lan can sắt / chuồng cọp (cao cả tầng) |
+| `window` | `'tall'\|'louver'\|'glass-doors'\|'pair'\|'wide'\|'arch'\|'french'\|'glass'` | `'tall'` | Cửa sổ đứng 2 cánh, cửa chớp, cửa kính ra ban công, cặp cửa nhỏ, cửa ngang 3 ô, cửa vòm, cửa Pháp kèm cánh chớp mở, mảng kính lớn |
+| `balcony` | `'none'\|'rail'\|'solid'\|'cage'` | `'rail'` | Không có / lan can sắt / lan can xây / chuồng cọp (cao cả tầng) |
+| `canopy` | `'none'\|'concrete'\|'metal'` | `'none'` | Ô văng bê tông hoặc mái tôn nhỏ che cửa sổ (không đi với chuồng cọp) |
+| `laundry` | bool | false | Quần áo phơi ở ban công (cần ban công) |
 | `plants` | int 0–3 | 1 | Số chậu cây trên ban công |
 | `ac` | bool | false | Cục nóng điều hòa treo ngoài mặt tiền. **Chỉ vẽ khi tầng không có ban công** |
 
@@ -84,20 +89,23 @@ Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plan
 ### 2.5 Mái
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `roof` | `'flat'\|'metal2'` | `'flat'` | Mái bằng có tường chắn / mái tôn 2 dốc (nóc chạy dọc chiều sâu) |
+| `roof` | `'flat'\|'metal2'\|'metal1'\|'tile'` | `'flat'` | Mái bằng có tường chắn / tôn 2 dốc / tôn 1 dốc (cao phía sau, thấp ra phố) / mái ngói 2 dốc |
 | `topRoom` | bool | false | Phòng tum trên mái bằng, lùi vào so với mặt tiền, phía trước là sân thượng |
 | `topSetback` | number | 28 | Khoảng cách từ mặt tiền tầng trên đến tường trước của phòng tum |
 | `parapet` | number | 8 | Cao tường chắn mái |
+| `stairHut` | bool | false | Tum thang nhỏ ở góc sau mái bằng (khi không có phòng tum) |
 | `roofShelter` | `'none'\|'terrace'\|'full'` | `'none'` | **Mái tôn tam giác** (2 dốc, nóc chạy dọc chiều sâu, đầu hồi tam giác hướng ra phố, để hở thấy khung vì kèo) trên cột sắt mảnh. `terrace`: che sân thượng trước phòng tum, **cao hơn trần tum một chút**, 4 cột trên tường chắn hai bên sân thượng. `full`: che toàn bộ mái bằng khi không có tum (4 cột), chừa dải phía sau cho bồn nước/ăng-ten. Nhiều nhà ống có, nhiều nhà không |
 | `laundry` | bool | false | Dây phơi quần áo trên sân thượng (cần `topRoom`) |
 | `roofPlants` | int 0–3 | 0 | Chậu cây trên sân thượng hoặc mái |
-| `roofItems` | `RoofItem[]` | `['tank-h']` | `'tank-h'` bồn inox nằm, `'tank-v'` bồn đứng, `'solar'` máy nước nóng năng lượng mặt trời, `'antenna'` ăng-ten. Vị trí cố định từ sau ra trước nên không chồng nhau. Có `topRoom` thì vật đặt trên mái phòng tum |
+| `roofItems` | `RoofItem[]` | `['tank-h']` | `'tank-h'` bồn inox nằm, `'tank-v'` bồn đứng, `'solar'` máy NLMT, `'antenna'` ăng-ten, `'ac'` cục nóng, `'flag'` cột cờ. Một bộ xếp chỗ đặt từng thứ: thử vị trí quen trước, rồi tìm chỗ trống, hết chỗ thì bỏ. Dưới mái tôn che cả mái chỉ đặt vật thấp hơn mép mái. Có `topRoom` thì vật đặt trên mái phòng tum |
 
 ### 2.6 Tường hồi
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
 | `sideAC` | int 0–3 | 1 | Cục nóng treo trên tường hồi `sideEnd`, cao hơn tầng 1 và cao hơn `sideClear`. Bỏ qua vị trí nào trùng chỗ biển quảng cáo lớn |
 | `sideEnd` | `'+a'\|'-a'` | `'+a'` | Tường hồi nào lộ ra (bên phải / trái nhìn từ phố). Cục nóng treo và biển `billboard` chỉ gắn ở bên này, **cố định theo dữ liệu**, không đổi khi xoay góc nhìn |
+| `sideAd` | string | `''` | Mảng quảng cáo sơn trên tường hồi, `"DÒNG 1|DÒNG 2"` (cần tường lộ đủ cao) |
+| `sideWindows` | bool | false | Cửa sổ nhỏ trên tường hồi, chỉ ở các tầng cao hơn nhà bên; sáng cùng tầng |
 | `sideClear` | number | 0 | Độ cao mà từ đó trở lên tường hồi `sideEnd` không bị nhà bên che. Bố cục phố tính bằng `peakZ` của nhà bên (cả phòng tum, vật trên mái, mái tôn). `0` = không có nhà bên |
 
 Vệt ố và ống thoát nước tự sinh trên tường hồi, mặt sau có cửa sổ nhỏ ở mỗi tầng; không cần tham số.
@@ -132,7 +140,10 @@ Thêm preset **không được** đòi sửa renderer (tiêu chí S3). Mục ti�
 | `roof !== 'flat'` → không `topRoom`, `roofItems` chỉ giữ `antenna`, không chậu cây và dây phơi | Tự sửa, `warn` |
 | `topRoom` và `topSetback < 15` | Nâng lên 15, `warn` |
 | `roofShelter: 'terrace'` mà không có `topRoom` → đổi thành `'full'`; `'full'` mà có `topRoom` → đổi thành `'terrace'`; mái không bằng → `'none'` | Tự sửa, `warn` |
-| `roofShelter: 'full'` → bỏ `solar` (máy NLMT không đặt dưới mái tôn) | Tự sửa, `warn` |
+| `roofShelter: 'full'` → bỏ `solar` (máy NLMT không đặt dưới mái tôn) và `flag` (cột cờ sát mép mái tôn tạo vòng che khuất không vẽ được) | Tự sửa, `warn` |
+| `stairHut` với mái dốc hoặc khi đã có `topRoom` | Bỏ, `warn` |
+| Tầng có `cage` → bỏ `canopy`; `laundry` mà không có ban công → bỏ | Tự sửa, `warn` |
+| `bays` ngoài 0–6 | Kẹp, `warn` |
 | `side-panels` và `w < 34` | Bỏ biển, `warn` |
 | `id` trùng trong cảnh | `error` (do `sceneIssues`) |
 
@@ -146,13 +157,7 @@ Cảnh ghi `error` ra console. Vẽ khối placeholder cho nhà lỗi để dàn
 
 | Trường / giá trị | Ý nghĩa |
 |---|---|
-| `window`: `'arch'`, `'glass'` (kính lớn) | Cửa vòm, mảng kính lớn |
-| `balcony`: `'solid'` | Lan can xây đặc |
-| `awning`: `'metal'` | Mái tôn che trước cửa |
-| `roof`: `'metal1'`, `'tile'`, `stairHut` | Tôn 1 dốc, mái ngói, tum thang nhỏ (không phải phòng) |
 | `shape`: `'L'`, `'chamfer'` + `shapeParam` | Nhà góc chữ L, nhà vát góc |
-| `wall`: `'plain'\|'tile'\|'paint-old'` | Kiểu hoàn thiện tường |
-| `sideAd` | Mảng quảng cáo sơn trên tường hồi |
 | Preset: `cap4-tile`, `1f-flat`, `4f-shop`, `tube-narrow-7f`, `corner-L`, `corner-chamfer`, `old-villa` | Bổ sung để đủ 12+ preset |
 
 ## 6. Ví dụ

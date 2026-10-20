@@ -2,16 +2,16 @@
    house's local frame, so the same code draws a house facing any way (FR-20). Floors light by
    data-floor="<id>/<n>" (1 = ground, 2… = upper floors, floors + 2 = roof room), whichever face
    (front or back) is visible. */
-import type { Kernel } from '@iso/kernel';
+import { esc, type Kernel } from '@iso/kernel';
 import { rng } from '@core/rng';
 import { localFrame } from '@core/view';
 import type { HouseSpec, Item } from '@core/types';
 import { LocalDraw } from '@render/local';
 import { band, type Ctx } from '@render/parts/ctx';
 import { backWindow, windowSet, win } from '@render/parts/windows';
-import { awning, groundFace } from '@render/parts/ground';
+import { awning, finish, goods, groundFace } from '@render/parts/ground';
 import { SIDEWALK, signItems } from '@render/parts/signs';
-import { balcony, facadeAC } from '@render/parts/balconies';
+import { balcony, canopy, facadeAC } from '@render/parts/balconies';
 import { endWall, sideACs } from '@render/parts/walls';
 import { roof } from '@render/parts/roofs';
 import { g, safeId } from '@render/svg';
@@ -37,6 +37,7 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
   {
     let svg = D.box(0, 0, 0, W, s.d, H);
     const front = D.face(0, 0, 0, W, s.d, H, '+b'), back = D.face(0, 0, 0, W, s.d, H, '-b');
+    if (front && (s.wall === 'stone-base' || s.wall === 'paint-old')) svg += g(front.t, finish(c, s.wall === 'stone-base' ? 'stone' : 'paint-old', front.w, H));
     if (front) { const { lights, extra } = groundFace(c, front.w); svg += band(c.floorId(1), front.t, front.w, H, lights, extra); }
     if (back) svg += band(c.floorId(1), back.t, back.w, H, win(c.v, back.w * 0.55, 10, 9, H - 10.5));
     svg += endWall(c, D.face(0, 0, 0, W, s.d, H, side), side, 4, s.floors === 0);
@@ -47,11 +48,19 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
   if (s.floors > 0) {
     const UH = s.floors * FH;
     let svg = D.box(0, 0, H, W, fy, UH);
+    const face = D.face(0, 0, H, W, fy, UH, '+b');
+    if (face && (s.wall === 'tile' || s.wall === 'paint-old')) svg += g(face.t, finish(c, s.wall, face.w, UH));
+    // painted ad on the exposed end wall, in the part clear of the neighbour
+    const endFace = D.face(0, 0, H, W, fy, UH, s.sideEnd);
+    if (endFace && s.sideAd) svg += paintedAd(c, endFace.t, endFace.w, c.topZ - Math.max(s.sideClear, H));
     s.upper.forEach((fl, i) => {
       const n = i + 2, z = H + i * FH;
       const front = D.face(0, 0, z, W, fy, FH, '+b'), back = D.face(0, 0, z, W, fy, FH, '-b');
       if (front) svg += band(c.floorId(n), front.t, front.w, FH, bays(c, fl.window, front.w, FH));
       if (back) svg += band(c.floorId(n), back.t, back.w, FH, backWindow(c.v, back.w, FH));
+      // small windows in the exposed end wall, only above the neighbour
+      const sideF = s.sideWindows && z >= s.sideClear ? D.face(0, 0, z, W, fy, FH, s.sideEnd) : null;
+      if (sideF) svg += band(c.floorId(n), sideF.t, sideF.w, FH, win(c.v, sideF.w * 0.42, 9, 6, 10) + win(c.v, sideF.w * 0.7, 9, 6, 10));
     });
     const front = D.face(0, 0, H, W, fy, UH, '+b');
     if (front && s.floors > 1) svg += g(front.t, `<path class="detail" d="${Array.from({ length: s.floors - 1 }, (_, i) => `M0 ${(i + 1) * FH}H${W}`).join('')}"/>`);
@@ -62,9 +71,11 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
   // ---- things on and off the facade ----
   if (c.base > 0) entranceSteps(c);
   if (s.awning !== 'none') awning(c);
+  if (s.goods !== 'none') goods(c);
   signItems(c);
   s.upper.forEach((fl, i) => {
     balcony(c, i + 2, fl);
+    canopy(c, i + 2, fl);
     if (fl.ac && fl.balcony === 'none') facadeAC(c, i + 2);
   });
   sideACs(c);
@@ -74,9 +85,18 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
 
 /** a wide facade is split into bays of about 4 m, each with the floor's window set */
 function bays(c: Ctx, kind: Parameters<typeof windowSet>[1], W: number, H: number): string {
-  const n = Math.max(1, Math.round(W / 40)), bw = W / n;
+  const n = c.s.bays > 0 ? c.s.bays : Math.max(1, Math.round(W / 40)), bw = W / n;
   if (n === 1) return windowSet(c.v, kind, W, H);
   return Array.from({ length: n }, (_, i) => `<g transform="translate(${(i * bw).toFixed(2)} 0)">${windowSet(c.v, kind, bw, H)}</g>`).join('');
+}
+
+/** a painted ad on a side wall (sơn quảng cáo): a frame and two lines of lettering, high up on the face */
+function paintedAd(c: Ctx, t: string, faceW: number, room: number): string {
+  if (room < 26 || faceW < 60) return '';
+  const [l1 = '', l2 = ''] = c.s.sideAd.split('|'), w = Math.min(80, faceW * 0.55), x = faceW * 0.22;
+  return g(t, `<rect class="ad-box" x="${x.toFixed(2)}" y="4" width="${w.toFixed(2)}" height="18"/>` +
+    `<text class="ad-paint" x="${(x + w / 2).toFixed(2)}" y="12.2" font-size="${Math.min(6, (w - 6) / Math.max(1, [...l1].length) / 0.7).toFixed(2)}" text-anchor="middle">${esc(l1)}</text>` +
+    `<text class="ad-paint" x="${(x + w / 2).toFixed(2)}" y="19" font-size="4.2" text-anchor="middle" letter-spacing=".6">${esc(l2)}</text>`);
 }
 
 /** steps up to a raised ground floor, beside the garage */

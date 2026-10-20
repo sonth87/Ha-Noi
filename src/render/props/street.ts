@@ -8,13 +8,16 @@ import type { Kernel } from '@iso/kernel';
 import { slits } from '@iso/kernel';
 import { localFrame, rotateSpec, type LocalSide } from '@core/view';
 import { STREET, streetCenter, streetFrameSpec, type StreetLayout } from '@core/layout';
+import { resolveSpec } from '@core/spec';
 import type { Item, ViewK } from '@core/types';
 import { LocalDraw, type LV } from '@render/local';
 import { sagLine } from '@render/geom';
 import { sticker } from '@render/parts/signs';
+import { scooter } from '@render/parts/bike';
 import { f, g } from '@render/svg';
 
 const POLE_H = 92, ARM_Z = 84;
+export const LANE_PIECE = 50;
 
 export function streetFrame(k: ViewK) {
   const [cx, cy] = streetCenter();
@@ -42,12 +45,20 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
     add('slab', 0, 0, -6, len, STREET.depth, 6, svg);
   }
 
-  // ---- sidewalks ----
-  for (const [name, b0] of [['walk-far', STREET.farFacade], ['walk-near', r1]] as const) {
-    const w = STREET.sidewalk;
-    const svg = D.box(0, b0, 0, len, w, 2) +
-      g(D.plane([0, b0, 2], [1, 0, 0], [0, 1, 0]), `${slits(10, len - 10, 10, 0, w)}<line class="detail" x1="0" y1="${w / 2}" x2="${len}" y2="${w / 2}"/>`);
-    add(name, 0, b0, 0, len, w, 2, svg);
+  // ---- sidewalks, one piece per house frontage (and per alley mouth): a single 100 m box would sit
+  //      both before and after things along the street and close a ring no draw order can satisfy;
+  //      cutting exactly at the house boundaries keeps every piece's relations local to its house ----
+  for (const [row, b0] of [['far', STREET.farFacade], ['near', r1]] as const) {
+    const w = STREET.sidewalk, cuts = new Set<number>([0, len]);
+    for (const h of lay.houses) if (h.row === row) { const sp = resolveSpec(h.input).spec; cuts.add(sp.x); cuts.add(sp.x + sp.w); }
+    const xs = [...cuts].sort((p, q) => p - q);
+    for (let i = 0; i < xs.length - 1; i++) {
+      const x = xs[i]!, pw = xs[i + 1]! - x;
+      if (pw <= 0.01) continue;
+      const svg = D.box(x, b0, 0, pw, w, 2) +
+        g(D.plane([x, b0, 2], [1, 0, 0], [0, 1, 0]), `${slits(10 - (x % 10), pw - 0.01, 10, 0, w)}<line class="detail" x1="0" y1="${w / 2}" x2="${pw}" y2="${w / 2}"/>`);
+      add(`walk-${row}-${i}`, x, b0, 0, pw, w, 2, svg);
+    }
   }
 
   // ---- poles (with a tangle of cable and A5 stickers) and lamps ----
@@ -81,8 +92,10 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
   for (const rw of ['far', 'near'] as const) {
     const ps = lay.poles.filter(p => p.row === rw).sort((a, b) => a.x - b.x);
     const b0 = rw === 'far' ? STREET.far.pole + 4.3 : STREET.near.pole - 1.8;
-    let svg = '', zMin = ARM_Z;
-    for (let i = 0; i < 4; i++) {
+    // one item per stretch between pole centres (same reason as the sidewalk pieces): every wire is
+    // cut at the same x, so the stretches only touch; each stretch carries its own pulses
+    const cuts = [0, ...ps.map(p => p.x), len];
+    const wires = Array.from({ length: 4 }, (_, i) => {
       const b = b0 + i * 0.5;
       const anchors: LV[] = [[0, b, ARM_Z - 4 - i], ...ps.map(p => [p.x - 9 + i * 6, b, ARM_Z] as LV), [len, b, ARM_Z - 3 - i]];
       const pts: LV[] = [];
@@ -91,41 +104,53 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
         const seg = sagLine(A, B, 4 + span / 60 + i, Math.max(6, Math.round(span / 20)));
         pts.push(...(j ? seg.slice(1) : seg));
       }
-      for (const p of pts) zMin = Math.min(zMin, p[2]);
-      const d = D.path(pts);
-      svg += `<path class="wire" d="${d}"/>`;
-      if (i % 2 === 0) svg += `<path class="pulse" pathLength="1000" d="${d}"/>`;
+      return pts;
+    });
+    for (let j = 0; j < cuts.length - 1; j++) {
+      const x0 = cuts[j]!, x1 = cuts[j + 1]!;
+      let svg = '', zMin = ARM_Z;
+      wires.forEach((pts, i) => {
+        const part = clipX(pts, x0, x1);
+        if (part.length < 2) return;
+        for (const p of part) zMin = Math.min(zMin, p[2]);
+        const d = D.path(part);
+        svg += `<path class="wire" d="${d}"/>`;
+        if (i % 2 === 0) svg += `<path class="pulse" pathLength="1000" d="${d}"/>`;
+      });
+      add(`wires-${rw}-${j}`, x0, b0, zMin, x1 - x0, 1.6, ARM_Z - zMin, svg);
     }
-    add(`wires-${rw}`, 0, b0, zMin, len, 1.6, ARM_Z - zMin, svg);
   }
 
   // ---- lanes with their motorbikes (moved by the controller along the lane) ----
+  // in LANE_PIECE pieces (long boxes close draw-order rings); a bike starts in the piece holding
+  // its a0, and the controller moves it into the next piece's group as it rides on
   STREET.lanes.forEach((ln, i) => {
-    const mid = (ln.y0 + ln.y1) / 2;
-    const bikes = lay.bikes.filter(b => b.lane === i).map(bk => bike(D, mid + bk.track, ln.dir, bk.a0, bk.v)).join('');
-    add(`lane-${i}`, 0, ln.y0, 0, len, ln.y1 - ln.y0, 21, `<g class="lane" data-lane="${i}">${bikes}</g>`);
+    const mid = (ln.y0 + ln.y1) / 2, pieces = Math.ceil(len / LANE_PIECE);
+    const byPiece: string[] = Array.from({ length: pieces }, () => '');
+    for (const bk of lay.bikes.filter(b => b.lane === i)) byPiece[Math.min(pieces - 1, Math.floor(bk.a0 / LANE_PIECE))] += bike(D, mid + bk.track, ln.dir, bk.a0, bk.v);
+    byPiece.forEach((bikes, k) => {
+      const x = k * LANE_PIECE, pw = Math.min(LANE_PIECE, len - x);
+      add(`lane-${i}-${k}`, x, ln.y0, 0, pw, ln.y1 - ln.y0, 21, `<g class="lane" data-lane="${i}" data-piece="${k}">${bikes}</g>`);
+    });
   });
 
   return items;
 }
 
-/** a scooter with its rider, side-on like the reference house's parked bike, at a = 0…18 along the lane
-    (front toward dir); the controller slides it to a(t). Wheels and the body profile sit in the vertical
-    plane along the lane; seat and rider are small boxes so they read from any view. */
+/** a moving scooter with its rider at a = 0…18 along the lane; the controller slides it to a(t) */
 function bike(D: LocalDraw, b: number, dir: 1 | -1, a0: number, v: number): string {
-  const L = 18, x = (u: number) => (dir > 0 ? u : L - u);            // u measured from the tail
-  const side = D.plane([0, b, 8], [1, 0, 0], [0, 0, -1]);           // vertical, along the lane; v down from z = 8
-  const wheel = (u: number) => `<circle class="wheel" cx="${f(x(u))}" cy="5" r="3"/><circle class="detail" cx="${f(x(u))}" cy="5" r="1"/>`;
-  // body: rear hump over the back wheel, low floorboard, front shield rising to the handlebar
-  const prof: [number, number][] = [[1.5, 4.6], [2.5, 1.2], [7.5, 0.4], [9, 3.2], [12, 3.6], [14.5, -1.6], [15.6, -1.4], [16.2, 3.8], [13.2, 5.6], [4, 5.6]];
-  const body = `<path class="face" d="M${prof.map(([u, z]) => `${f(x(u))} ${f(z)}`).join('L')}Z"/>`;
-  const head = D.P(x(7.6), b, 18.2), hl = D.P(x(16.4), b, 7.4), tl = D.P(x(1.2), b, 6.8);
-  return `<g class="bike" data-a0="${f(a0)}" data-v="${v}" data-dir="${dir}">` +
-    g(side, wheel(3.4) + wheel(15) + body) +
-    D.box(Math.min(x(4), x(9.5)), b - 1.6, 8.2, 5.5, 3.2, 1.4, 0.8) +                    // seat
-    D.box(Math.min(x(5.8), x(9.6)), b - 1.5, 9.6, 3.8, 3, 6.4, 1.2) +                    // rider
-    `<path class="mast" d="${D.path([[x(9.6), b, 13.8], [x(14.4), b, 10.2]])}${D.path([[x(14.8), b - 2.6, 10.2], [x(14.8), b + 2.6, 10.2]])}"/>` +
-    `<circle class="face" cx="${f(head[0])}" cy="${f(head[1])}" r="1.9"/>` +
-    `<g class="lamp" data-night="1"><circle class="bulb" cx="${f(hl[0])}" cy="${f(hl[1])}" r="1"/><circle class="bulb tail" cx="${f(tl[0])}" cy="${f(tl[1])}" r="0.7"/></g>` +
-    `</g>`;
+  return `<g class="bike" data-a0="${f(a0)}" data-v="${v}" data-dir="${dir}">${scooter(D, 'a', 0, b, dir, 0, true)}</g>`;
+}
+
+/** the part of a polyline (monotone in x) between x0 and x1, with interpolated end points */
+function clipX(pts: LV[], x0: number, x1: number): LV[] {
+  const out: LV[] = [];
+  const at = (p: LV, q: LV, x: number): LV => { const t = (x - p[0]) / (q[0] - p[0]); return [x, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]; };
+  for (let k = 0; k < pts.length - 1; k++) {
+    const p = pts[k]!, q = pts[k + 1]!;
+    if (q[0] <= x0 || p[0] >= x1) continue;
+    if (!out.length) out.push(p[0] < x0 ? at(p, q, x0) : p);
+    out.push(q[0] > x1 ? at(p, q, x1) : q);
+  }
+  return out;
 }

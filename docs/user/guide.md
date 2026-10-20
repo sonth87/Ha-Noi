@@ -69,6 +69,7 @@ Lưu file, trang `pnpm dev` tự cập nhật; xem căn mới trong Catalog. Th�
 
 ### 4.4 Xưởng nhà (Fig 3)
 Một căn nhà ở giữa, bảng bên phải chỉnh mọi tham số: khối (mặt tiền, sâu, số tầng, cao tầng, đua ra, **nửa hầm để xe**), tầng 1 (cửa, mở hàng, mái hiên, tên quán, 7 loại biển, tờ dán), **từng tầng trên** (cửa sổ, ban công, chậu cây, cục nóng), mái (loại, phòng tum, mái tôn, dây phơi, vật trên mái), tường hồi.
+- Bảng chia nhóm thu gọn được: *Khối & mặt tiền* (kể cả kiểu tường, số gian), *Tầng 1 & vỉa hè* (cửa sắt hoa, mái hiên tôn, bày bàn ghế / xe máy / két bia), *Biển hiệu* (bật từng loại, sửa chữ từng biển), *Các tầng trên* (cửa vòm, cửa Pháp, kính lớn, lan can xây, ô văng, phơi đồ), *Mái* (tôn 1 dốc, ngói, tum thang, cục nóng, cột cờ), *Tường hồi* (quảng cáo sơn, cửa sổ nhỏ).
 - **Preset**: chọn kiểu có sẵn; **Ngẫu nhiên** (hoặc `R`); **Bỏ chỉnh** về preset gốc.
 - Ô **Cảnh báo** liệt kê những gì hệ thống tự sửa (ví dụ mái tôn 2 dốc thì không có phòng tum).
 - **Chép JSON** rồi dán vào `src/core/presets.ts` (thêm `label`) để thành preset mới.

@@ -47,7 +47,14 @@ body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono)
          max-height:calc(100vh - 100px); overflow:auto; font-size:12px; position:sticky; top:12px; }
 .panel h3 { margin:0 0 6px; font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-hi); }
 .panel h4 { margin:6px 0 2px; font-size:11px; font-weight:500; color:var(--accent); }
-.ws-section { display:grid; gap:5px; }
+.ws-section { display:grid; gap:5px; border-top:1px solid var(--edge); padding-top:8px; }
+.ws-section > summary { cursor:pointer; list-style:none; font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-hi); }
+.ws-section > summary::-webkit-details-marker { display:none; }
+.ws-section > summary::before { content:'▸ '; color:var(--line); }
+.ws-section[open] > summary::before { content:'▾ '; }
+.ws-body { display:grid; gap:5px; margin-top:6px; }
+.ws-sign { display:grid; gap:3px; }
+.ws-sign-text { margin-left:22px; }
 .ws-top { display:grid; gap:8px; }
 .ws-buttons { display:flex; gap:6px; flex-wrap:wrap; }
 .ws-row { display:grid; grid-template-columns:92px minmax(0,1fr) auto; gap:8px; align-items:center; }
