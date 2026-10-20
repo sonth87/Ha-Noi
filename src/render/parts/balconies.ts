@@ -11,6 +11,11 @@ const OUT = 10;   // balcony depth
 
 const railBars = (len: number, h: number) =>
   `<path class="rail" d="M0 0H${f(len)}M0 ${f(h)}H${f(len)}${Array.from({ length: Math.floor(len / 2.4) + 1 }, (_, i) => `M${f(Math.min(i * 2.4, len))} 0V${f(h)}`).join('')}"/>`;
+/** lan can kính: tinted panels with a top rail and posts at the ends */
+const glassPanels = (len: number, h: number) =>
+  `<rect class="glass-panel" x="0.3" y="0.8" width="${f(len - 0.6)}" height="${f(h - 0.8)}"/>` +
+  `<path class="glint" d="M${f(len * 0.18)} ${f(h - 1)}l${f(h * 0.5)} ${f(-h * 0.7)}M${f(len * 0.18 + 2)} ${f(h - 1)}l${f(h * 0.3)} ${f(-h * 0.42)}M${f(len * 0.62)} ${f(h - 1)}l${f(h * 0.5)} ${f(-h * 0.7)}"/>` +
+  `<path class="rail" d="M0 0H${f(len)}M0.3 0V${f(h)}M${f(len - 0.3)} 0V${f(h)}"/>`;
 const cageGrid = (len: number, h: number) =>
   `<path class="rail" d="M0 0H${f(len)}M0 ${f(h * 0.62)}H${f(len)}M0 ${f(h)}H${f(len)}${Array.from({ length: Math.floor(len / 1.8) + 1 }, (_, i) => `M${f(Math.min(i * 1.8, len))} 0V${f(h)}`).join('')}"/>`;
 
@@ -55,22 +60,24 @@ export function balcony(c: Ctx, n: number, fl: FloorSpec): void {
 /** one balcony between a0 and a0 + w (the rail sits 2 in from each end, the cage 1) */
 function balconySpan(c: Ctx, n: number, fl: FloorSpec, a0: number, w: number, tag: string): void {
   const { s, D } = c, z = s.groundH + (n - 2) * s.floorH, b = c.fy, a1 = a0 + w;
-  const spots: [number, number][] = [[3, 3], [10, 2.4], [w - 8, 3.2]];
+  const spots: [number, number][] = [[4, 4.8], [12, 4.2], [w - 9, 5]];
   const plants = Math.min(fl.plants, w < 22 ? 2 : 3);
   // clothes line under the floor above, but clear of an ô văng (which starts at floorH − 5.6)
   const lineZ = z + s.floorH - 8, dry = fl.laundry ? laundry(c, a0 + 4, a1 - 4, b + OUT - 5, lineZ) : '';
-  if (fl.balcony === 'rail' || fl.balcony === 'solid') {
+  if (fl.balcony === 'rail' || fl.balcony === 'solid' || fl.balcony === 'glass') {
     const rh = 11, ra = a0 + 2, rw = w - 4;
     let svg = D.box(ra, b, z, rw, OUT, 2);
     for (let i = 0; i < plants; i++) { const [pa, sz] = spots[i]!; svg += pot(c, ra + pa, b + OUT - 3.5, z + 2, sz); }
     svg += dry;
     if (fl.balcony === 'rail') svg += onOpenSides(c, ra, b, z + 2, rw, OUT, rh, len => railBars(len, rh));
+    else if (fl.balcony === 'glass') svg += onOpenSides(c, ra, b, z + 2, rw, OUT, rh, len => glassPanels(len, rh));
     else {
       // lan can xây: thin solid walls on the open sides
       const t = 1.2, walls: [number, number, number, number][] = [[ra, b, t, OUT - t], [ra + rw - t, b, t, OUT - t], [ra, b + OUT - t, rw, t]];
       for (const [a, bb, la, lb] of walls) svg += D.box(a, bb, z + 2, la, lb, rh - 1);
     }
-    c.add(`balcony-${n}${tag}`, ra, b, z, rw, OUT, fl.laundry ? lineZ - z : rh + 2, svg);
+    // tall plants and laundry reach up to here, still under an ô văng (floorH − 5.6)
+    c.add(`balcony-${n}${tag}`, ra, b, z, rw, OUT, s.floorH - 7, svg);
   } else {
     const h = s.floorH - 2, ca = a0 + 1, cw = w - 2;
     let svg = D.box(ca, b, z, cw, OUT, 2);

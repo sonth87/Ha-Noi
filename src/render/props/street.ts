@@ -9,6 +9,7 @@ import { slits } from '@iso/kernel';
 import { localFrame, rotateSpec, type LocalSide } from '@core/view';
 import { STREET, streetCenter, streetFrameSpec, type StreetLayout } from '@core/layout';
 import { resolveSpec } from '@core/spec';
+import { TREE } from '@core/units';
 import type { Item, ViewK } from '@core/types';
 import { LocalDraw, type LV } from '@render/local';
 import { sagLine } from '@render/geom';
@@ -84,7 +85,9 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
     const b0 = rw === 'far' ? STREET.far.pole + 4.3 : STREET.near.pole - 1.8;
     // one item per stretch between pole centres (same reason as the sidewalk pieces): every wire is
     // cut at the same x, so the stretches only touch; each stretch carries its own pulses
-    const cuts = [0, ...ps.map(p => p.x), len];
+    // cut at every pole and at both edges of every tree crown on this side: a wire stretch running
+    // past a pole and through a crown would otherwise close a pole → tree → wire draw-order ring
+    const cuts = [...new Set([0, ...ps.map(p => p.x), ...treeEdges(lay, rw), len])].filter(x => x >= 0 && x <= len).sort((p, q) => p - q);
     const wires = Array.from({ length: 4 }, (_, i) => {
       const b = b0 + i * 0.5;
       const anchors: LV[] = [[0, b, ARM_Z - 4 - i], ...ps.map(p => [p.x - 9 + i * 6, b, ARM_Z] as LV), [len, b, ARM_Z - 3 - i]];
@@ -143,4 +146,18 @@ function clipX(pts: LV[], x0: number, x1: number): LV[] {
     out.push(q[0] > x1 ? at(p, q, x1) : q);
   }
   return out;
+}
+
+/** x of both crown edges of every street tree on one side (as the houses will draw them) */
+function treeEdges(lay: StreetLayout, row: 'far' | 'near'): number[] {
+  const xs: number[] = [];
+  for (const h of lay.houses) {
+    if (h.row !== row) continue;
+    const sp = resolveSpec(h.input).spec;
+    if (sp.trees === 'none') continue;
+    const ra = TREE[sp.treeSize].ra, both = sp.trees === 'both' && sp.w - 8 >= 2 * ra;
+    const at = both ? [4, sp.w - 4] : sp.trees === 'right' ? [sp.w - 4] : [4];
+    for (const a of at) { const x = row === 'far' ? sp.x + a : sp.x + sp.w - a; xs.push(x - ra, x + ra); }
+  }
+  return xs;
 }

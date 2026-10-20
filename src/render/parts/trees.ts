@@ -1,39 +1,55 @@
 /* Street trees at the curb in front of a house (Hà Nội streets are full of them): small, medium or
    large, on the left, right or both ends of the frontage as seen from the street. They stand past
    the house's REACH (1.9 m), on the curb side of the sidewalk, so they never meet balconies or
-   signs; a large tree's crown spreads along the street and out over the road edge instead. */
+   signs; a large tree's crown spreads along the street and out over the road edge instead.
+   Drawn as a tapered trunk with branches showing under a crown of one to three big leafy clumps
+   (user feedback: separate round circles looked like a bunch of balloons). Two habits, by seed:
+     dome    bàng, sấu        wide rounded crown
+     tall    xà cừ, dầu       taller, narrower crown on a long trunk                          */
 import type { Ctx } from '@render/parts/ctx';
-import { f } from '@render/svg';
 import { TREE } from '@core/units';
+import { f } from '@render/svg';
+import { clump, trunk } from '@render/parts/foliage';
+
+type Size = 'small' | 'medium' | 'large';
 
 export function streetTrees(c: Ctx): void {
   const { s } = c;
   if (s.trees === 'none') return;
-  const at = s.trees === 'both' ? [4, s.w - 4] : s.trees === 'left' ? [4] : [s.w - 4];
+  // two crowns on a narrow frontage would grow into each other: keep the left one
+  const both = s.trees === 'both' && s.w - 8 >= 2 * TREE[s.treeSize].ra;
+  const at = both ? [4, s.w - 4] : s.trees === 'right' ? [s.w - 4] : [4];
   at.forEach((a, i) => tree(c, a, s.d + TREE[s.treeSize].trunkB, s.treeSize, i));
 }
 
-function tree(c: Ctx, a: number, b: number, size: 'small' | 'medium' | 'large', i: number): void {
+function tree(c: Ctx, a: number, b: number, size: Size, i: number): void {
   const { D } = c, k = TREE[size], z0 = 2, r = () => c.r.next();
-  let svg = D.box(a - 2.5, b - 2.5, z0, 5, 5, 0.6) + `<path class="mast trunk" d="${D.path([[a, b, z0 + 0.6], [a, b, k.zc - k.rz * 0.4]])}"/>`;
-  if (size === 'large') svg += `<path class="mast" d="${D.path([[a, b, k.zc - 6], [a - 5, b, k.zc - 2]])}${D.path([[a, b, k.zc - 4], [a + 6, b + 1, k.zc]])}"/>`;
-  // crown: overlapping clumps (back ones first), each with a few leaf strokes
-  const clumps = size === 'large' ? 7 : size === 'medium' ? 4 : 3;
-  const pts: [number, number, number, number][] = [];
-  for (let j = 0; j < clumps; j++) {
-    const t = (j / clumps) * Math.PI * 2 + r() * 0.6;
-    pts.push([a + Math.cos(t) * k.ra * 0.55, b + Math.sin(t) * k.rb * 0.45, k.zc + (r() - 0.3) * k.rz * 0.5, Math.min(k.ra, k.rz) * (0.55 + r() * 0.2)]);
+  const habit = r() < 0.55 ? 'dome' : 'tall';
+  const [fx, fy] = D.P(a, b, z0 + 0.6), [cx, cy] = D.P(a, b, k.zc);
+  // crown size on screen from the world half-extents (an ellipsoid seen from the iso direction)
+  const rx = 0.85 * k.ra + 0.5 * k.rb, ry = k.rz * 0.95;
+  const w0 = size === 'large' ? 2.2 : size === 'medium' ? 1.5 : 1;
+
+  let svg = D.box(a - 2.5, b - 2.5, z0, 5, 5, 0.6);
+
+  const tall = habit === 'tall', crx = tall ? rx * 0.78 : rx, cry = tall ? ry * 1.12 : ry * 0.88;
+  const top = cy + cry * 0.35;
+  svg += trunk(fx, fy, cx, top, w0, w0 * 0.45);
+  // branches fanning up into the crown, visible below its edge
+  const nb = size === 'small' ? 2 : 3;
+  for (let j = 0; j < nb; j++) {
+    const dx = (j - (nb - 1) / 2) * crx * 0.55, by = top + cry * 0.15;
+    svg += `<path class="mast branch" d="M${f(cx)} ${f(top + cry * 0.25)}Q${f(cx + dx * 0.4)} ${f(by)} ${f(cx + dx)} ${f(cy - cry * 0.2)}"/>`;
   }
-  pts.push([a, b, k.zc + k.rz * 0.25, Math.min(k.ra, k.rz) * 0.7]);
-  pts.sort((p, q) => p[0] + p[1] - (q[0] + q[1]));
-  for (const [ca, cb, cz, cr] of pts) {
-    const [x, y] = D.P(ca, cb, cz);
-    svg += `<circle class="face crown" cx="${f(x)}" cy="${f(y)}" r="${f(cr)}"/>`;
-    for (let m = 0; m < 3; m++) {
-      const lx = x + (r() - 0.5) * cr, ly = y + (r() - 0.6) * cr;
-      svg += `<path class="detail" d="M${f(lx)} ${f(ly)}q${f(cr * 0.15)} ${f(-cr * 0.2)} ${f(cr * 0.35)} 0"/>`;
-    }
+  // the crown is a heap of clumps, not one disc: top and back ones first, the lower front ones last,
+  // each jittered so no two trees share a silhouette (x, y as fractions of the crown; rx, ry of it too)
+  const heap: [number, number, number, number][] = size === 'small'
+    ? [[-0.35, -0.2, 0.6, 0.55], [0.35, -0.25, 0.6, 0.55], [0, 0.15, 0.7, 0.55]]
+    : [[-0.5, -0.2, 0.5, 0.45], [0.5, -0.25, 0.5, 0.45], [-0.15, -0.55, 0.55, 0.45], [0.3, -0.5, 0.48, 0.42],
+       [0, -0.05, 0.62, 0.52], [-0.4, 0.3, 0.48, 0.38], [0.38, 0.28, 0.5, 0.38]];
+  for (const [hx, hy, hrx, hry] of heap) {
+    const jx = (r() - 0.5) * 0.12, jy = (r() - 0.5) * 0.1;
+    svg += clump(cx + (hx + jx) * crx, cy + (hy + jy) * cry, hrx * crx, hry * cry, r);
   }
   c.add(`tree-${i}`, a - k.ra, b - k.rb, z0, 2 * k.ra, 2 * k.rb, k.zc + k.rz - z0, svg);
 }
-

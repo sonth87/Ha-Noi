@@ -155,7 +155,7 @@ export function sceneIssues(inputs: readonly HouseInput[]): Issue[] {
 
 const SHOP_NAMES = ['CÀ PHÊ', 'PHỞ BÒ', 'TẠP HÓA', 'SỬA XE', 'BÚN CHẢ', 'CẮT TÓC', 'PHOTO', 'BÁNH MÌ', 'THUỐC', 'ĐIỆN THOẠI'];
 const WINDOWS: WindowKind[] = ['tall', 'tall', 'louver', 'glass-doors', 'pair', 'wide', 'arch', 'french', 'glass'];
-const BALCONIES: BalconyKind[] = ['rail', 'rail', 'solid', 'cage', 'none'];
+const BALCONIES: BalconyKind[] = ['rail', 'rail', 'solid', 'glass', 'cage', 'none'];
 
 export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}): HouseInput {
   const preset = r.pick(PRESET_IDS);

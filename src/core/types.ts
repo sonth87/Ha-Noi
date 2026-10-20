@@ -24,7 +24,7 @@ export interface Item {
 export type GroundKind = 'fold' | 'roll' | 'glass' | 'wood' | 'wall' | 'iron';
 export type AwningKind = 'none' | 'fabric' | 'metal';
 export type WindowKind = 'tall' | 'louver' | 'glass-doors' | 'pair' | 'wide' | 'arch' | 'french' | 'glass';
-export type BalconyKind = 'none' | 'rail' | 'solid' | 'cage';
+export type BalconyKind = 'none' | 'rail' | 'solid' | 'glass' | 'cage';
 export type RoofKind = 'flat' | 'metal2' | 'metal1' | 'tile';
 /** facade finish: plain render, glazed tiles, old peeling paint, stone cladding on the ground floor */
 export type WallFinish = 'plain' | 'tile' | 'paint-old' | 'stone-base';

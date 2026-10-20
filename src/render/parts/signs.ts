@@ -74,13 +74,15 @@ export function signItems(c: Ctx): void {
         break;
       }
       case 'projecting-round': {
+        // a disc holds one glyph: the sign's own text, else the shop name's first letter
+        const glyph = sign.text ?? [...s.shopName][0] ?? '●';
         const a0 = W * 0.62, b0 = s.d + (hasFacade && !hang ? 0.8 : 0), b1 = hang ? Math.min(s.d + 7.2, c.fy - 0.2) : s.d + 8.5;
         // above an awning (top at H − 9) and below the floor above (z = H), bracket included
         const len = b1 - b0, z0 = s.awning !== 'none' ? H - 8.8 : H - 11, side = D.endSide();
         const face = D.face(a0, b0, z0, 0.4, len, 8, side);
         const r = Math.min(3.9, len / 2 - 0.2);
         const svg = `<path class="mast" d="${D.path([[a0 + 0.2, b0, z0 + 8.5], [a0 + 0.2, b1, z0 + 8.5]])}"/>` +
-          (face ? lightbox(g(face.t, `<circle class="sign-board" cx="${f(face.w / 2)}" cy="4" r="${f(r)}"/>${signText(face.w / 2, 5.3, r * 0.95, text)}`)) : '');
+          (face ? lightbox(g(face.t, `<circle class="sign-board" cx="${f(face.w / 2)}" cy="4" r="${f(r)}"/>${signText(face.w / 2, 5.3, r * 0.95, glyph)}`)) : '');
         c.add('sign-round', a0, b0, z0, 0.4, len, 8.5, svg);
         break;
       }

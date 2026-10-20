@@ -217,6 +217,7 @@ Mỗi hàm trong `src/render/reference-house.ts` (nhà mẫu đã được duy�
 
 | Phần | Hình | Ghi chú |
 |---|---|---|
-| Chậu cây `plants.ts` | Chậu + lá thật vẽ quanh điểm chiếu: **bụi lá** (vòm lá elip), **lá nhọn đứng** (lưỡi hổ), **dây leo rủ** qua mép ban công (hoa giấy), **bụi có hoa** — chọn theo seed | Dùng cho ban công, chuồng cọp, sân thượng, mái |
-| Cây trước nhà `trees.ts` | Bồn gốc + thân + tán gồm nhiều cụm tròn chồng nhau (sau trước), nét lá; cây to có cành và tán dẹt dài dọc phố | Item riêng, ở b = mặt tiền + 2.55 m (cây to 2.7 m). Kích thước trong `core/units.ts → TREE` |
-| Luật trên phố | Hai cây sát ranh hai nhà thì giữ cây nhà bên trái; bỏ cây vướng cột điện (trong tán + 1.1 m) hoặc vượt ra ngoài hai đầu phố | `core/layout.ts`; cây rải đều kiểu cũ đã bỏ |
+| Chậu cây `plants.ts` | Chậu 0.4 m + cây cao vượt lan can, 6 loại theo seed: **bụi lá**, **kim tiền** (3 thân, lá bóng xòe), **trúc** (thân mảnh, lá nhỏ), **cau cảnh** (tàu lá cong), **hoa giấy** (khối lá + hoa rủ qua lan can), **bụi hoa** | Viền lá màu `--ink` để đọc ra cây trên nền tối |
+| Cây trước nhà `trees.ts` | Thân thon + cành lộ dưới tán; **tán = đống 3–7 cụm lá**, mỗi cụm viền múi mây mềm (`foliage.ts → cloudOutline`), nếp tán bên khuất sáng, vài nét lá; 2 dáng: tán tròn rộng (bàng, sấu) / tán cao (xà cừ, dầu). Cỡ nhỏ / vừa / to (to: tán 3.6 m dọc phố, cao ~4 m, dưới dây điện) | Item riêng, ở mặt tiền + 2.55 m (to: 2.7 m). Kích thước `core/units.ts → TREE`. Lần 1 (đĩa tròn ghép) bị chê "như chùm bóng bay", lần 2 (viền răng cưa) như kẹo mút |
+| Luật trên phố | Đi dọc mỗi dãy, giữ cây chỉ khi tán không chạm tán đã giữ, cách cột điện ≥ tán + 1.1 m, không vượt hai đầu phố; nhà hẹp không đủ chỗ cho 2 tán thì chỉ 1 cây. Dây điện được cắt thêm tại 2 mép mỗi tán (tránh vòng thứ tự vẽ dây – cột – cây) | `core/layout.ts`, `render/props/street.ts` |
+| Biển tròn chìa ra | Chỉ 1 ký tự: chữ riêng của biển, không có thì chữ cái đầu tên quán | |

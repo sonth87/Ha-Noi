@@ -32,7 +32,7 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A4 | Không làm việc ngoài phase hiện tại. Ý mới ghi vào backlog P5 trong checklist. |
 | A5 | Không thêm dependency khi chưa có ADR (trừ những gói đã nêu trong ADR-011, ADR-014). |
 | A6 | Trước khi báo xong: `pnpm typecheck && pnpm lint && pnpm test`. Lỗi thì báo nguyên văn, không giấu. |
-| A7 | **Không dùng tự động hóa trình duyệt** (Playwright, Puppeteer, headless). Chạy `pnpm dev` và nhờ người dùng kiểm bằng mắt. |
+| A7 | **Không dùng tự động hóa trình duyệt** (Playwright, Puppeteer, headless). Chạy `pnpm dev` và nhờ người dùng kiểm bằng mắt. **Được phép tự soát hình** trước khi gửi: xuất SVG độc lập (CSS bọc trong `<![CDATA[ ]]>`, kèm 3 filter) từ một file test tạm trong `src/`, rồi `qlmanage -t -s 2400 -o <scratchpad> file.svg` (Quick Look của macOS) và đọc PNG. Xóa file test tạm sau đó. |
 | A8 | Giữ luật thẩm mỹ iso-glow: một màu nhấn chỉ trên thứ đang sống; màu chỉ qua token; mọi nét `vector-effect: non-scaling-stroke`; theme sáng không glow. |
 | A9 | Không logo, không chữ thương hiệu thật. |
 | A10 | Tôn trọng luật phụ thuộc giữa các tầng (ADR-015). Không tắt luật ESLint để lách. |

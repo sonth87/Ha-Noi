@@ -134,6 +134,10 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý: ban công dài hoặc ngắn (rộng hơn cửa một chút) → `balconyWidth`, mỗi gian một ban công ngắn
 - [x] Góp ý: chậu cây chỉ là một cục → vẽ lá thật, 4 dáng (bụi, lá nhọn, dây leo rủ, có hoa)
 - [x] Góp ý: Hà Nội nhiều cây, trước nhà có cây nhỏ / to, trái / phải / hai bên → `trees` + `treeSize` theo từng nhà, luật tránh đè nhau và tránh cột; bỏ cây rải đều
+- [x] Góp ý: cây ban công "vừa bé vừa xấu" → 6 loại cây, cao vượt lan can, chậu to, viền sáng hơn
+- [x] Góp ý: thêm ban công mặt kính → `balcony: 'glass'`
+- [x] Góp ý: cây vỉa hè "như chùm bóng bay" → tán là đống cụm lá viền múi mây, thân thon + cành, cây to hơn hẳn; tự soát hình bằng `qlmanage` qua 3 vòng trước khi gửi
+- [x] Sửa: biển tròn hiện cả tên quán tràn ra ngoài → 1 ký tự
 - [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 

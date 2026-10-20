@@ -49,11 +49,17 @@
 .stain { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.8; }
 .face.plant { fill:var(--deck); }
 /* plants and trees: leaves are filled shapes with a hairline, so they read as foliage, not blobs */
-.leaf { fill:var(--deck); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.leaf { fill:var(--deck); stroke:var(--ink); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.leaf-line { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+.stem { fill:none; stroke:var(--ink); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
 .vine { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 .flower { fill:var(--ink); }
-.face.crown { fill:var(--deck); }
-.trunk { stroke-width:1.6; }
+.face.crown, .face.plant { fill:var(--deck); stroke:var(--ink); stroke-linejoin:round; }
+.face.trunk { fill:var(--body); }
+.branch { stroke-width:1; }
+/* lan can kính: tinted, see-through, a couple of glints */
+.glint { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.7; }
+.glass-panel { fill:var(--glass-on); fill-opacity:.22; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 .face.solar { fill:var(--recess); }
 .face.awning { fill:var(--deck); }
 .face.metal { fill:var(--deck); }

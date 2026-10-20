@@ -1,53 +1,86 @@
-/* Potted plants with visible leaves (user feedback: "a blob, no plant"). Foliage is drawn in screen
-   space around the projected top of the pot, so it reads the same from every view. Four kinds,
-   picked by the house's seed: a leafy bush, upright blades (lưỡi hổ), a vine trailing down over
-   the balcony edge (hoa giấy), and a bush in flower. */
+/* Potted plants on balconies, terraces and roofs: taller than the railing and of several kinds
+   (user feedback: "small and ugly, a blob"). Drawn in screen space above the projected pot, so
+   they read the same from every view; the kind comes from the house's seed unless given.
+     bush        cây bụi            a leafy clump
+     money       kim tiền           three stems, each ending in a fan of glossy leaves
+     bamboo      trúc               tall thin canes with small leaves along them
+     palm        cau cảnh           arching fronds with leaflets
+     bougain     hoa giấy           a mass of leaves and flowers spilling forward over the rail
+     flower      bụi hoa            a clump dotted with flowers                                  */
 import type { Ctx } from '@render/parts/ctx';
 import { f } from '@render/svg';
+import { blade, clump } from '@render/parts/foliage';
 
-type Kind = 'bush' | 'spiky' | 'vine' | 'flower';
+export type PlantKind = 'bush' | 'money' | 'bamboo' | 'palm' | 'bougain' | 'flower';
+const KINDS: PlantKind[] = ['bush', 'money', 'bamboo', 'palm', 'bougain', 'flower'];
 
-const leaf = (x: number, y: number, rx: number, ry: number, deg: number) =>
-  `<ellipse class="leaf" cx="${f(x)}" cy="${f(y)}" rx="${f(rx)}" ry="${f(ry)}" transform="rotate(${f(deg)} ${f(x)} ${f(y)})"/>`;
+/** tallest a potted plant gets above its pot's foot (keep balconies' item boxes above this) */
+export const PLANT_MAX_H = 16;
 
-function bush(x: number, y: number, s: number, r: () => number): string {
+export function plant(c: Ctx, a: number, b: number, z: number, size: number, kind?: PlantKind): string {
+  const r = () => c.r.next();
+  const k = kind ?? KINDS[Math.floor(r() * KINDS.length)]!;
+  const [x, y] = c.D.P(a, b, z + 4), s = size;   // pot rim
   let out = '';
-  // a dome of leaves pointing outward, back row first
-  for (let i = 0; i < 9; i++) {
-    const t = -Math.PI * (0.08 + 0.84 * i / 8), rad = s * (0.75 + r() * 0.3);
-    const lx = x + Math.cos(t) * rad * 0.9, ly = y - s * 0.6 + Math.sin(t) * rad * 0.75;
-    out += leaf(lx, ly, s * 0.55, s * 0.26, (t * 180) / Math.PI);
-  }
-  out += leaf(x - s * 0.25, y - s * 0.75, s * 0.5, s * 0.25, -60) + leaf(x + s * 0.3, y - s * 0.7, s * 0.5, s * 0.25, -120);
-  return out;
-}
-
-export function plant(c: Ctx, a: number, b: number, z: number, size: number, kind?: Kind): string {
-  const [x, y] = c.D.P(a, b, z + 3), r = () => c.r.next();
-  const k: Kind = kind ?? (['bush', 'spiky', 'vine', 'flower'] as const)[Math.floor(r() * 4)]!;
-  const s = size;
-  let out = '';
-  if (k === 'spiky') {
-    for (let i = 0; i < 6; i++) {
-      const dx = (i - 2.5) * s * 0.28, h = s * (1.7 + r() * 0.8), lean = dx * 0.6;
-      out += `<path class="leaf" d="M${f(x + dx - 0.35)} ${f(y)}Q${f(x + dx + lean - 0.6)} ${f(y - h * 0.6)} ${f(x + dx + lean)} ${f(y - h)}Q${f(x + dx + lean + 0.6)} ${f(y - h * 0.6)} ${f(x + dx + 0.35)} ${f(y)}Z"/>`;
+  switch (k) {
+    case 'bush':
+      out += clump(x, y - s * 1.1, s * 1.25, s * 1.05, r, 'plant');
+      break;
+    case 'flower': {
+      out += clump(x, y - s * 1.0, s * 1.2, s * 0.95, r, 'plant');
+      for (let i = 0; i < 7; i++) out += `<circle class="flower" cx="${f(x + (r() - 0.5) * s * 1.9)}" cy="${f(y - s * (0.4 + r() * 1.3))}" r="${f(s * 0.14 + 0.15)}"/>`;
+      break;
     }
-  } else {
-    out += bush(x, y, s, r);
-    if (k === 'flower') for (let i = 0; i < 5; i++) out += `<circle class="flower" cx="${f(x + (r() - 0.5) * s * 1.5)}" cy="${f(y - s * (0.5 + r() * 0.7))}" r="${f(s * 0.16)}"/>`;
-    if (k === 'vine') {
-      // trails falling forward over the edge, small leaves along them
-      for (let i = 0; i < 3; i++) {
-        const sx = x + (i - 1) * s * 0.6, len = s * (2.2 + r() * 1.6);
-        out += `<path class="vine" d="M${f(sx)} ${f(y - s * 0.2)}q${f(s * 0.4)} ${f(len * 0.5)} ${f((r() - 0.5) * s * 0.6)} ${f(len)}"/>`;
-        for (let j = 1; j <= 3; j++) out += leaf(sx + (j % 2 ? 0.5 : -0.5) * s * 0.3, y - s * 0.2 + len * j / 3.4, s * 0.3, s * 0.15, j % 2 ? 30 : 150);
+    case 'money': {
+      // kim tiền: three stems fanning out, each with paired glossy leaves up its top half
+      for (let i = -1; i <= 1; i++) {
+        const tx = x + i * s * 0.9, ty = y - s * (2.8 + (i === 0 ? 0.7 : 0) + r() * 0.3);
+        out += `<path class="stem" d="M${f(x + i * 0.4)} ${f(y)}Q${f(x + i * s * 0.3)} ${f((y + ty) / 2)} ${f(tx)} ${f(ty)}"/>`;
+        for (let j = 0; j < 4; j++) {
+          const py = ty + j * s * 0.45, px = tx - i * j * s * 0.08;
+          out += blade(px, py, s * 0.9, -150 + i * 12) + blade(px, py, s * 0.9, -30 + i * 12);
+        }
+        out += blade(tx, ty, s * 0.8, -90);
       }
+      break;
+    }
+    case 'bamboo': {
+      for (let i = 0; i < 5; i++) {
+        const sx = x + (i - 2) * s * 0.32, h = s * (3 + r() * 1.1), lean = (i - 2) * s * 0.18;
+        out += `<path class="stem" d="M${f(sx)} ${f(y)}L${f(sx + lean)} ${f(y - h)}"/>`;
+        for (let j = 1; j <= 4; j++) {
+          const t = j / 4.6, px = sx + lean * t, py = y - h * t;
+          out += blade(px, py, s * 0.55, j % 2 ? -25 : -155, 0.25);
+        }
+      }
+      break;
+    }
+    case 'palm': {
+      // cau cảnh: arching fronds from the pot, leaflets along each
+      for (let i = 0; i < 6; i++) {
+        const ang = -160 + i * 28 + (r() - 0.5) * 8, len = s * (2.6 + r() * 0.8), t = (ang * Math.PI) / 180;
+        const ex = x + Math.cos(t) * len, ey = y - s * 1.2 + Math.sin(t) * len * 0.8;
+        const cx = x + Math.cos(t) * len * 0.5, cy = y - s * 3.2;
+        out += `<path class="stem" d="M${f(x)} ${f(y)}Q${f(cx)} ${f(cy)} ${f(ex)} ${f(ey)}"/>`;
+        for (let j = 1; j <= 4; j++) {
+          const u = j / 5, px = (1 - u) * (1 - u) * x + 2 * (1 - u) * u * cx + u * u * ex, py = (1 - u) * (1 - u) * y + 2 * (1 - u) * u * cy + u * u * ey;
+          out += blade(px, py, s * 0.5, ang + 60, 0.22) + blade(px, py, s * 0.5, ang - 60 + 180, 0.22);
+        }
+      }
+      break;
+    }
+    case 'bougain': {
+      // hoa giấy: a leafy mass leaning forward and down over the rail, flowers on it
+      out += clump(x + s * 0.4, y - s * 0.9, s * 1.5, s * 1.1, r, 'plant');
+      out += clump(x + s * 1.2, y + s * 0.5, s * 0.9, s * 1.2, r, 'plant');
+      for (let i = 0; i < 10; i++) out += `<circle class="flower" cx="${f(x + s * (r() * 2.4 - 0.6))}" cy="${f(y + s * (r() * 2 - 1.6))}" r="${f(s * 0.13 + 0.15)}"/>`;
+      break;
     }
   }
   return out;
 }
 
-/** a pot with its plant, standing at (a, b, z) */
-export function pot(c: Ctx, a: number, b: number, z: number, size: number, kind?: Kind): string {
-  return c.D.box(a - 1.6, b - 1.6, z, 3.2, 3.2, 3, 0.8) + plant(c, a, b, z, size, kind);
+/** a pot with its plant, standing at (a, b, z); taller plants get a bigger pot */
+export function pot(c: Ctx, a: number, b: number, z: number, size: number, kind?: PlantKind): string {
+  return c.D.box(a - 2, b - 2, z, 4, 4, 4, 1) + plant(c, a, b, z, size, kind);
 }

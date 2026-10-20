@@ -26,7 +26,7 @@ function flat(c: Ctx): void {
     wall('parapet-l', 0, T, T, L - 2 * T);
     wall('parapet-r', W - T, T, T, L - 2 * T);
     wall('parapet-front', 0, L - T, W, T);
-    for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 1.6, L - 9.6, z, 3.2, 3.2, 10, pot(c, T + 3 + i * 8, L - 8, z, 2.8));
+    for (let i = 0; i < s.roofPlants; i++) c.add(`roof-pot-${i}`, T + 3 + i * 8 - 2, L - 10, z, 4, 4, 20, pot(c, T + 3 + i * 8, L - 8, z, 3));
     // tum thang: a small stair hut in the back corner
     const hut = s.stairHut ? { a: T + 0.6, b: T + 0.6, la: Math.min(14, W - 2 * T - 3), lb: 20 } : null;   // its cap overhangs 0.6, up to the parapets
     if (hut) {
@@ -38,7 +38,7 @@ function flat(c: Ctx): void {
     // a full shelter leaves the back strip open for tall things (antenna, flag, the hut)
     const open = s.roofShelter === 'full' ? (s.roofItems.length || hut ? T + 28 : T) : 0;
     const reserved = [...(hut ? [{ a: hut.a - 0.6, b: hut.b - 0.6, la: hut.la + 1.2, lb: hut.lb + 1.2 }] : []),
-      ...Array.from({ length: s.roofPlants }, (_, i) => ({ a: T + 1.4 + i * 8, b: L - 9.6, la: 3.2, lb: 3.2 }))];
+      ...Array.from({ length: s.roofPlants }, (_, i) => ({ a: T + 1 + i * 8, b: L - 10, la: 4, lb: 4 }))];
     roofItems(c, { a0: T, a1: W - T, b0: T, b1: L - T, z }, s.roofShelter === 'full' ? { from: open, maxH: 22 } : null, reserved);
     if (s.roofShelter === 'full') shelter(c, open, z + 24, true);
     return;
@@ -65,7 +65,7 @@ function flat(c: Ctx): void {
   const spots: [number, number, number][] = [[7, 9, 3.4], [14, 17, 2.6], [8, 4, 2.4]];
   for (let i = 0; i < s.roofPlants; i++) {
     const [pa, pb, sz] = spots[i]!;
-    if (rb1 + pb + 2 < L - T) c.add(`terrace-pot-${i}`, pa - 1.6, rb1 + pb - 1.6, z, 3.2, 3.2, 3 + sz * 2, pot(c, pa, rb1 + pb, z, sz));
+    if (rb1 + pb + 2.5 < L - T) c.add(`terrace-pot-${i}`, pa - 2, rb1 + pb - 2, z, 4, 4, 20, pot(c, pa, rb1 + pb, z, sz + 0.4));
   }
   if (s.laundry) {
     const lb = rb1 + 9, x0 = W * 0.55, x1 = W * 0.9, zt = z + 15;

@@ -126,13 +126,7 @@ function row(r: Rng, prefix: string): { slots: Slot[]; alleys: [number, number][
     const sideEnd = clearR <= clearL ? '+a' : '-a';
     s.input = { ...s.input, sideEnd, sideClear: sideEnd === '+a' ? clearR : clearL };
   });
-  // two trees at a shared boundary would grow into each other: keep the left house's
-  slots.forEach((s, i) => {
-    const left = slots[i - 1];
-    if (!left || left.a + left.spec.w !== s.a) return;
-    const lt = left.input.trees ?? left.spec.trees, mine = s.input.trees ?? s.spec.trees;
-    if ((lt === 'right' || lt === 'both') && (mine === 'left' || mine === 'both')) s.input = { ...s.input, trees: mine === 'both' ? 'right' : 'none' };
-  });
+
   return { slots, alleys };
 }
 
@@ -154,15 +148,24 @@ export function streetLayout(seed: number, name = 'Thái Hà', prefix = 'TH'): S
   for (const [rw, xs] of [['far', [70, 400, 730]], ['near', [235, 565, 895]]] as const)
     for (let x of xs) { x += r.int(-20, 20); while (inAlley(x, rw, 6)) x += 12; poles.push({ x, row: rw }); }
 
-  // street trees belong to the houses; drop any that would stand in a pole's way or past the street's ends
-  for (const h of houses) {
-    const sp = resolveSpec(h.input).spec;
-    if (sp.trees === 'none') continue;
-    const reach = TREE[sp.treeSize].ra + 11;
-    const worldX = (a: number) => (h.row === 'far' ? sp.x + a : sp.x + sp.w - a);
-    const ok = (a: number) => { const x = worldX(a); return x - TREE[sp.treeSize].ra >= 0 && x + TREE[sp.treeSize].ra <= L && !poles.some(p => p.row === h.row && Math.abs(p.x - x) < reach); };
-    const left = (sp.trees === 'left' || sp.trees === 'both') && ok(4), right = (sp.trees === 'right' || sp.trees === 'both') && ok(sp.w - 4);
-    h.input = { ...h.input, trees: left && right ? 'both' : left ? 'left' : right ? 'right' : 'none' };
+  // street trees belong to the houses; walking each row along x, keep a tree only if its crown
+  // clears the street's ends, every pole (crossarm ± 10, plus a gap), and the crowns already kept
+  for (const rw of ['far', 'near'] as const) {
+    const kept: [number, number][] = [];   // crown intervals along x
+    const rowHouses = houses.filter(h => h.row === rw).map(h => ({ h, sp: resolveSpec(h.input).spec })).sort((p, q) => p.sp.x - q.sp.x);
+    for (const { h, sp } of rowHouses) {
+      if (sp.trees === 'none') continue;
+      const ra = TREE[sp.treeSize].ra;
+      const worldX = (a: number) => (rw === 'far' ? sp.x + a : sp.x + sp.w - a);
+      const fits = (a: number) => {
+        const x = worldX(a), lo = x - ra, hi = x + ra;
+        return lo >= 0 && hi <= L && !poles.some(p => p.row === rw && Math.abs(p.x - x) < ra + 11) && !kept.some(([k0, k1]) => lo < k1 + 1 && k0 < hi + 1);
+      };
+      const want = (sp.trees === 'both' && sp.w - 8 >= 2 * ra) ? [4, sp.w - 4] : sp.trees === 'right' ? [sp.w - 4] : [4];
+      const ok = want.filter(a => fits(a) && (kept.push([worldX(a) - ra, worldX(a) + ra]), true));
+      const left = ok.includes(4), right = ok.includes(sp.w - 4);
+      h.input = { ...h.input, trees: left && right ? 'both' : left ? 'left' : right ? 'right' : 'none' };
+    }
   }
 
   const bikes: StreetLayout['bikes'] = [];

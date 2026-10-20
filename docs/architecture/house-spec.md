@@ -80,11 +80,11 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | Trường của `FloorSpec` | Kiểu | Mặc định (lấy từ khuôn) | Ý nghĩa |
 |---|---|---|---|
 | `window` | `'tall'\|'louver'\|'glass-doors'\|'pair'\|'wide'\|'arch'\|'french'\|'glass'` | `'tall'` | Cửa sổ đứng 2 cánh, cửa chớp, cửa kính ra ban công, cặp cửa nhỏ, cửa ngang 3 ô, cửa vòm, cửa Pháp kèm cánh chớp mở, mảng kính lớn |
-| `balcony` | `'none'\|'rail'\|'solid'\|'cage'` | `'rail'` | Không có / lan can sắt / lan can xây / chuồng cọp (cao cả tầng) |
+| `balcony` | `'none'\|'rail'\|'solid'\|'glass'\|'cage'` | `'rail'` | Không có / lan can sắt / lan can xây / lan can kính (trong, có tay vịn, thấy cây phía sau) / chuồng cọp (cao cả tầng) |
 | `balconyWidth` | `'full'\|'short'` | `'full'` | Ban công dài hết mặt tiền, hoặc **ngắn**: rộng hơn ô cửa một chút, mỗi gian một cái (áp cho lan can sắt, lan can xây, chuồng cọp) |
 | `canopy` | `'none'\|'concrete'\|'metal'` | `'none'` | Ô văng bê tông hoặc mái tôn nhỏ che cửa sổ (không đi với chuồng cọp) |
 | `laundry` | bool | false | Quần áo phơi ở ban công (cần ban công) |
-| `plants` | int 0–3 | 1 | Số chậu cây trên ban công |
+| `plants` | int 0–3 | 1 | Số chậu cây trên ban công. Cây cao vượt lan can, loại cây chọn theo seed: bụi lá, kim tiền, trúc, cau cảnh, hoa giấy rủ, bụi hoa |
 | `ac` | bool | false | Cục nóng điều hòa treo ngoài mặt tiền. **Chỉ vẽ khi tầng không có ban công** |
 
 Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plants`, và `balconyFloors: 'all' | 'odd' | 'even' | 'none'`. Số tầng được đánh từ tầng 1, nên `'odd'` nghĩa là các tầng 3, 5, 7.
