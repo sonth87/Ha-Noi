@@ -53,6 +53,8 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `ground` | `'fold'\|'roll'\|'glass'\|'wood'\|'iron'\|'wall'` | `'fold'` | Cửa xếp, cửa cuốn, kính, gỗ 4 cánh, sắt hoa (lưới quả trám; mở = gập 2 bên), tường kín có cửa đi nhỏ |
 | `shop` | bool | true | Đang mở hàng: cửa mở, lòng nhà sáng. `false` thì cửa xếp hoặc cửa cuốn đóng kín |
 | `awning` | `'none'\|'fabric'\|'metal'` | `'none'` | Mái hiên bạt có diềm lượn sóng / mái hiên tôn |
+| `trees` | `'none'\|'left'\|'right'\|'both'` | `'none'` | **Cây trước nhà** ở mép vỉa hè (trái / phải nhìn từ phố, hoặc hai bên). Đứng ngoài tầm 1.9 m của nhà nên không đụng ban công, biển |
+| `treeSize` | `'small'\|'medium'\|'large'` | `'medium'` | Nhỏ (tán ~0.8 m, cao ~2.6 m) / vừa (tán ~1.2 m, cao ~4.2 m) / to (tán dài 2.4 m dọc phố, vươn ra mép đường, cao ~6.2 m) |
 | `goods` | `'none'\|'stools'\|'bikes'\|'crates'` | `'none'` | Bày ra vỉa hè: bàn ghế nhựa / xe máy dựng vuông góc lề / két bia, thùng hàng. Chỉ ở 60% mặt tiền bên trái, trong tầm 1.9 m |
 | `shopName` | string | `'TẠP HÓA'` | Chữ mặc định trên biển. Chữ tự đặt, không thương hiệu |
 | `signs` | `SignSpec[]` | `[{ type: 'facade' }]` | Danh sách biển, theo [components](components.md) mục A9 |
@@ -79,6 +81,7 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 |---|---|---|---|
 | `window` | `'tall'\|'louver'\|'glass-doors'\|'pair'\|'wide'\|'arch'\|'french'\|'glass'` | `'tall'` | Cửa sổ đứng 2 cánh, cửa chớp, cửa kính ra ban công, cặp cửa nhỏ, cửa ngang 3 ô, cửa vòm, cửa Pháp kèm cánh chớp mở, mảng kính lớn |
 | `balcony` | `'none'\|'rail'\|'solid'\|'cage'` | `'rail'` | Không có / lan can sắt / lan can xây / chuồng cọp (cao cả tầng) |
+| `balconyWidth` | `'full'\|'short'` | `'full'` | Ban công dài hết mặt tiền, hoặc **ngắn**: rộng hơn ô cửa một chút, mỗi gian một cái (áp cho lan can sắt, lan can xây, chuồng cọp) |
 | `canopy` | `'none'\|'concrete'\|'metal'` | `'none'` | Ô văng bê tông hoặc mái tôn nhỏ che cửa sổ (không đi với chuồng cọp) |
 | `laundry` | bool | false | Quần áo phơi ở ban công (cần ban công) |
 | `plants` | int 0–3 | 1 | Số chậu cây trên ban công |

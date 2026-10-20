@@ -1,7 +1,7 @@
 /* Scene layouts. P1b: the catalog — one lot per house in a row along x, facades on one line
    like a street, each lot with its own sidewalk and a label strip (FR-30). */
 import { localFrame } from '@core/view';
-import { M } from '@core/units';
+import { M, TREE } from '@core/units';
 import { rng, type Rng } from '@core/rng';
 import { peakZ, randomHouse, resolveSpec } from '@core/spec';
 import type { Facing, HouseInput, HouseSpec } from '@core/types';
@@ -80,7 +80,6 @@ export interface StreetLayout {
   name: string;
   houses: StreetHouse[];
   poles: { x: number; row: 'far' | 'near' }[];
-  trees: { x: number; row: 'far' | 'near' }[];
   alleys: { x0: number; x1: number; row: 'far' | 'near' }[];
   bikes: { lane: number; a0: number; v: number; track: number }[];
 }
@@ -127,6 +126,13 @@ function row(r: Rng, prefix: string): { slots: Slot[]; alleys: [number, number][
     const sideEnd = clearR <= clearL ? '+a' : '-a';
     s.input = { ...s.input, sideEnd, sideClear: sideEnd === '+a' ? clearR : clearL };
   });
+  // two trees at a shared boundary would grow into each other: keep the left house's
+  slots.forEach((s, i) => {
+    const left = slots[i - 1];
+    if (!left || left.a + left.spec.w !== s.a) return;
+    const lt = left.input.trees ?? left.spec.trees, mine = s.input.trees ?? s.spec.trees;
+    if ((lt === 'right' || lt === 'both') && (mine === 'left' || mine === 'both')) s.input = { ...s.input, trees: mine === 'both' ? 'right' : 'none' };
+  });
   return { slots, alleys };
 }
 
@@ -148,12 +154,15 @@ export function streetLayout(seed: number, name = 'Thái Hà', prefix = 'TH'): S
   for (const [rw, xs] of [['far', [70, 400, 730]], ['near', [235, 565, 895]]] as const)
     for (let x of xs) { x += r.int(-20, 20); while (inAlley(x, rw, 6)) x += 12; poles.push({ x, row: rw }); }
 
-  const trees: StreetLayout['trees'] = [];
-  for (const rw of ['far', 'near'] as const) {
-    for (let x = 30 + r.int(0, 40); x < L - 20; x += r.int(80, 140)) {
-      if (poles.some(p => p.row === rw && Math.abs(p.x - x) < 24) || inAlley(x, rw, 8)) continue;
-      trees.push({ x, row: rw });
-    }
+  // street trees belong to the houses; drop any that would stand in a pole's way or past the street's ends
+  for (const h of houses) {
+    const sp = resolveSpec(h.input).spec;
+    if (sp.trees === 'none') continue;
+    const reach = TREE[sp.treeSize].ra + 11;
+    const worldX = (a: number) => (h.row === 'far' ? sp.x + a : sp.x + sp.w - a);
+    const ok = (a: number) => { const x = worldX(a); return x - TREE[sp.treeSize].ra >= 0 && x + TREE[sp.treeSize].ra <= L && !poles.some(p => p.row === h.row && Math.abs(p.x - x) < reach); };
+    const left = (sp.trees === 'left' || sp.trees === 'both') && ok(4), right = (sp.trees === 'right' || sp.trees === 'both') && ok(sp.w - 4);
+    h.input = { ...h.input, trees: left && right ? 'both' : left ? 'left' : right ? 'right' : 'none' };
   }
 
   const bikes: StreetLayout['bikes'] = [];
@@ -161,5 +170,5 @@ export function streetLayout(seed: number, name = 'Thái Hà', prefix = 'TH'): S
     for (let i = 0; i < 7; i++) bikes.push({ lane, a0: r.next() * L, v: r.int(45, 80), track: r.chance(0.5) ? -3.5 : 3.5 });
   });
 
-  return { name, houses, poles, trees, alleys, bikes };
+  return { name, houses, poles, alleys, bikes };
 }

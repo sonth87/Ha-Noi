@@ -5,7 +5,7 @@ import { slits } from '@iso/kernel';
 import { sagLine } from '@render/geom';
 import type { Ctx } from '@render/parts/ctx';
 import { band } from '@render/parts/ctx';
-import { pot } from '@render/parts/balconies';
+import { pot } from '@render/parts/plants';
 import { backWindow, sill, win } from '@render/parts/windows';
 import { endWall } from '@render/parts/walls';
 import { roofItems } from '@render/parts/roof-items';

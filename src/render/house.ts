@@ -14,6 +14,7 @@ import { SIDEWALK, signItems } from '@render/parts/signs';
 import { balcony, canopy, facadeAC } from '@render/parts/balconies';
 import { endWall, sideACs } from '@render/parts/walls';
 import { roof } from '@render/parts/roofs';
+import { streetTrees } from '@render/parts/trees';
 import { g, safeId } from '@render/svg';
 
 export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
@@ -72,6 +73,7 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
   if (c.base > 0) entranceSteps(c);
   if (s.awning !== 'none') awning(c);
   if (s.goods !== 'none') goods(c);
+  streetTrees(c);
   signItems(c);
   s.upper.forEach((fl, i) => {
     balcony(c, i + 2, fl);

@@ -78,16 +78,6 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
     add(`lamp-${i}`, p.x - 1, Math.min(b0, bb(17)), ARM_Z + 2, 2, 17, 8, lamp);
   });
 
-  // ---- trees ----
-  lay.trees.forEach((t, i) => {
-    const b = t.row === 'far' ? STREET.far.tree : STREET.near.tree, R = 5.5;
-    const c1 = D.P(t.x, b, 36), c2 = D.P(t.x + 1.5, b - 1, 40);
-    const svg = D.box(t.x - 2.5, b - 2.5, 2, 5, 5, 0.6) + `<path class="mast" d="${D.path([[t.x, b, 2.6], [t.x, b, 32]])}"/>` +
-      `<circle class="face plant" cx="${f(c1[0])}" cy="${f(c1[1])}" r="${R}"/><circle class="face plant" cx="${f(c2[0])}" cy="${f(c2[1])}" r="${R * 0.75}"/>` +
-      `<circle class="detail" cx="${f(c1[0] - 1.6)}" cy="${f(c1[1] - 1)}" r="${R * 0.5}"/>`;
-    add(`tree-${i}`, t.x - R, b - R, 2, 2 * R, 2 * R, 44, svg);
-  });
-
   // ---- wires: through every crossarm on a side, sagging between poles; a few carry pulses ----
   for (const rw of ['far', 'near'] as const) {
     const ps = lay.poles.filter(p => p.row === rw).sort((a, b) => a.x - b.x);

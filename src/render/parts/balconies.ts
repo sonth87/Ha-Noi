@@ -5,15 +5,9 @@ import type { FloorSpec } from '@core/types';
 import type { Ctx } from '@render/parts/ctx';
 import type { LocalSide } from '@core/view';
 import { f, g } from '@render/svg';
+import { pot } from '@render/parts/plants';
 
 const OUT = 10;   // balcony depth
-
-/** a pot with a round plant on top, standing at (a, b, z) */
-export function pot(c: Ctx, a: number, b: number, z: number, size: number): string {
-  const p = c.D.P(a, b, z + 3 + size * 0.8);
-  return c.D.box(a - 1.6, b - 1.6, z, 3.2, 3.2, 3, 0.8) +
-    `<circle class="face plant" cx="${f(p[0])}" cy="${f(p[1])}" r="${f(size)}"/><circle class="detail" cx="${f(p[0] - size * 0.3)}" cy="${f(p[1] - size * 0.25)}" r="${f(size * 0.5)}"/>`;
-}
 
 const railBars = (len: number, h: number) =>
   `<path class="rail" d="M0 0H${f(len)}M0 ${f(h)}H${f(len)}${Array.from({ length: Math.floor(len / 2.4) + 1 }, (_, i) => `M${f(Math.min(i * 2.4, len))} 0V${f(h)}`).join('')}"/>`;
@@ -45,32 +39,46 @@ function laundry(c: Ctx, a0: number, a1: number, b: number, zt: number): string 
   return s;
 }
 
+/** the balconies of one floor: one across the frontage, or short ones (a little wider than the
+    window, one per bay) — the bays match the facade's window bays */
 export function balcony(c: Ctx, n: number, fl: FloorSpec): void {
   if (fl.balcony === 'none') return;
-  const { s, D } = c, W = s.w, z = s.groundH + (n - 2) * s.floorH, b = c.fy;
-  const spots: [number, number][] = [[5, 3], [12, 2.4], [W - 10, 3.2]];
+  const W = c.s.w;
+  if (fl.balconyWidth === 'full') return balconySpan(c, n, fl, 0, W, '');
+  const bays = c.s.bays > 0 ? c.s.bays : Math.max(1, Math.round(W / 40)), bw = W / bays;
+  for (let k = 0; k < bays; k++) {
+    const sw = Math.min(bw - 4, Math.max(14, bw * 0.62));
+    balconySpan(c, n, fl, k * bw + (bw - sw) / 2 - 2, sw + 4, bays > 1 ? `-${k}` : '');
+  }
+}
+
+/** one balcony between a0 and a0 + w (the rail sits 2 in from each end, the cage 1) */
+function balconySpan(c: Ctx, n: number, fl: FloorSpec, a0: number, w: number, tag: string): void {
+  const { s, D } = c, z = s.groundH + (n - 2) * s.floorH, b = c.fy, a1 = a0 + w;
+  const spots: [number, number][] = [[3, 3], [10, 2.4], [w - 8, 3.2]];
+  const plants = Math.min(fl.plants, w < 22 ? 2 : 3);
   // clothes line under the floor above, but clear of an ô văng (which starts at floorH − 5.6)
-  const lineZ = z + s.floorH - 8, dry = fl.laundry ? laundry(c, 4, W - 4, b + OUT - 5, lineZ) : '';
+  const lineZ = z + s.floorH - 8, dry = fl.laundry ? laundry(c, a0 + 4, a1 - 4, b + OUT - 5, lineZ) : '';
   if (fl.balcony === 'rail' || fl.balcony === 'solid') {
-    const rh = 11;
-    let svg = D.box(2, b, z, W - 4, OUT, 2);
-    for (let i = 0; i < Math.min(3, fl.plants); i++) { const [pa, sz] = spots[i]!; svg += pot(c, 2 + pa, b + OUT - 3.5, z + 2, sz); }
+    const rh = 11, ra = a0 + 2, rw = w - 4;
+    let svg = D.box(ra, b, z, rw, OUT, 2);
+    for (let i = 0; i < plants; i++) { const [pa, sz] = spots[i]!; svg += pot(c, ra + pa, b + OUT - 3.5, z + 2, sz); }
     svg += dry;
-    if (fl.balcony === 'rail') svg += onOpenSides(c, 2, b, z + 2, W - 4, OUT, rh, len => railBars(len, rh));
+    if (fl.balcony === 'rail') svg += onOpenSides(c, ra, b, z + 2, rw, OUT, rh, len => railBars(len, rh));
     else {
-      // lan can xây: thin solid walls on the open sides, a coping line on top
-      const t = 1.2, walls: [number, number, number, number][] = [[2, b, t, OUT - t], [W - 2 - t, b, t, OUT - t], [2, b + OUT - t, W - 4, t]];
+      // lan can xây: thin solid walls on the open sides
+      const t = 1.2, walls: [number, number, number, number][] = [[ra, b, t, OUT - t], [ra + rw - t, b, t, OUT - t], [ra, b + OUT - t, rw, t]];
       for (const [a, bb, la, lb] of walls) svg += D.box(a, bb, z + 2, la, lb, rh - 1);
     }
-    c.add(`balcony-${n}`, 2, b, z, W - 4, OUT, fl.laundry ? lineZ - z : rh + 2, svg);
+    c.add(`balcony-${n}${tag}`, ra, b, z, rw, OUT, fl.laundry ? lineZ - z : rh + 2, svg);
   } else {
-    const h = s.floorH - 2;
-    let svg = D.box(1, b, z, W - 2, OUT, 2);
-    if (fl.plants > 0) svg += pot(c, W - 7, b + 4, z + 2, 2.4);
+    const h = s.floorH - 2, ca = a0 + 1, cw = w - 2;
+    let svg = D.box(ca, b, z, cw, OUT, 2);
+    if (fl.plants > 0) svg += pot(c, ca + cw - 6, b + 4, z + 2, 2.4);
     svg += dry;
-    svg += onOpenSides(c, 1, b, z + 2, W - 2, OUT, h - 2, len => cageGrid(len, h - 4));
-    svg += D.box(0.2, b, z + h - 1.5, W - 0.4, OUT + 1.2, 1.5);
-    c.add(`cage-${n}`, 0.2, b, z, W - 0.4, OUT + 1.2, h, svg);
+    svg += onOpenSides(c, ca, b, z + 2, cw, OUT, h - 2, len => cageGrid(len, h - 4));
+    svg += D.box(ca - 0.8, b, z + h - 1.5, cw + 1.6, OUT + 1.2, 1.5);
+    c.add(`cage-${n}${tag}`, ca - 0.8, b, z, cw + 1.6, OUT + 1.2, h, svg);
   }
 }
 

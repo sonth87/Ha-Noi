@@ -51,6 +51,8 @@ export interface FloorSpec {
   plants: number;
   /** outdoor AC unit on the facade below this floor's window */
   ac: boolean;
+  /** balcony across the whole frontage, or short: a little wider than the window, one per bay */
+  balconyWidth: 'full' | 'short';
   /** ô văng over the window (not with a cage, which has its own cap) */
   canopy: Canopy;
   /** clothes drying on the balcony */
@@ -91,6 +93,9 @@ export interface HouseSpec {
   awning: AwningKind;
   /** set out on the sidewalk in front of the shop */
   goods: Goods;
+  /** street trees at the curb in front of the house (left / right as seen from the street) */
+  trees: 'none' | 'left' | 'right' | 'both';
+  treeSize: 'small' | 'medium' | 'large';
   shopName: string;
   signs: SignSpec[];
   /** A5 paper ads stuck at ground-floor height, 0–4 */

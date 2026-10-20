@@ -125,6 +125,8 @@ export function WorkshopPanel({ controller }: { controller: SceneController }) {
         <Check label="Đang mở hàng" checked={s.shop} onChange={shop => c.patch({ shop })} />
         <Select label="Mái hiên" value={s.awning} options={AWNING} onChange={awning => c.patch({ awning })} />
         <Select label="Bày vỉa hè" value={s.goods} options={GOODS} onChange={goods => c.patch({ goods })} />
+        <Select label="Cây trước nhà" value={s.trees} options={[['none', 'Không'], ['left', 'Bên trái'], ['right', 'Bên phải'], ['both', 'Hai bên']]} onChange={trees => c.patch({ trees })} />
+        {s.trees !== 'none' && <Select label="Cỡ cây" value={s.treeSize} options={[['small', 'Nhỏ'], ['medium', 'Vừa'], ['large', 'To, tán rộng']]} onChange={treeSize => c.patch({ treeSize })} />}
         <Text label="Tên quán" value={s.shopName} max={16} onChange={shopName => c.patch({ shopName })} />
         <Range label="Tờ dán A5" value={s.stickers} min={0} max={4} onChange={stickers => c.patch({ stickers })} />
       </Section>
@@ -149,6 +151,7 @@ export function WorkshopPanel({ controller }: { controller: SceneController }) {
               <h4>Tầng {i + 2}</h4>
               <Select label="Cửa sổ" value={fl.window} options={WINDOW} onChange={window => c.patchFloor(i, { window })} />
               <Select label="Ban công" value={fl.balcony} options={BALCONY} onChange={balcony => c.patchFloor(i, { balcony })} />
+              {fl.balcony !== 'none' && <Select label="Độ dài" value={fl.balconyWidth} options={[['full', 'Dài hết mặt tiền'], ['short', 'Ngắn, quanh cửa']]} onChange={balconyWidth => c.patchFloor(i, { balconyWidth })} />}
               <Select label="Che cửa sổ" value={fl.canopy} options={CANOPY} onChange={canopy => c.patchFloor(i, { canopy })} />
               <Range label="Chậu cây" value={fl.plants} min={0} max={3} onChange={plants => c.patchFloor(i, { plants })} />
               <Check label="Phơi quần áo ở ban công" checked={fl.laundry} onChange={laundry => c.patchFloor(i, { laundry })} />

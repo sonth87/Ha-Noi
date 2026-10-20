@@ -131,7 +131,10 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Yêu cầu: **Xưởng nhà** — trang tự nhào nặn một căn (bảng chỉnh mọi tham số, từng tầng, cảnh báo, chép JSON); làm sớm FR-31 của P2; 6 test controller
 - [x] Góp ý: "chưa có nhiều option" → thêm 14 lựa chọn (ADR-022), bảng Xưởng nhà chia nhóm thu gọn + sửa chữ từng biển
 - [x] Chữa vòng lặp thứ tự vẽ do khối dài: vỉa hè theo ranh nhà, dây điện theo cột, làn xe theo đoạn 5 m (ADR-022); test phố 6 bố cục
-- [~] **Người dùng kiểm bằng mắt** (lựa chọn mới, xe máy, nhà rộng, Xưởng nhà) + đo fps khi xe chạy (NFR-03) và khi đêm
+- [x] Góp ý: ban công dài hoặc ngắn (rộng hơn cửa một chút) → `balconyWidth`, mỗi gian một ban công ngắn
+- [x] Góp ý: chậu cây chỉ là một cục → vẽ lá thật, 4 dáng (bụi, lá nhọn, dây leo rủ, có hoa)
+- [x] Góp ý: Hà Nội nhiều cây, trước nhà có cây nhỏ / to, trái / phải / hai bên → `trees` + `treeSize` theo từng nhà, luật tránh đè nhau và tránh cột; bỏ cây rải đều
+- [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 
 ## P4 · Ngã tư

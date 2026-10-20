@@ -48,6 +48,12 @@
 .pipe { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 .stain { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.8; }
 .face.plant { fill:var(--deck); }
+/* plants and trees: leaves are filled shapes with a hairline, so they read as foliage, not blobs */
+.leaf { fill:var(--deck); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.vine { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.flower { fill:var(--ink); }
+.face.crown { fill:var(--deck); }
+.trunk { stroke-width:1.6; }
 .face.solar { fill:var(--recess); }
 .face.awning { fill:var(--deck); }
 .face.metal { fill:var(--deck); }

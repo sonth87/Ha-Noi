@@ -36,6 +36,8 @@
 | Tum thang | `stairHut` | Khối nhỏ trên mái che cầu thang (khác phòng tum) |
 | Cột cờ | `roofItems: 'flag'` | |
 | Quảng cáo sơn tường | `sideAd` | Chữ sơn trên tường hồi |
+| Cây trước nhà | `trees`, `treeSize` | Cây ở mép vỉa hè trước mỗi nhà: trái / phải / hai bên, nhỏ / vừa / to |
+| Ban công ngắn | `balconyWidth: 'short'` | Ban công chỉ rộng hơn ô cửa một chút |
 | Tường hồi | `side wall` (`back.ts`) | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
 | Mặt tiền | `facade` | Mặt nhà quay ra phố |
 | Vỉa hè / bó vỉa | `sidewalk` / `curb` | |

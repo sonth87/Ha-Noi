@@ -11,7 +11,7 @@ type Defaults = Omit<HouseSpec, 'id' | 'seed' | 'upper' | 'preset'>;
 export const DEFAULTS: Defaults = {
   x: 0, y: 0, w: SIZE.tubeW, d: SIZE.tubeD, facing: 'S',
   floors: 3, basement: 0, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0, wall: 'plain', bays: 0,
-  ground: 'fold', shop: true, awning: 'none', goods: 'none', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
+  ground: 'fold', shop: true, awning: 'none', goods: 'none', trees: 'none', treeSize: 'medium', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
   roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, stairHut: false, roofShelter: 'none', laundry: false, roofPlants: 0,
   roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0, sideAd: '', sideWindows: false,
 };
@@ -39,7 +39,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     const n = i + 2;   // floor number: ground = 1
     const on = merged.balconyFloors === 'all' || (merged.balconyFloors === 'odd' && n % 2 === 1) || (merged.balconyFloors === 'even' && n % 2 === 0);
     return {
-      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false, canopy: 'none', laundry: false,
+      window: merged.window, balcony: on ? merged.balcony : 'none', plants: merged.plants, ac: false, canopy: 'none', laundry: false, balconyWidth: 'full',
       ...preset.upper?.[i], ...input.upper?.[i],
     } as FloorSpec;
   });
@@ -51,7 +51,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     seed: input.seed ?? hash(input.id),
     floors, basement: merged.basement, groundH: merged.groundH, floorH: merged.floorH, overhang: merged.overhang,
     wall: merged.wall, bays: clampInt(merged.bays, 0, 6, 'bays', warn),
-    ground: merged.ground, shop: merged.shop, awning: merged.awning, goods: merged.goods, shopName: merged.shopName,
+    ground: merged.ground, shop: merged.shop, awning: merged.awning, goods: merged.goods, trees: merged.trees, treeSize: merged.treeSize, shopName: merged.shopName,
     signs: [...merged.signs], stickers: clampInt(merged.stickers, 0, 4, 'stickers', warn),
     upper,
     roof: merged.roof, topRoom: merged.topRoom, topSetback: merged.topSetback, parapet: merged.parapet, stairHut: merged.stairHut, roofShelter: merged.roofShelter,
@@ -194,10 +194,14 @@ export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}):
         window: r.pick(WINDOWS), balcony, plants: r.int(0, 3), ac: r.chance(0.25),
         canopy: balcony === 'cage' ? 'none' as const : r.pick(['none', 'none', 'concrete', 'metal'] as const),
         laundry: balcony !== 'none' && r.chance(0.3),
+        balconyWidth: r.chance(0.45) ? 'short' as const : 'full' as const,
       };
     }),
     wall: r.pick(['plain', 'plain', 'tile', 'paint-old', 'stone-base'] as const),
     goods: r.pick(['none', 'none', 'stools', 'bikes', 'crates'] as const),
+    // Hà Nội streets are full of trees: most frontages have one, some two, small to huge
+    trees: r.pick(['none', 'left', 'right', 'both', 'left', 'right'] as const),
+    treeSize: r.pick(['small', 'medium', 'medium', 'large', 'large'] as const),
     stairHut: !pitched && !topRoom && floors > 0 && r.chance(0.3),
     sideAd: r.chance(0.15) ? r.pick(['KHOAN CẮT BÊ TÔNG|0912 345 678', 'CHO THUÊ NHÀ|0987 654 321', 'SƠN NƯỚC|0903 111 222']) : '',
     sideWindows: r.chance(0.25),

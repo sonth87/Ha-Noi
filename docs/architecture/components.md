@@ -210,3 +210,13 @@ Mỗi hàm trong `src/render/reference-house.ts` (nhà mẫu đã được duy�
 | Tum thang `stairHut` | Khối 1.4 × 2 m cao 2.4 m ở góc sau, mái đua, cửa | |
 | Mái: `ac`, `flag` | Cục nóng trên mái; cột cờ với lá cờ (ngôi sao vẽ nét) | Qua bộ xếp chỗ |
 | Tường hồi `sideAd`, `sideWindows` | Khung + 2 dòng chữ sơn; cửa sổ nhỏ theo tầng (chỉ trên phần lộ) | |
+
+---
+
+## H. Cây (góp ý 2026-10-21)
+
+| Phần | Hình | Ghi chú |
+|---|---|---|
+| Chậu cây `plants.ts` | Chậu + lá thật vẽ quanh điểm chiếu: **bụi lá** (vòm lá elip), **lá nhọn đứng** (lưỡi hổ), **dây leo rủ** qua mép ban công (hoa giấy), **bụi có hoa** — chọn theo seed | Dùng cho ban công, chuồng cọp, sân thượng, mái |
+| Cây trước nhà `trees.ts` | Bồn gốc + thân + tán gồm nhiều cụm tròn chồng nhau (sau trước), nét lá; cây to có cành và tán dẹt dài dọc phố | Item riêng, ở b = mặt tiền + 2.55 m (cây to 2.7 m). Kích thước trong `core/units.ts → TREE` |
+| Luật trên phố | Hai cây sát ranh hai nhà thì giữ cây nhà bên trái; bỏ cây vướng cột điện (trong tán + 1.1 m) hoặc vượt ra ngoài hai đầu phố | `core/layout.ts`; cây rải đều kiểu cũ đã bỏ |
