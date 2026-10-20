@@ -2,7 +2,7 @@
 
 Biến ngã tư **Thái Hà – Tây Sơn – Chùa Bộc** (Đống Đa, Hà Nội) thành một mô hình isometric tương tác theo phong cách **iso-glow**: bản vẽ nét mảnh trên nền tối, thứ gì đang "sống" (cửa sổ sáng, biển hiệu, đèn đường, dây điện, xe máy) thì phát sáng.
 
-> **Trạng thái:** P0 (khung project) — code xong, chờ kiểm bằng mắt. Tiến độ xem ở [docs/plan/checklist.md](docs/plan/checklist.md).
+> **Trạng thái:** P1 xong (generator nhà + Catalog). Tiến độ xem ở [docs/plan/checklist.md](docs/plan/checklist.md).
 
 ## Tài liệu
 

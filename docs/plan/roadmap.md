@@ -63,12 +63,14 @@ P0 Khung ──► P1 Nhà cơ bản + Catalog ──► P2 Thư viện chi ti�
 | **Yêu cầu** | FR-01, 02, 03 (một phần), 04 (một phần), 12, 13, 20, 22, 30, 37 |
 
 **DoD**
-- [ ] Catalog hiển thị 6 preset, mỗi căn trên ô đất riêng (xếp thành 1 hàng như dãy phố, thay cho lưới 3 × 2 để không căn nào che mặt tiền căn khác), nhìn khác nhau rõ rệt. *(code xong, chờ kiểm bằng mắt)*
-- [ ] `Q`/`E` xoay 4 hướng: mặt tiền (cửa hàng, cửa sổ) luôn nằm đúng phía; mặt lưng hiện khi mặt tiền khuất.
+- [x] Catalog hiển thị 6 preset, mỗi căn trên ô đất riêng (xếp thành 1 hàng như dãy phố, ADR-019), nhìn khác nhau rõ rệt.
+- [x] `Q`/`E` xoay 4 hướng: mặt tiền (cửa hàng, cửa sổ) luôn nằm đúng phía; mặt lưng hiện khi mặt tiền khuất.
 - [x] Click căn → bật/tắt đèn; `←`/`→` chọn căn; `Space` bật đèn căn đang chọn; `R` sinh căn ngẫu nhiên ở ô đang chọn (thêm `P` về preset, `N` ngày/đêm).
 - [x] Readout: `view S · 3/27 lit · 01 Nhà mẫu · cà phê`.
 - [x] Test: xoay 4 lần về lại ban đầu; facing đúng ở 4 hướng; `depthSort` đúng các ca mẫu; snapshot SVG ổn định; không bộ phận lồng nhau (77 test).
-- [ ] Không lỗi che khuất khi xoay (kiểm bằng mắt, 4 hướng).
+- [x] Không lỗi che khuất khi xoay (kiểm bằng mắt, 4 hướng).
+
+**P1 hoàn thành 2026-10-20** (thêm ngoài kế hoạch, theo góp ý: mái tôn tam giác trên sân thượng / cả mái).
 
 ---
 

@@ -66,7 +66,8 @@ function flat(c: Ctx): void {
     c.add('laundry', x0, lb - 0.5, z, x1 - x0, 1, 15, l);
   }
   roofItems(c, { a0: 0, a1: W, b0: rb0, b1: rb1, z: z + RH });
-  if (s.roofShelter === 'terrace') shelter(c, rb1, z + RH - 8, false);
+  // the terrace roof sits a little above the roof room's ceiling, on four posts (user feedback)
+  if (s.roofShelter === 'terrace') shelter(c, rb1, z + RH + 3, true);
 }
 
 /** two corrugated slopes meeting at a ridge along the depth (b0 → b0 + len), eaves at zEave */

@@ -2,7 +2,7 @@
 
 Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật file này **mỗi khi** một việc đổi trạng thái. Mã trong ngoặc tham chiếu [requirements](../product/requirements.md) và [decisions](../architecture/decisions.md).
 
-**Phase hiện tại: P1b — code xong, chờ người dùng kiểm bằng mắt.**
+**Phase hiện tại: P1 xong (2026-10-20) → chờ chọn hướng tiếp theo (P2 hoặc P3).**
 
 ## Lập kế hoạch
 - [x] Đánh giá ý tưởng, chốt phạm vi ngã tư Thái Hà – Tây Sơn – Chùa Bộc
@@ -92,8 +92,9 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Cập nhật [house-spec](../architecture/house-spec.md) theo code (A3); tách phần dự kiến P2
 - [x] Góp ý người dùng: nhà ống cũng hay có **mái tôn** (che sân thượng trước tum, hoặc che cả mái); có nhà không làm → `roofShelter: 'none' | 'terrace' | 'full'`, luật hợp lệ, random 50% (có tum) / 35% (không tum), preset `tube-5f-cage` (full), `tube-6f-photo` (tum + terrace); test luật + 300 nhà ngẫu nhiên vẫn không lồng nhau
 - [x] Góp ý người dùng: mái tôn trên tầng cao là **mái tam giác**, không phải tấm phẳng → đổi sang 2 dốc, đầu hồi hở có vì kèo; gom hàm vẽ 2 dốc dùng chung với mái nhà cấp 4 (snapshot nhà cấp 4 không đổi)
-- [~] **Người dùng kiểm bằng mắt**: 4 góc xoay đúng mặt tiền, không lỗi che khuất, nhà `nha-mau` giống bản vẽ tay, mái tôn
-- [ ] Đánh dấu DoD P1
+- [x] Góp ý người dùng: mái tôn che sân thượng làm cao hơn trần tum một chút → mép mái cao hơn trần tum 0.3 m, thêm 2 cột sau
+- [x] Người dùng kiểm bằng mắt: "trông có vẻ ok" (2026-10-20)
+- [x] Đánh dấu DoD P1 → **P1 xong**
 
 ## P2 · Thư viện chi tiết
 - [ ] `parts/ground.ts`: `glass`, `wood`, `wall`; mái hiên `fabric`/`metal`; biển `board`/`box`/`vertical` (FR-04, FR-09)
