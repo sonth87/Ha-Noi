@@ -87,7 +87,7 @@ Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plan
 | `topRoom` | bool | false | Phòng tum trên mái bằng, lùi vào so với mặt tiền, phía trước là sân thượng |
 | `topSetback` | number | 28 | Khoảng cách từ mặt tiền tầng trên đến tường trước của phòng tum |
 | `parapet` | number | 8 | Cao tường chắn mái |
-| `roofShelter` | `'none'\|'terrace'\|'full'` | `'none'` | **Mái tôn** trên khung cột mảnh, dốc ra phía phố. `terrace`: che sân thượng trước phòng tum (tựa vào tường tum, 2 cột trên tường chắn trước). `full`: che toàn bộ mái bằng khi không có tum (4 cột), chừa dải phía sau cho bồn nước/ăng-ten. Nhiều nhà ống có, nhiều nhà không |
+| `roofShelter` | `'none'\|'terrace'\|'full'` | `'none'` | **Mái tôn tam giác** (2 dốc, nóc chạy dọc chiều sâu, đầu hồi tam giác hướng ra phố, để hở thấy khung vì kèo) trên cột sắt mảnh. `terrace`: che sân thượng trước phòng tum (tựa vào tường tum, 2 cột trên tường chắn trước). `full`: che toàn bộ mái bằng khi không có tum (4 cột), chừa dải phía sau cho bồn nước/ăng-ten. Nhiều nhà ống có, nhiều nhà không |
 | `laundry` | bool | false | Dây phơi quần áo trên sân thượng (cần `topRoom`) |
 | `roofPlants` | int 0–3 | 0 | Chậu cây trên sân thượng hoặc mái |
 | `roofItems` | `RoofItem[]` | `['tank-h']` | `'tank-h'` bồn inox nằm, `'tank-v'` bồn đứng, `'solar'` máy nước nóng năng lượng mặt trời, `'antenna'` ăng-ten. Vị trí cố định từ sau ra trước nên không chồng nhau. Có `topRoom` thì vật đặt trên mái phòng tum |

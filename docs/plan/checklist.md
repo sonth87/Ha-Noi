@@ -91,6 +91,7 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Đăng ký "Catalog" làm Fig 2
 - [x] Cập nhật [house-spec](../architecture/house-spec.md) theo code (A3); tách phần dự kiến P2
 - [x] Góp ý người dùng: nhà ống cũng hay có **mái tôn** (che sân thượng trước tum, hoặc che cả mái); có nhà không làm → `roofShelter: 'none' | 'terrace' | 'full'`, luật hợp lệ, random 50% (có tum) / 35% (không tum), preset `tube-5f-cage` (full), `tube-6f-photo` (tum + terrace); test luật + 300 nhà ngẫu nhiên vẫn không lồng nhau
+- [x] Góp ý người dùng: mái tôn trên tầng cao là **mái tam giác**, không phải tấm phẳng → đổi sang 2 dốc, đầu hồi hở có vì kèo; gom hàm vẽ 2 dốc dùng chung với mái nhà cấp 4 (snapshot nhà cấp 4 không đổi)
 - [~] **Người dùng kiểm bằng mắt**: 4 góc xoay đúng mặt tiền, không lỗi che khuất, nhà `nha-mau` giống bản vẽ tay, mái tôn
 - [ ] Đánh dấu DoD P1
 
