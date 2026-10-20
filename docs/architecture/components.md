@@ -108,6 +108,7 @@ Ghi chú:
 | **Dây điện** `wires` | 3–6 dây/khoảng, võng (catenary xấp xỉ bằng bezier bậc 2), thêm **bó dây rối** (cuộn tròn) ở vài cột | độ võng, số dây | **Xung sáng** chạy dọc dây (`.pulse.go`), ngẫu nhiên theo thời gian; đêm thì nhiều hơn |
 | **Đèn đường** `lamp` | Cột + cần cong + chao | khoảng cách | Đêm: bóng `accent-hi` + `halo` bloom hắt xuống vỉa hè |
 | **Cây** `tree` | Bồn gốc + thân + tán (circle chồng) — như office-tower | cỡ tán | — |
+| **Ô tô** `car.ts` | sedan / hatchback / taxi (hộp đèn trên nóc, sáng đêm) / van: thân + khoang kính, bánh và kính ở sườn nhìn thấy, kính lái hoặc kính hậu ở đầu nhìn thấy | chạy giữa làn; ô tô cùng làn cùng tốc độ, cách đều nên không chồng nhau | Đèn pha + đèn hậu ban đêm |
 | **Xe máy** `bike` | Xe tay ga nhìn ngang trên mặt phẳng đứng dọc làn: 2 bánh, thân + yếm, yên, tay lái; người lái (khối + đầu) | làn, tốc độ, chiều, vệt trái/phải | Đèn pha + đèn hậu `accent` ban đêm (không filter vì chạy liên tục); controller trượt theo thời gian, mờ dần ở 2 đầu phố |
 | **Đèn giao thông** `traffic-light` | Cột + hộp 3 đèn (mặt nhìn thấy) | chu kỳ (xanh 20 s / vàng 3 s / đỏ 23 s, tua nhanh ×4) | Đèn đang bật `accent` + glow; xe dừng ở vạch khi đỏ |
 
@@ -118,11 +119,13 @@ Ghi chú:
 Mục tiêu: **nhận ra được qua hình khối và tỉ lệ**, không cần logo hay chữ. Hình khối dưới đây là **phác thảo ban đầu**; sẽ chỉnh theo ảnh thực tế khi có (xem [decisions](decisions.md), câu hỏi mở Q2).
 
 ### C1. Tòa Thái Bình (Parkson cũ)
-- **Bố cục giả định**: khối đế thương mại rộng (nhiều tầng, mặt kính lớn) + tháp văn phòng phía trên.
+- **Số liệu tìm trên web (2026-10-21)**: tòa Parkson Thái Hà nay gọi là **Việt Tower**, **18 tầng**: 7 tầng dưới là trung tâm thương mại, 11 tầng trên là văn phòng, 2 tầng hầm; Parkson đóng cửa ở đây năm 2016 ([Báo Văn Hóa](https://baovanhoa.vn/doi-song/ha-noi-chua-phat-hien-thiet-hai-ve-nguoi-trong-vu-chay-tren-pho-thai-ha-128465.html), [batdongsan](https://batdongsan.com.vn/ban-nha-rieng-viet-tower), [Bizhub](https://bizhub.vietnamnews.vn/parkson-closes-last-trade-centre-in-ha-noi-post282470.html)). *Cần người dùng xác nhận đây là tòa "Thái Bình".*
+- **Bố cục**: khối đế thương mại 7 tầng (mặt kính lớn) + tháp văn phòng 11 tầng phía trên.
 - **Đặc điểm cần xác nhận từ ảnh**: số tầng đế, số tầng tháp, tháp đặt giữa hay lệch, góc tòa nhà vát/bo, vị trí sảnh.
 - **Sáng / tương tác**: khối đế sáng theo tầng (như mall mở cửa); tháp bật đèn từng tầng (tái dùng ý tưởng office-tower: click tầng, cascade `N`); biển trên đỉnh là **một khối sáng trơn**, không chữ thương hiệu.
 
 ### C2. Tòa Novotel
+- **Số liệu tìm trên web (2026-10-21)**: Novotel Hanoi Thai Ha, **27 tầng** (một số nguồn ghi 26), 1 tháp, 343 phòng, hoàn thành 2017–2020 ([Hotels.com](https://www.hotels.com/ho1080005984), [Expedia](https://www.expedia.com/Hanoi-Hotels-Novotel-Hanoi-Thai-Ha.h33718937.Hotel-Information), [Northstar](https://www.northstarmeetingsgroup.com/Meeting-Event-Venues/Hanoi-Vietnam/Convention-Hotel/Novotel-Hanoi-Thai-Ha-p53183046)).
 - **Bố cục giả định**: tháp khách sạn cao, mặt bằng gọn, lưới cửa sổ phòng đều, khối đế/sảnh thấp có mái sảnh (canopy) cho xe đón.
 - **Đặc điểm cần xác nhận từ ảnh**: số tầng, hình mặt bằng, mái (phẳng / có khối kỹ thuật), dải sáng đặc trưng nếu có.
 - **Sáng / tương tác**: cửa sổ phòng sáng rải rác kiểu lived-in (seed), sảnh sáng, mái sảnh hắt sáng; xe ra vào sảnh (tùy chọn).

@@ -76,10 +76,14 @@
 .lane { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; stroke-dasharray:8 7; }
 .wheel { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
 .lane-solid { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
-.lane.off { display:none; }
+/* the traffic groups must not share a class with the dashed lane markings: stroke-dasharray inherits */
+.traffic-lane.off { display:none; }
 /* moving lights: no filter (a blur on every frame is expensive); brightness carries them */
-.bike .lamp.on .bulb { filter:none; }
-.bike .lamp.on .bulb.tail { fill:var(--accent); }
+.vehicle .lamp.on .bulb { filter:none; }
+.vehicle .lamp.on .bulb.tail { fill:var(--accent); }
+.car-glass { fill:var(--glass); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+.face.taxi-sign { fill:var(--recess); }
+.lamp.on .face.taxi-sign { fill:var(--accent); stroke:var(--accent-hi); }
 
 /* lamps, headlights and light pools: on at night */
 .lamp .bulb { fill:var(--detail); transition:fill .3s; }

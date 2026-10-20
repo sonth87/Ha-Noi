@@ -65,7 +65,10 @@ export const STREET = {
   depth: 520,
   /** road between the two sidewalks */
   road: [220, 300] as const,
-  lanes: [{ y0: 230, y1: 246, dir: -1 as const }, { y0: 274, y1: 290, dir: 1 as const }],
+  // two 2.8 m lanes: cars in the middle track, motorbikes in the tracks either side
+  lanes: [{ y0: 226, y1: 254, dir: -1 as const }, { y0: 266, y1: 294, dir: 1 as const }],
+  /** track offsets across a lane from its centre line: 0 = one edge, 1 = middle (cars), 2 = other edge */
+  tracks: [-8.5, 0, 8.5],
   /** pole and tree lines on each sidewalk, near the curb */
   far: { pole: 214, tree: 215 },
   near: { pole: 302, tree: 304.5 },
@@ -81,7 +84,8 @@ export interface StreetLayout {
   houses: StreetHouse[];
   poles: { x: number; row: 'far' | 'near' }[];
   alleys: { x0: number; x1: number; row: 'far' | 'near' }[];
-  bikes: { lane: number; a0: number; v: number; track: number }[];
+  /** traffic: kind, lane, start position along the street, speed (units/s), track (0–2) */
+  vehicles: { kind: 'bike' | 'sedan' | 'hatch' | 'taxi' | 'van'; lane: number; a0: number; v: number; track: number }[];
 }
 
 export const streetCenter = (): [number, number] => [STREET.length / 2, STREET.depth / 2];
@@ -168,10 +172,13 @@ export function streetLayout(seed: number, name = 'Thái Hà', prefix = 'TH'): S
     }
   }
 
-  const bikes: StreetLayout['bikes'] = [];
+  const vehicles: StreetLayout['vehicles'] = [];
   STREET.lanes.forEach((_, lane) => {
-    for (let i = 0; i < 7; i++) bikes.push({ lane, a0: r.next() * L, v: r.int(45, 80), track: r.chance(0.5) ? -3.5 : 3.5 });
+    for (let i = 0; i < 8; i++) vehicles.push({ kind: 'bike', lane, a0: r.next() * L, v: r.int(45, 80), track: r.chance(0.5) ? 0 : 2 });
+    // cars share one speed per lane and keep even gaps, so they never run into each other
+    const n = 3, v = r.int(50, 64), off = r.next() * L;
+    for (let i = 0; i < n; i++) vehicles.push({ kind: r.pick(['sedan', 'sedan', 'hatch', 'taxi', 'van'] as const), lane, a0: (off + (i * L) / n) % L, v, track: 1 });
   });
 
-  return { name, houses, poles, alleys, bikes };
+  return { name, houses, poles, alleys, vehicles };
 }

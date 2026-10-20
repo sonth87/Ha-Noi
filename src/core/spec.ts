@@ -137,6 +137,8 @@ export function cutaway(s: HouseSpec): HouseSpec {
   return {
     ...s, floors: 0, upper: [], overhang: 0, roof: 'flat', topRoom: false, roofShelter: 'none', parapet: 0,
     roofItems: [], roofPlants: 0, laundry: false, sideAC: 0,
+    // its street trees go too: the point of cutaway is to see the street
+    trees: 'none',
     signs: s.signs.filter(x => x.type !== 'projecting-vertical' && x.type !== 'billboard'),
   };
 }

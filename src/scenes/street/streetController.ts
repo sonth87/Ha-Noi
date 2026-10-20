@@ -15,7 +15,7 @@ import { SceneController, type SceneSnapshot } from '@scenes/controller';
 const K0 = kernel(0, 0);
 const reducedMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-interface Bike { el: SVGGElement; a0: number; v: number; dir: number; lane: number; piece: number }
+interface Vehicle { el: SVGGElement; a0: number; v: number; dir: number; len: number; lane: number; piece: number; track: string }
 
 export class StreetController extends SceneController<SceneSnapshot> {
   private readonly lay = streetLayout(20261020);
@@ -25,7 +25,7 @@ export class StreetController extends SceneController<SceneSnapshot> {
   private traffic = true;
   private ids: string[] = [];
   private unit: [number, number] = [0, 0];
-  private bikes: Bike[] = [];
+  private vehicles: Vehicle[] = [];
   /** lane piece groups, [lane][piece] */
   private pieces: SVGGElement[][] = [];
   private readonly lit = new Set<string>();
@@ -37,19 +37,20 @@ export class StreetController extends SceneController<SceneSnapshot> {
 
   protected override onAttach(svg: SVGSVGElement): void {
     this.pieces = [];
-    svg.querySelectorAll<SVGGElement>('.lane[data-piece]').forEach(g => {
+    svg.querySelectorAll<SVGGElement>('.traffic-lane[data-piece]').forEach(g => {
       const lane = Number(g.dataset.lane), k = Number(g.dataset.piece);
       (this.pieces[lane] ??= [])[k] = g;
     });
-    this.bikes = [...svg.querySelectorAll<SVGGElement>('.bike')].map(el => {
-      const host = el.closest<SVGGElement>('.lane')!;
-      return { el, a0: Number(el.dataset.a0), v: Number(el.dataset.v), dir: Number(el.dataset.dir), lane: Number(host.dataset.lane), piece: Number(host.dataset.piece) };
+    this.vehicles = [...svg.querySelectorAll<SVGGElement>('.vehicle')].map(el => {
+      const host = el.closest<SVGGElement>('.traffic-lane')!, track = el.parentElement!.getAttribute('data-track')!;
+      return { el, a0: Number(el.dataset.a0), v: Number(el.dataset.v), dir: Number(el.dataset.dir), len: Number(el.dataset.len),
+        lane: Number(host.dataset.lane), piece: Number(host.dataset.piece), track };
     });
     this.apply();
     const still = reducedMotion();
-    this.placeBikes(still ? 0 : performance.now());
+    this.placeVehicles(still ? 0 : performance.now());
     if (!still) {
-      this.loop(now => { if (this.traffic) this.placeBikes(now); });
+      this.loop(now => { if (this.traffic) this.placeVehicles(now); });
       this.schedulePulse();
     }
   }
@@ -106,15 +107,15 @@ export class StreetController extends SceneController<SceneSnapshot> {
   }
 
   /** slide each bike to its position at time `now`, fading at the street's ends */
-  private placeBikes(now: number): void {
+  private placeVehicles(now: number): void {
     const L = STREET.length, [ux, uy] = this.unit;
-    for (const b of this.bikes) {
+    for (const b of this.vehicles) {
       const a = (((b.a0 + b.dir * b.v * now / 1000) % L) + L) % L;
-      const edge = Math.min(a, L - 18 - a);
+      const edge = Math.min(a, L - b.len - a);
       b.el.setAttribute('transform', `translate(${(ux * a).toFixed(2)} ${(uy * a).toFixed(2)})`);
       // ride into the next lane piece's group so the bike is drawn at that piece's depth
       const k = Math.min(this.pieces[b.lane]!.length - 1, Math.floor(a / LANE_PIECE));
-      if (k !== b.piece) { this.pieces[b.lane]![k]!.appendChild(b.el); b.piece = k; }
+      if (k !== b.piece) { this.pieces[b.lane]![k]!.querySelector(`[data-track="${b.track}"]`)!.appendChild(b.el); b.piece = k; }
       b.el.style.opacity = edge < 0 ? '0' : edge < 24 ? (edge / 24).toFixed(2) : '';
     }
   }
@@ -138,9 +139,9 @@ export class StreetController extends SceneController<SceneSnapshot> {
       svg.querySelectorAll<SVGGElement>('[data-floor]').forEach(el => el.classList.toggle('on', this.lit.has(el.dataset.floor!)));
       svg.querySelectorAll<SVGGElement>('[data-for]').forEach(el => el.classList.toggle('on', this.lit.has(el.dataset.for!)));
       svg.querySelectorAll<SVGGElement>('[data-night]').forEach(el => el.classList.toggle('on', this.night));
-      svg.querySelectorAll<SVGGElement>('.lane').forEach(el => el.classList.toggle('off', !this.traffic));
+      svg.querySelectorAll<SVGGElement>('.traffic-lane').forEach(el => el.classList.toggle('off', !this.traffic));
     }
-    const parts = [`view ${VIEW_LABEL[this.k]}`, this.cut ? 'cutaway' : 'full', this.night ? 'night' : 'day', `${this.lit.size}/${this.ids.length} lit`, this.traffic ? `${this.lay.bikes.length} bikes` : 'no traffic'];
+    const parts = [`view ${VIEW_LABEL[this.k]}`, this.cut ? 'cutaway' : 'full', this.night ? 'night' : 'day', `${this.lit.size}/${this.ids.length} lit`, this.traffic ? `${this.lay.vehicles.filter(v => v.kind === 'bike').length} bikes · ${this.lay.vehicles.filter(v => v.kind !== 'bike').length} cars` : 'no traffic'];
     this.update({ readout: parts.join(' · '), power: this.lit.size > 0 || this.night });
   }
 }

@@ -14,7 +14,8 @@ import type { Item, ViewK } from '@core/types';
 import { LocalDraw, type LV } from '@render/local';
 import { sagLine } from '@render/geom';
 import { sticker } from '@render/parts/signs';
-import { scooter } from '@render/parts/bike';
+import { SCOOTER_LEN, scooter } from '@render/parts/bike';
+import { CAR_LEN, car } from '@render/parts/car';
 import { f, g } from '@render/svg';
 
 const POLE_H = 92, ARM_Z = 84;
@@ -115,24 +116,36 @@ export function renderStreet(K: Kernel, lay: StreetLayout, k: ViewK): Item[] {
   }
 
   // ---- lanes with their motorbikes (moved by the controller along the lane) ----
-  // in LANE_PIECE pieces (long boxes close draw-order rings); a bike starts in the piece holding
-  // its a0, and the controller moves it into the next piece's group as it rides on
+  // in LANE_PIECE pieces (long boxes close draw-order rings); inside each piece one group per track,
+  // ordered far → near for this view, so a bike on the near edge passes in front of a car and one on
+  // the far edge behind it. A vehicle starts in the piece holding its a0 and the controller moves it
+  // into the next piece's group for the same track as it drives on.
+  const nearIsPlusB = L.visible('+b');
   STREET.lanes.forEach((ln, i) => {
     const mid = (ln.y0 + ln.y1) / 2, pieces = Math.ceil(len / LANE_PIECE);
-    const byPiece: string[] = Array.from({ length: pieces }, () => '');
-    for (const bk of lay.bikes.filter(b => b.lane === i)) byPiece[Math.min(pieces - 1, Math.floor(bk.a0 / LANE_PIECE))] += bike(D, mid + bk.track, ln.dir, bk.a0, bk.v);
-    byPiece.forEach((bikes, k) => {
+    const byPiece: string[][] = Array.from({ length: pieces }, () => ['', '', '']);
+    for (const vh of lay.vehicles.filter(v => v.lane === i)) {
+      const k = Math.min(pieces - 1, Math.floor(vh.a0 / LANE_PIECE));
+      byPiece[k]![vh.track] += vehicle(D, vh.kind, mid + STREET.tracks[vh.track]!, ln.dir, vh.a0, vh.v);
+    }
+    const order = nearIsPlusB ? [0, 1, 2] : [2, 1, 0];
+    byPiece.forEach((tracks, k) => {
       const x = k * LANE_PIECE, pw = Math.min(LANE_PIECE, len - x);
-      add(`lane-${i}-${k}`, x, ln.y0, 0, pw, ln.y1 - ln.y0, 21, `<g class="lane" data-lane="${i}" data-piece="${k}">${bikes}</g>`);
+      const groups = order.map(t => `<g data-track="${t}">${tracks[t]}</g>`).join('');
+      add(`lane-${i}-${k}`, x, ln.y0, 0, pw, ln.y1 - ln.y0, 21, `<g class="traffic-lane" data-lane="${i}" data-piece="${k}">${groups}</g>`);
     });
   });
 
   return items;
 }
 
-/** a moving scooter with its rider at a = 0…18 along the lane; the controller slides it to a(t) */
-function bike(D: LocalDraw, b: number, dir: 1 | -1, a0: number, v: number): string {
-  return `<g class="bike" data-a0="${f(a0)}" data-v="${v}" data-dir="${dir}">${scooter(D, 'a', 0, b, dir, 0, true)}</g>`;
+/** a moving vehicle at a = 0…its length along the lane; the controller slides it to a(t) */
+function vehicle(D: LocalDraw, kind: StreetLayout['vehicles'][number]['kind'], b: number, dir: 1 | -1, a0: number, v: number): string {
+  const len = kind === 'bike' ? SCOOTER_LEN : CAR_LEN[kind];
+  const body = kind === 'bike' ? scooter(D, 'a', 0, b, dir, 0, true) : car(D, kind, b, dir);
+  // start where it belongs, so a still frame (and the first one) already shows the traffic in place
+  const u = D.L.vec(1, 0, 0), [ux, uy] = D.K.D(u[0], u[1], u[2]);
+  return `<g class="vehicle${kind === 'bike' ? ' bike' : ' car'}" data-a0="${f(a0)}" data-v="${v}" data-dir="${dir}" data-len="${len}" transform="translate(${f(ux * a0)} ${f(uy * a0)})">${body}</g>`;
 }
 
 /** the part of a polyline (monotone in x) between x0 and x1, with interpolated end points */

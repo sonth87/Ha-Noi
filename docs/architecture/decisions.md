@@ -150,6 +150,12 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
   4. Một vòng che khuất thật (cột cờ – tường chắn – cột đỡ – mái tôn) không có thứ tự vẽ nào thỏa → luật: không cột cờ khi mái tôn che cả mái.
 - **Hệ quả**: Test phố tăng lên 6 bố cục × 4 góc × bật/tắt cutaway; tất cả sạch. Snapshot các preset cũ không đổi.
 
+### ADR-023 · Ô tô trên phố; làn 2.8 m chia 3 vệt
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "đường phố thêm ô tô")
+- **Quyết định**: Mỗi làn rộng 2.8 m, 3 vệt: xe máy ở 2 mép, ô tô ở giữa. Mỗi đoạn làn (5 m) có 3 nhóm SVG theo vệt, xếp xa → gần theo góc nhìn, nên xe máy ở mép gần luôn vẽ đè lên ô tô và ở mép xa thì nằm sau; khi xe sang đoạn kế tiếp, controller gắn nó vào nhóm cùng vệt. Xe được vẽ sẵn ở vị trí xuất phát (khung hình tĩnh và khung đầu đã đúng chỗ).
+- **Bài học**: nhóm xe từng dùng class `lane`, trùng class vạch kẻ đường có `stroke-dasharray`; thuộc tính này **kế thừa** xuống mọi nét con nên xe máy (và ô tô) bị vẽ nét đứt. Đổi thành `traffic-lane`. Phát hiện nhờ tự soát hình.
+- **Hệ quả**: Cutaway cắt luôn cây vỉa hè của dãy gần (để nhìn thấy lòng phố).
+
 ---
 
 ## Câu hỏi mở
@@ -158,6 +164,7 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
 |---|---|---|---|
 | Q1 | Có ảnh nhà ống quanh khu làm mẫu preset không? | P2 | Dựng theo nhà phố Hà Nội phổ biến |
 | Q2 | Ảnh tòa Thái Bình, Novotel, 2 vườn hoa (toàn cảnh + tầng trệt)? | P4 | Phác khối theo [components](components.md) mục C |
+| Q6 | "Tòa Thái Bình" có đúng là Việt Tower (Parkson Thái Hà cũ, 18 tầng) không? Có ảnh 2 tòa nhà và 2 vườn hoa không (công cụ web của AI chỉ đọc được chữ, không xem được ảnh)? | P4 bước 3 | Dựng khối theo số tầng tìm được |
 | Q3 | Mỗi landmark / vườn hoa ở góc nào? | P4 | Bố trí tạm: 2 tòa phía Tây Sơn bắc, 2 vườn phía nam (đổi được trong `layout.js`) |
 | Q4 | Có muốn âm thanh không? | P5 | Không |
 | ~~Q5~~ | ~~Font có tiếng Việt cho biển hiệu~~ → **Đã chốt: ADR-017** | — | — |

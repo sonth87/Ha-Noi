@@ -141,11 +141,12 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý: cây vỉa hè "tán 1 thể, đừng tròn tròn mấy cục" → `canopy()` một viền liền; cây ban công "ok rồi"
 - [x] Góp ý: chọn được loại cây ban công → `plantKind` theo tầng, `roofPlantKind` cho sân thượng / mái; ô chọn trong Xưởng nhà
 - [x] Góp ý: tán "như cục cơm nắm" → tán ghép từ mảng lá theo cành, hợp thành một viền (kỹ thuật viền dày + nền đè); tán hạ thấp, to và rộng hơn; khe đáy tán cho thấy chỗ chia cành; tự soát bằng bảng thử cây + ảnh phố
+- [x] Yêu cầu: thêm ô tô → `car.ts` (4 kiểu), làn 2.8 m chia 3 vệt, nhóm SVG theo vệt (ADR-023); sửa lỗi nét đứt kế thừa ở xe; cutaway cắt cây dãy gần
 - [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 
 ## P4 · Ngã tư
-- [ ] Thu thập ảnh tham khảo: tòa Thái Bình, Novotel, 2 vườn hoa (Q2)
+- [~] Thu thập tham khảo: số tầng 2 tòa nhà đã tìm trên web (components C1, C2); còn ảnh + xác nhận tên tòa (Q6)
 - [ ] `core/layout.ts`: `crossroads()` gồm 4 nhánh + nút giao + 4 góc
 - [ ] Mặt đường nút giao: vạch dừng, vạch sang đường
 - [ ] `render/landmarks/tower-thai-binh.ts`: khối đế + tháp, bật đèn theo tầng
