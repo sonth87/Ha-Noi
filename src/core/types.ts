@@ -95,6 +95,10 @@ export interface HouseSpec {
 
   /** AC units hung on the exposed side wall, 0–3 */
   sideAC: number;
+  /** which end wall is exposed (tường hồi): things hung on the side (AC units, billboard) go only here */
+  sideEnd: '+a' | '-a';
+  /** height above which that end wall is free of the neighbour (0 = nothing next to it) */
+  sideClear: number;
 }
 
 /** What a scene or preset writes: an id plus any subset of fields; `upper` may be partial per floor. */

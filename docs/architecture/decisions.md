@@ -119,6 +119,18 @@ Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → h�
 - **Lý do**: Ở lưới 2 hàng, nhà hàng trước (cao tới 20 m) che mặt tiền nhà hàng sau. Một hàng với mặt tiền thẳng một đường thì không căn nào che căn nào, và trông giống một dãy phố thật.
 - **Hệ quả**: Khi lên 12 preset (P2), hàng dài gấp đôi; nếu quá rộng thì chia 2 hàng cách xa nhau hoặc phân trang.
 
+### ADR-020 · Dãy phố: tường hồi cố định theo dữ liệu, khung phố xoay chung, xe theo làn
+- **Trạng thái**: Đã chốt (2026-10-20, P3)
+- **Bối cảnh**: Ở Catalog, cục nóng treo và biển lớn gắn vào tường hồi đang nhìn thấy (đổi theo góc xoay). Trên phố nhà sát nhau, cách đó làm chúng đâm sang nhà bên ở góc xoay khác.
+- **Quyết định**:
+  1. `sideEnd` + `sideClear` trong spec: bố cục phố chọn tường hồi có nhà bên thấp hơn và độ cao bắt đầu lộ ra (`peakZ` của nhà bên, tính cả phòng tum, vật trên mái, mái tôn). Bộ phận treo tường chỉ đặt trên `sideClear`.
+  2. Đồ phố (nền, đường, vỉa hè, cột, đèn, cây, dây, làn xe) vẽ trong **khung phố** — cả con phố coi như một "căn nhà" giả, xoay bằng `rotateSpec` + `localFrame` như nhà (ADR-018).
+  3. Xe máy gom theo **làn**: mỗi làn là một item (khối dọc cả phố, cao 1.7 m) nằm giữa hai vỉa hè, nên tự đứng sau dãy xa và trước dãy gần; controller trượt từng xe bằng `transform` theo thời gian, không cần sắp lại mỗi khung hình.
+  4. Dây điện đi **phía trước** cột (phía lòng đường), đèn đường ở **trên** dây, vũng sáng của đèn vẽ trong lớp nền — để không item nào lồng nhau.
+  5. Phóng to (con lăn), kéo (khi đã phóng), nhấp đúp để về khung gốc: chỉ đổi `viewBox`, không dựng lại SVG; mức phóng giữ nguyên khi xoay. Kéo không bị tính là click.
+  6. Cảnh phố mở ra ở chế độ **cutaway bật** (dãy gần chỉ còn tầng 1), vì nếu không dãy gần che hết lòng phố.
+- **Hệ quả**: Test: 3 bố cục × 4 góc × bật/tắt cutaway không có item lồng nhau, không cảnh báo thứ tự vẽ, dựng lại < 300 ms (NFR-04). Ở Catalog, cục nóng/biển lớn giờ cũng cố định bên `+a` (ẩn khi bên đó khuất).
+
 ---
 
 ## Câu hỏi mở

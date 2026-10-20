@@ -89,8 +89,9 @@ export function signItems(c: Ctx): void {
         break;
       }
       case 'billboard': {
-        if (s.floors < 2) break;
-        const side = D.endSide(), out = side === '+a' ? 1 : -1;
+        // on the exposed end wall, and only if that wall is clear of the neighbour where the board goes
+        if (s.floors < 2 || c.topZ - 30 < s.sideClear + 2) break;
+        const side = s.sideEnd, out = side === '+a' ? 1 : -1;
         const a0 = side === '+a' ? W : -1.6, BH = 24, BZ = c.topZ - 30;
         const BD = Math.min(74, c.fy * 0.5), b0 = Math.max(4, c.fy * 0.33);
         const face = D.face(a0, b0, BZ, 1.6, BD, BH, side);

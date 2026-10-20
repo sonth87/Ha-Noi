@@ -13,7 +13,7 @@ export const DEFAULTS: Defaults = {
   floors: 3, groundH: SIZE.groundH, floorH: SIZE.floorH, overhang: 0,
   ground: 'fold', shop: true, awning: 'none', shopName: 'TẠP HÓA', signs: [{ type: 'facade' }], stickers: 1,
   roof: 'flat', topRoom: false, topSetback: 2.8 * M, parapet: 0.8 * M, roofShelter: 'none', laundry: false, roofPlants: 0,
-  roofItems: ['tank-h'], sideAC: 1,
+  roofItems: ['tank-h'], sideAC: 1, sideEnd: '+a', sideClear: 0,
 };
 
 const FLOOR_DEFAULT = { window: 'tall' as WindowKind, balcony: 'rail' as BalconyKind, balconyFloors: 'all' as const, plants: 1 };
@@ -56,6 +56,7 @@ export function resolveSpec(input: HouseInput): { spec: HouseSpec; issues: Issue
     roof: merged.roof, topRoom: merged.topRoom, topSetback: merged.topSetback, parapet: merged.parapet, roofShelter: merged.roofShelter,
     laundry: merged.laundry, roofPlants: clampInt(merged.roofPlants, 0, 3, 'roofPlants', warn),
     roofItems: [...merged.roofItems], sideAC: clampInt(merged.sideAC, 0, 3, 'sideAC', warn),
+    sideEnd: merged.sideEnd, sideClear: Math.max(0, merged.sideClear),
   };
 
   // consistency rules (house-spec §4)
@@ -96,6 +97,32 @@ function clampInt(v: number, lo: number, hi: number, field: string, warn: (f: st
   const n = Math.round(v);
   if (n < lo || n > hi || n !== v) warn(field, `${v} adjusted to ${Math.min(hi, Math.max(lo, n))}`);
   return Math.min(hi, Math.max(lo, n));
+}
+
+/** Top of the house's solid mass (upper floors; roof room and roof items not included). */
+export const topZ = (s: Pick<HouseSpec, 'groundH' | 'floors' | 'floorH'>) => s.groundH + s.floors * s.floorH;
+
+/** heights of roof items above the roof they stand on (render/parts/roof-items.ts) */
+const ITEM_H: Record<string, number> = { 'tank-h': 16, 'tank-v': 18, solar: 24, antenna: 32 };
+
+/** Highest point of a house: roof, roof room, roof items, shelter (for neighbours' sideClear). */
+export function peakZ(s: HouseSpec): number {
+  const top = topZ(s);
+  if (s.roof === 'metal2') return top + 14 + (s.roofItems.includes('antenna') ? 26 : 0);
+  const base = s.topRoom ? top + s.floorH - 2 : top;
+  let z = Math.max(top + s.parapet, top + 15 /* pots, laundry */, base, ...s.roofItems.map(i => base + (ITEM_H[i] ?? 0)));
+  if (s.roofShelter === 'terrace') z = Math.max(z, top + s.floorH + 1 + Math.round(s.w * 0.3));
+  if (s.roofShelter === 'full') z = Math.max(z, top + 24 + Math.round(s.w * 0.3));
+  return z;
+}
+
+/** Cutaway (FR-21): the same house cut down to its ground floor, for the row nearest the viewer. */
+export function cutaway(s: HouseSpec): HouseSpec {
+  return {
+    ...s, floors: 0, upper: [], overhang: 0, roof: 'flat', topRoom: false, roofShelter: 'none', parapet: 0,
+    roofItems: [], roofPlants: 0, laundry: false, sideAC: 0,
+    signs: s.signs.filter(x => x.type !== 'projecting-vertical' && x.type !== 'billboard'),
+  };
 }
 
 /** Errors stop a house from drawing; duplicate ids are a scene-level error. */

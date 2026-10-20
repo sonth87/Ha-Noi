@@ -2,7 +2,7 @@
 
 Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật file này **mỗi khi** một việc đổi trạng thái. Mã trong ngoặc tham chiếu [requirements](../product/requirements.md) và [decisions](../architecture/decisions.md).
 
-**Phase hiện tại: P1 xong (2026-10-20) → chờ chọn hướng tiếp theo (P2 hoặc P3).**
+**Phase hiện tại: P3 — phố Thái Hà, code xong, chờ người dùng kiểm bằng mắt + đo fps.**
 
 ## Lập kế hoạch
 - [x] Đánh giá ý tưởng, chốt phạm vi ngã tư Thái Hà – Tây Sơn – Chùa Bộc
@@ -112,19 +112,19 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [ ] Tự đánh giá S1
 - [ ] Đánh dấu DoD P2
 
-## P3 · Một nhánh phố
-- [ ] `core/layout.ts`: `streetRow({ length, side, seed, mix })`: rải nhà sát nhau, xen nhà thấp, không 3 căn cùng preset liền nhau
-- [ ] `render/props/sidewalk.ts`: vỉa hè, bó vỉa, lòng đường, vạch làn
-- [ ] `render/props/poles-wires.ts`: cột, dây võng, bó dây rối, xung sáng (FR-34)
-- [ ] `render/props/lamps.ts`: đèn đường + halo
-- [ ] `render/props/trees.ts`
-- [ ] `render/props/bikes.ts` + điều khiển trong controller: xe 2 chiều, `T` (FR-35)
-- [ ] Lớp vẽ: dãy xa → đường → xe → dãy gần → dây điện
-- [ ] Cutaway `X` (FR-21)
-- [ ] Ngày/đêm `N` + cascade (FR-23)
-- [ ] `hooks/useReducedMotion` + xử lý trong controller (NFR-09)
-- [ ] `scenes/street/` + `?demo` (FR-32, FR-36)
-- [ ] Đo fps (NFR-03), thời gian dựng lại (NFR-04), xác nhận không re-render theo frame (NFR-14); ghi vào [decisions](../architecture/decisions.md)
+## P3 · Một nhánh phố (phố Thái Hà)
+- [x] `core/layout.ts` — `streetLayout(seed)`: 2 dãy quay mặt vào nhau (20–26 căn/dãy), ngõ chen giữa, xen nhà thấp mỗi 4–6 căn, không 3 căn cùng preset liền nhau; cột, cây, xe (FR-32)
+- [x] Tường hồi lộ ra theo nhà bên: `sideEnd` + `sideClear` (dùng `peakZ`), cục nóng treo/biển lớn chỉ ở phần lộ (ADR-020)
+- [x] `core/spec.ts` — `cutaway(spec)`, `topZ`, `peakZ`
+- [x] `render/props/street.ts` — nền + lòng đường + vạch kẻ, 2 vỉa hè lát gạch, cột điện + bó dây rối + tờ dán, đèn đường + vũng sáng, cây, dây võng qua các xà + xung sáng (FR-34), 2 làn xe máy (FR-35)
+- [x] `render/street-scene.ts` — `buildStreet`: xoay nhà + đồ phố theo khung phố, cắt dãy gần khi cutaway
+- [x] Cutaway `X`, mặc định bật (FR-21)
+- [x] Ngày/đêm `N` + cascade ngẫu nhiên (FR-23)
+- [x] Xe chạy 2 chiều theo thời gian, mờ dần ở 2 đầu phố, `T` bật/tắt; đứng yên khi reduced motion (FR-35, NFR-09)
+- [x] Phóng to / kéo / nhấp đúp (dùng chung mọi cảnh) — `hooks/useZoomPan.ts`
+- [x] `scenes/street/` + đăng ký "Phố Thái Hà" (Fig 3), `?demo` bật đêm (FR-36)
+- [x] Test: 29 test phố — số căn, mặt tiền thẳng hàng, không chồng nhà, tái tạo theo seed; 3 bố cục × 4 góc × cutaway bật/tắt không item lồng nhau, sắp xếp không cảnh báo; dựng lại < 300 ms (NFR-04)
+- [~] **Người dùng kiểm bằng mắt** + đo fps khi xe chạy (NFR-03) và khi đêm
 - [ ] Đánh dấu DoD P3
 
 ## P4 · Ngã tư

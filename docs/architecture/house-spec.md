@@ -66,7 +66,7 @@ upper[i]    = mặc định theo tầng ⊕ preset.upper[i] ⊕ input.upper[i]
 | `projecting-round` | Nếu có mái hiên thì biển nằm trên mái hiên |
 | `standee` | Đứng trên vỉa hè, cách mép phần đua ra 0.8 m |
 | `barber-pole` | Trên mặt tiền tầng 1, cạnh cửa |
-| `billboard` | Cần `floors ≥ 2`. Gắn trên tường hồi ở phía nhìn thấy, cao sát đỉnh nhà, có 3 đèn chiếu |
+| `billboard` | Cần `floors ≥ 2` và đỉnh nhà − 3 m ≥ `sideClear`. Gắn trên tường hồi `sideEnd`, cao sát đỉnh nhà, có 3 đèn chiếu |
 
 ### 2.4 Các tầng trên
 `upper: FloorSpec[]`, một phần tử cho mỗi tầng từ tầng 2 trở lên, theo thứ tự từ dưới lên.
@@ -95,7 +95,9 @@ Khuôn cho mọi tầng (chỉ có ở `HouseInput`): `window`, `balcony`, `plan
 ### 2.6 Tường hồi
 | Trường | Kiểu | Mặc định | Ý nghĩa |
 |---|---|---|---|
-| `sideAC` | int 0–3 | 1 | Cục nóng treo trên tường hồi ở phía nhìn thấy, cao hơn tầng 1. Bỏ qua vị trí nào trùng chỗ biển quảng cáo lớn |
+| `sideAC` | int 0–3 | 1 | Cục nóng treo trên tường hồi `sideEnd`, cao hơn tầng 1 và cao hơn `sideClear`. Bỏ qua vị trí nào trùng chỗ biển quảng cáo lớn |
+| `sideEnd` | `'+a'\|'-a'` | `'+a'` | Tường hồi nào lộ ra (bên phải / trái nhìn từ phố). Cục nóng treo và biển `billboard` chỉ gắn ở bên này, **cố định theo dữ liệu**, không đổi khi xoay góc nhìn |
+| `sideClear` | number | 0 | Độ cao mà từ đó trở lên tường hồi `sideEnd` không bị nhà bên che. Bố cục phố tính bằng `peakZ` của nhà bên (cả phòng tum, vật trên mái, mái tôn). `0` = không có nhà bên |
 
 Vệt ố và ống thoát nước tự sinh trên tường hồi, mặt sau có cửa sổ nhỏ ở mỗi tầng; không cần tham số.
 

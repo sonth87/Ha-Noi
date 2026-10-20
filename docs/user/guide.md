@@ -20,7 +20,7 @@ Sửa code hay dữ liệu thì trang tự cập nhật.
 | Một file gửi cho người khác (từ P4) | `pnpm build:single` | Một file HTML, mở thẳng bằng trình duyệt |
 
 ## 2. Giao diện
-- **Thanh bên trái**: chọn figure (Catalog, Street, Crossroads).
+- **Thanh bên trái**: chọn cảnh (Nhà mẫu, Catalog, Phố Thái Hà, Hello; sau này Ngã tư).
 - **Góc trên**: đổi màu đèn (palette `city`: Sodium, Tungsten, Neon, Signal, Dusk, Moon) và theme sáng/tối.
 - **Góc dưới phải** (readout): trạng thái hiện tại, ví dụ `view S · 23/40 lit · night`.
 
@@ -33,9 +33,13 @@ Sửa code hay dữ liệu thì trang tự cập nhật.
 | `←` / `→` | Chọn căn trước / sau | Catalog | P1 |
 | `Space` / `Enter` | Bật/tắt đèn căn đang chọn | Catalog | P1 |
 | `R` | Sinh căn nhà ngẫu nhiên ở ô đang chọn | Catalog | P1 |
-| `X` | Cắt lớp: hạ dãy nhà phía trước xuống tầng 1 | Street, Crossroads | P3 |
-| `N` | Ngày ↔ đêm | Street, Crossroads | P3 |
-| `T` | Bật/tắt dòng xe | Street, Crossroads | P3 |
+| `X` | Cắt lớp: hạ dãy nhà phía trước xuống tầng 1 (mặc định **bật** ở cảnh phố) | Phố, Ngã tư | P3 |
+| `W` | Bắn một xung sáng dọc dây điện (cũng tự chạy ngẫu nhiên) | Nhà mẫu, Phố | P1a |
+| Con lăn chuột | Phóng to / thu nhỏ quanh con trỏ | tất cả | P3 |
+| Kéo chuột (khi đã phóng to) | Di chuyển khung nhìn | tất cả | P3 |
+| Nhấp đúp | Về khung nhìn gốc | tất cả | P3 |
+| `N` | Ngày ↔ đêm: đèn nhà bật dần, đèn đường, biển hiệu, đèn xe | Nhà mẫu, Catalog, Phố | P1a |
+| `T` | Bật/tắt dòng xe máy | Phố, Ngã tư | P3 |
 | Thêm `?demo` vào URL | Mở ra đã là đêm, đèn sáng, xe chạy | tất cả | P3 |
 
 **Vì sao cần xoay và cắt lớp?** Trong hình isometric chỉ nhìn được hai mặt đứng của mỗi khối. Dãy nhà phía gần người xem quay lưng lại và che mất mặt đường. Xoay góc nhìn để thấy mặt tiền phía kia; cắt lớp để nhìn bao quát ngay.

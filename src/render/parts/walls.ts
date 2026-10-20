@@ -18,16 +18,16 @@ export function endWall(c: Ctx, face: Face | null, side: LocalSide, count: numbe
   return g(face.t, s);
 }
 
-/** AC units hung on the visible side wall, above the ground floor */
+/** AC units hung on the exposed side wall (spec.sideEnd), above the ground floor and the neighbour (sideClear) */
 export function sideACs(c: Ctx): void {
   const { s, D } = c;
   if (s.floors === 0 || s.sideAC === 0) return;
-  const side = D.endSide(), a0 = side === '+a' ? s.w : -6;
+  const side = s.sideEnd, a0 = side === '+a' ? s.w : -6;
   const spots: [number, number][] = [[0.4, 1.5], [0.63, 2.3], [0.25, 3.1]];
   for (let i = 0; i < s.sideAC; i++) {
     const [fb, ff] = spots[i]!;
     const b = c.fy * fb, z = s.groundH + s.floorH * Math.min(ff, s.floors) - 12;
-    if (z < s.groundH + 2) continue;
+    if (z < s.groundH + 2 || z < s.sideClear + 1) continue;
     if (s.signs.some(x => x.type === 'billboard') && z + 7 > c.topZ - 31) continue;   // leave the billboard's wall clear
     let svg = D.box(a0, b, z, 6, 9, 7);
     const fan = D.face(a0, b, z, 6, 9, 7, '+b'), grille = D.face(a0, b, z, 6, 9, 7, side);
