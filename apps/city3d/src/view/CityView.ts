@@ -195,14 +195,18 @@ export class CityView {
   readonly subscribe = (fn: () => void) => { this.listeners.add(fn); return () => { this.listeners.delete(fn); }; };
   private update(p: Partial<Snapshot>) { this.snap = { ...this.snap, ...p }; this.listeners.forEach(f => f()); }
 
+  private interacting = false;
+  private interactCooldown = 0;
+
   // ---------- lifecycle ----------
   mount(host: HTMLElement) {
     if (this.mounted) this.unmount();
     const q = this.snap.quality;
-    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
+    renderer.domElement.style.touchAction = 'none';
     const onLost = (e: Event) => e.preventDefault();   // let the browser restore the context; three re-uploads everything
     renderer.domElement.addEventListener('webglcontextlost', onLost);
 
@@ -219,15 +223,24 @@ export class CityView {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(target);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.18;
+    controls.panSpeed = 1.0;
+    controls.zoomSpeed = 1.15;
     controls.minZoom = 0.5; controls.maxZoom = 40;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.45;
     // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
-    // tilts, the wheel zooms toward the pointer; one finger moves, two pinch and turn
+    // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
-    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: THREE.TOUCH.DOLLY_ROTATE };
-    controls.rotateSpeed = 0.6;
+    controls.touches = { ONE: THREE.TOUCH.PAN, TWO: this.snap.mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN };
+    controls.rotateSpeed = 0.65;
+    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; };
+    const onControlChange = () => { if (this.interacting) this.interactCooldown = performance.now() + 140; };
+    const onControlEnd = () => { this.interacting = false; this.interactCooldown = performance.now() + 140; };
+    controls.addEventListener('start', onControlStart);
+    controls.addEventListener('change', onControlChange);
+    controls.addEventListener('end', onControlEnd);
     this.place(camera, controls, azOf(this.snap.view), ISO_EL);
 
     mapGroup.add(this.group(this.base));
@@ -258,12 +271,38 @@ export class CityView {
     const composer = new EffectComposer(renderer);
     const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.35, 0.5);
 
-    // input: a click (not a drag) lights or darkens the floor under it
+    // double click / double tap: fly to that spot on the ground
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
+    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
+    const flyToClient = (clientX: number, clientY: number) => {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
+    };
+    const onDbl = (e: MouseEvent) => flyToClient(e.clientX, e.clientY);
+
+    // input: a click/tap (not a drag) lights or darkens the floor under it; on touch, disable zoomToCursor so two-finger pinch doesn't drift toward a single finger
     let down: [number, number] | null = null;
-    const onDown = (e: PointerEvent) => { down = [e.clientX, e.clientY]; };
+    let lastTap: { t: number; x: number; y: number } | null = null;
+    const onTouchStart = () => { controls.zoomToCursor = false; };
+    const onWheel = () => { controls.zoomToCursor = true; };
+    const onDown = (e: PointerEvent) => {
+      controls.zoomToCursor = e.pointerType === 'mouse';
+      down = [e.clientX, e.clientY];
+    };
     const onUp = (e: PointerEvent) => {
-      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > 4) return;
+      const maxMove = e.pointerType === 'touch' ? 10 : 4;
+      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
+      if (e.pointerType === 'touch') {
+        const now = performance.now();
+        if (lastTap && now - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 28) {
+          lastTap = null;
+          flyToClient(e.clientX, e.clientY);
+          return;
+        }
+        lastTap = { t: now, x: e.clientX, y: e.clientY };
+      }
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
@@ -283,16 +322,10 @@ export class CityView {
       const floor = owner && layer.floorAt(owner, hit.point);
       if (floor) this.setLamp(floor, !this.lit.has(floor));
     };
+    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+    renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
     renderer.domElement.addEventListener('pointerdown', onDown);
     renderer.domElement.addEventListener('pointerup', onUp);
-    // double click: fly to that spot on the ground
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
-    const onDbl = (e: MouseEvent) => {
-      const r = renderer.domElement.getBoundingClientRect();
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
-    };
     renderer.domElement.addEventListener('dblclick', onDbl);
 
     const resize = () => {
@@ -326,7 +359,10 @@ export class CityView {
         for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
         this.mats.pulse.dashOffset -= dt * 9;
       }
-      this.mounted?.composer.render();
+      if (this.mounted) {
+        if (this.mounted.bloom.enabled) this.mounted.composer.render();
+        else this.mounted.renderer.render(scene, camera);
+      }
       frames++;
       if (now - t0 > 500) {
         const fps = Math.round((frames * 1000) / (now - t0)); frames = 0; t0 = now;
@@ -342,6 +378,11 @@ export class CityView {
       host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer, bloom, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
+        controls.removeEventListener('start', onControlStart);
+        controls.removeEventListener('change', onControlChange);
+        controls.removeEventListener('end', onControlEnd);
+        renderer.domElement.removeEventListener('touchstart', onTouchStart);
+        renderer.domElement.removeEventListener('wheel', onWheel);
         renderer.domElement.removeEventListener('pointerdown', onDown);
         renderer.domElement.removeEventListener('pointerup', onUp);
         renderer.domElement.removeEventListener('dblclick', onDbl);
@@ -352,9 +393,9 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // every tile at once at a low level, so the whole area is there from the first frame
+    // nearby tiles at once at a low level, so the initial view is there from the first frame without stalling startup
     const first = Math.min(1, this.wantedDetail()) as Detail;
-    for (const t of this.tiles) this.show(t, this.ensure(t, first));
+    for (const t of this.tiles) if (this.nearTile(t)) this.show(t, this.ensure(t, first));
     this.houseLights(false);
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
@@ -676,30 +717,48 @@ export class CityView {
       }
       this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
     }
-    const far = this.snap.quality.viewDistance, c = m.controls.target, hidden = new THREE.Matrix4().makeScale(0, 0, 0), mat = new THREE.Matrix4();
+    const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
+    const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, e = mat.elements;
     let k = 0;
     for (const f of m.fleets.values()) {
       const local = f.model.lines;
-      f.list.forEach((v, i) => {
+      let vis = 0;
+      for (let i = 0; i < f.list.length; i++) {
+        const v = f.list[i]!;
         placeVehicle(v, this.lanes[v.lane]!, mat);
         const out = far > 0 && Math.hypot(e[12]! - c.x, e[14]! - c.z) > far;
-        for (const o of f.meshes) o.setMatrixAt(i, out ? hidden : mat);
-        // the vehicle's creases, carried to where it is (collapsed when it is out of view)
-        for (let j = 0; j < local.length; j += 3, k += 3) {
-          const x = local[j]!, y = local[j + 1]!, z = local[j + 2]!;
-          if (out) { arr[k] = arr[k + 1] = arr[k + 2] = 0; continue; }
-          arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + e[12]!;
-          arr[k + 1] = e[1]! * x + e[5]! * y + e[9]! * z + e[13]!;
-          arr[k + 2] = e[2]! * x + e[6]! * y + e[10]! * z + e[14]!;
+        if (out) continue;
+        for (const o of f.meshes) o.setMatrixAt(vis, mat);
+        vis++;
+        if (drawLines) {
+          for (let j = 0; j < local.length; j += 3, k += 3) {
+            const x = local[j]!, y = local[j + 1]!, z = local[j + 2]!;
+            arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + e[12]!;
+            arr[k + 1] = e[1]! * x + e[5]! * y + e[9]! * z + e[13]!;
+            arr[k + 2] = e[2]! * x + e[6]! * y + e[10]! * z + e[14]!;
+          }
         }
-      });
-      for (const o of f.meshes) o.instanceMatrix.needsUpdate = true;
+      }
+      for (const o of f.meshes) {
+        o.count = vis;
+        if (vis > 0) o.instanceMatrix.needsUpdate = true;
+      }
     }
-    buf.needsUpdate = true;
+    if (drawLines) {
+      m.vehicleLines.geometry.instanceCount = k / 6;
+      buf.needsUpdate = true;
+    }
   }
 
   // ---------- view distance and the quality stepping down by itself ----------
+  private nearTile(t: TileState) {
+    const m = this.mounted;
+    if (!m) return true;
+    const far = this.snap.quality.viewDistance, c = m.controls.target;
+    return far <= 0 || Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
+  }
+
   private distanceStep() {
     const m = this.mounted;
     if (!m) return;
@@ -761,20 +820,22 @@ export class CityView {
     t.shown = level;
   }
 
-  /** each frame: show every tile at the wanted level when it is built, and build one more */
+  /** each frame: show every nearby tile at the wanted level when it is built, and build one more when not mid-gesture */
   private detailStep() {
     const m = this.mounted;
     if (!m) return;
     const want = this.wantedDetail(), c = m.controls.target, waiting: TileState[] = [];
     for (const t of this.tiles) {
+      if (!this.nearTile(t)) continue;
       if (t.layers.has(want)) this.show(t, this.ensure(t, want));
       else waiting.push(t);
     }
-    if (waiting.length) {
+    const busy = this.interacting || performance.now() < this.interactCooldown;
+    if (waiting.length && !busy) {
       const near = waiting.reduce((a, t) => (dist2(t.tile.center, c) < dist2(a.tile.center, c) ? t : a));
       this.show(near, this.ensure(near, want));
     }
-    const pending = Math.max(0, waiting.length - 1);
+    const pending = busy ? waiting.length : Math.max(0, waiting.length - 1);
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
   }
 
@@ -1067,6 +1128,7 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     m.controls.enableRotate = mode === '3d';
+    m.controls.touches.TWO = mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN;
     if (mode === '2d') {
       const k = Math.round((Math.PI / 4 - this.azimuth()) / (Math.PI / 2));
       if (animate) this.startTurn(azOf(k), ISO_EL); else this.place(m.camera, m.controls, azOf(k), ISO_EL);

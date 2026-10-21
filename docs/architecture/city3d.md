@@ -45,11 +45,11 @@ Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `Ci
 Một camera trực giao, hai chế độ (phím `V`):
 - **2D**: isometric thật (góc nâng `asin(1/√3)` ≈ 35,26°), khóa ở 4 góc `45° + 90°·k`, **trùng 4 góc của app SVG cũ**. `Q`/`E` xoay 90° có chuyển động. Chỉ dời và phóng to.
 - **3D**: xoay tự do (OrbitControls), góc nâng 3°–83°. Về 2D thì trôi về góc iso gần nhất.
-- **Điều khiển kiểu bản đồ** (ADR-043, ADR-048): kéo trái di chuyển trên mặt đất, kéo phải / Shift + kéo xoay và nghiêng, cuộn phóng vào con trỏ; W A S D / mũi tên, R / F, + / −, H; nhấp đúp bay tới; dropdown **Công trình** để xem riêng từng tòa nhà trên đế hoặc quay về bản đồ toàn khu; dropdown **Khu vực** để bay nhanh tới Ngã tư Thái Hà, Ngã Tư Sở, Chùa Bộc, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hồ Hoàng Cầu, Láng Hạ và các ga Metro; tâm nhìn giữ trong vùng (hoặc trong phạm vi đế mô hình).
+- **Điều khiển kiểu bản đồ & cảm ứng** (ADR-043, ADR-048, ADR-049): kéo trái (hoặc 1 ngón) di chuyển trên mặt đất, kéo phải / Shift + kéo xoay và nghiêng, cuộn phóng vào con trỏ; trên cảm ứng, 2 ngón ở 2D vừa chụm phóng vừa kéo (`DOLLY_PAN`), ở 3D vừa chụm phóng vừa xoay/nghiêng (`DOLLY_ROTATE`), chạm đúp bay tới chỗ chạm; W A S D / mũi tên, R / F, + / −, H; dropdown **Công trình** để xem riêng từng tòa nhà trên đế hoặc quay về bản đồ toàn khu; dropdown **Khu vực** để bay nhanh tới Ngã tư Thái Hà, Ngã Tư Sở, Chùa Bộc, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hồ Hoàng Cầu, Láng Hạ và các ga Metro; tâm nhìn giữ trong vùng (hoặc trong phạm vi đế mô hình).
 
-## 4. Mức chi tiết theo zoom (ADR-036)
+## 4. Mức chi tiết theo zoom (ADR-036, ADR-049)
 
-Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: mọi ô dựng ngay ở mức thấp; sau đó mỗi khung hình dựng thêm một ô ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại.
+Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: các ô trong tầm nhìn dựng ngay ở mức thấp; sau đó mỗi khung hình (khi người dùng không đang kéo/chụm cảm ứng) dựng thêm một ô trong tầm nhìn ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại.
 
 ## 5. Đèn (ADR-039)
 
@@ -57,13 +57,13 @@ Nút **Ngày / Đêm** (phím N hoặc T) đổi cùng lúc giao diện sáng �
 
 ## 5b. Giao thông và đèn tín hiệu
 
-Mỗi khung hình: thời gian mô phỏng tăng, `signalsAt` cho pha; đổi pha thì bật / tắt các lamp đèn tín hiệu; `stepTraffic` cho mọi xe đi; ma trận instance cập nhật (xe ngoài tầm nhìn xa thì thu về 0). Chân trang hiện màu đèn và số giây còn lại của Tây Sơn (`x`) và Thái Hà (`y`).
+Mỗi khung hình: thời gian mô phỏng tăng, `signalsAt` cho pha; đổi pha thì bật / tắt các lamp đèn tín hiệu; `stepTraffic` cho mọi xe đi; chỉ các xe nằm trong tầm nhìn mới được gom vào đầu `InstancedMesh` (`o.count = vis`) và biến đổi nét cạnh (`instanceCount`). Chân trang hiện màu đèn và số giây còn lại của Tây Sơn (`x`) và Thái Hà (`y`).
 
 ## 6. Màu và chất lượng
 
 - Màu chỉ từ token CSS của `@my-city/theme` (đọc lại khi đổi theme): nền `--bg`; mặt đất và tường `--body`; mái, vỉa hè, tôn/sắt, bạt `--deck`; kính và nước `--glass`; lòng đường `--recess`; vạch `--line`; cỏ và cây chậu `--panel`; nét viền và cạnh `--line`; nét chi tiết `--detail`; cửa tắt `--recess`, cửa sáng `--accent`; đèn báo `--accent-hi`.
-- Glow (bloom) chỉ ở theme tối và khi bật trong chất lượng; ngưỡng sáng 0,5 nên chỉ màu nhấn mới tỏa.
-- Chất lượng (`view/quality.ts`): 4 mức **Thấp / Trung bình / Cao / Rất cao**; chỉnh tay một tùy chọn thì thành **Tùy chỉnh**, chỉnh về đúng bộ của một mức thì trở lại tên mức đó. Có: chi tiết nhà tối đa (L0–L3), tự giảm khi thu nhỏ, độ phân giải (×1–×3), khử răng cưa (MSAA 4×), glow, cửa sổ, 3 lớp nét. Nhớ theo máy (localStorage; không có vẫn chạy).
+- Glow (bloom) chỉ ở theme tối và khi bật trong chất lượng; ngưỡng sáng 0,5 nên chỉ màu nhấn mới tỏa. Khi bloom tắt (như ở chế độ Ngày), renderer vẽ trực tiếp không qua `EffectComposer` (ADR-049).
+- Chất lượng (`view/quality.ts`): 4 mức **Thấp / Trung bình / Cao / Rất cao** (mặc định **Cao** trên máy tính, **Trung bình** trên điện thoại/cảm ứng); chỉnh tay một tùy chọn thì thành **Tùy chỉnh**, chỉnh về đúng bộ của một mức thì trở lại tên mức đó. Có: chi tiết nhà tối đa (L0–L3), tự giảm khi thu nhỏ, độ phân giải (×1–×3), khử răng cưa (MSAA 4×), glow, cửa sổ, 3 lớp nét. Nhớ theo máy (localStorage; không có vẫn chạy).
 
 | Mức | Chi tiết nhà | Tự giảm | Xe | Cột + dây | Cây | Tầm nhìn | Tự hạ mức | Độ phân giải | MSAA | Glow | Nét chi tiết |
 |---|---|---|---|---|---|---|---|---|---|---|---|

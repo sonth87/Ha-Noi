@@ -81,18 +81,27 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (2: traffic 30 %) */
-const VERSION = 2;
+/** bumped when the defaults change in a way a saved setting should not outlive (3: mobile default medium) */
+const VERSION = 3;
+
+export function isMobileDevice(): boolean {
+  try {
+    return typeof matchMedia === 'function' && (matchMedia('(pointer: coarse)').matches || matchMedia('(max-width: 768px)').matches);
+  } catch {
+    return false;
+  }
+}
 
 export function loadQuality(): Quality {
+  const def: QualityLevel = isMobileDevice() ? 'medium' : 'high';
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const { v, ...q } = JSON.parse(raw) as Partial<Quality> & { v?: number };
-      if (v === VERSION) return { ...quality('high'), ...q };
+      if (v === VERSION) return { ...quality(def), ...q };
     }
   } catch { /* private mode, blocked storage, bad JSON: use the default */ }
-  return quality('high');
+  return quality(def);
 }
 
 export function saveQuality(q: Quality) {

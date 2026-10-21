@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { loadCity } from '@my-city/osm-import';
 import { CityView } from '@view/CityView';
 import { lightOn } from '@view/lights';
+import { isMobileDevice } from '@view/quality';
 import { QualityPanel } from './QualityPanel';
 import { LightsPanel } from './LightsPanel';
 
@@ -16,7 +17,7 @@ export function App() {
   const v = view();
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
   const host = useRef<HTMLDivElement>(null);
-  const [panel, setPanel] = useState(true);
+  const [panel, setPanel] = useState(() => !isMobileDevice());
 
   useEffect(() => {
     v.mount(host.current!);
@@ -104,7 +105,7 @@ export function App() {
         )}
       </main>
       <footer>
-        <span>kéo: di chuyển · {s.mode === '3d' ? 'chuột phải / shift + kéo: xoay, nghiêng · R F: nghiêng · ' : ''}cuộn: phóng vào con trỏ · WASD / mũi tên: đi · +/−: phóng · nhấp đúp: bay tới · click tầng: bật đèn</span>
+        <span className="hint">kéo: di chuyển · {s.mode === '3d' ? 'chuột phải / shift + kéo / 2 ngón: xoay, nghiêng · R F: nghiêng · ' : '2 ngón: phóng & kéo · '}cuộn: phóng vào con trỏ · WASD / mũi tên: đi · +/−: phóng · nhấp đúp: bay tới · chạm tầng: bật đèn</span>
         <span className="read">
           {currentShowcase ? `đế mô hình · ${currentShowcase.name}` : 'bản đồ'} · {s.mode} · góc {s.mode === '2d' ? s.view : `${s.heading}°`} · chi tiết L{s.detail} · cửa sáng {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%{s.lit ? ` + ${s.lit} tầng bật tay` : ''}{!currentShowcase ? ` · ${s.vehicles} xe · Tây Sơn ${LIGHT[s.signals.x]} ${s.signals.xLeft}s · Thái Hà ${LIGHT[s.signals.y]} ${s.signals.yLeft}s` : ''} · {s.fps} fps
         </span>

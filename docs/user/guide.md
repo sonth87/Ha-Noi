@@ -29,7 +29,7 @@ pnpm dev:3d        # http://localhost:5190
 | `N` hoặc `T`, nút **Ngày / Đêm** | **Ngày** (giao diện sáng, đèn tắt) ↔ **Đêm** (giao diện tối, cửa sổ sáng dần lên, đèn đường và đèn vườn sáng, xung sáng chạy dọc dây điện, xe bật đèn, đèn báo trên ăng-ten Việt Tower nhấp nháy). Mặc định là Ngày; lựa chọn được nhớ. Từng loại đèn vẫn chỉnh riêng ở bảng **Đèn** |
 | `G` | Mở / đóng bảng **Đèn · chất lượng** |
 
-Trên màn hình cảm ứng: một ngón để di chuyển, hai ngón để phóng to và xoay.
+Trên màn hình cảm ứng (điện thoại / máy tính bảng): **một ngón** để di chuyển, **hai ngón** ở chế độ 2D để vừa chụm phóng to/thu nhỏ vừa kéo, ở chế độ 3D để chụm phóng và xoay/nghiêng; **chạm đúp** để bay tới vị trí chạm, **chạm đơn** vào tòa nhà để bật/tắt đèn tầng. Trên điện thoại, ứng dụng tự chọn mức chất lượng *Trung bình* và thu gọn bảng cài đặt lúc mở để ưu tiên không gian cảm ứng mượt 60 fps.
 
 ## Khu phố & Công trình trên đế
 

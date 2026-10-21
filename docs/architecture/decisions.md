@@ -167,6 +167,21 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
     - Thêm dropdown **Khu vực** trên thanh công cụ để bay nhanh tới từng khu phố và nhà ga trên bản đồ.
     - Tối ưu tốc độ nạp và dựng cho bản đồ lớn: lưới không gian 64 m cho đường mặt tiền (`import.ts`, `buildings.ts`), lọc hộp bao trước khi kiểm tra `building:part` (`import.ts`), và lưới 32 m cho kiểm tra lòng đường (`core/furniture.ts`).
 
+### ADR-049 · Tối ưu cảm ứng và tốc độ khung hình trên thiết bị di động (Mobile Touch)
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng phản hồi: "sửu dụng trên mobile cảm ứng không mượt lắm")
+- **Bối cảnh**: Sau khi mở rộng bản đồ lên 7 khu phố (~180 ô nhà, ~700 xe), trên điện thoại cảm ứng xuất hiện độ trễ và giật khung hình khi vuốt/chụm 2 ngón do: (1) `dampingFactor` mặc định `0.05` làm bản đồ bám ngón tay trễ; (2) `zoomToCursor = true` trên cảm ứng lấy tọa độ ngón đầu tiên làm tâm phóng khiến chụm 2 ngón bị trôi lệch ngang, và `TOUCH.DOLLY_ROTATE` ở chế độ 2D khóa luôn thao tác kéo 2 ngón; (3) `detailStep()` biên dịch ô nhà L2/L3 mới ngay giữa lúc đang vuốt và biên dịch cả các ô ngoài `viewDistance`; (4) `EffectComposer` + `HalfFloatType` MSAA chạy cả ở chế độ Ban ngày khi `bloom` đang tắt; (5) `trafficStep()` biến đổi và đẩy toàn bộ xe ngoài `viewDistance` lên GPU; (6) thiết bị di động mặc định mở ở mức `Cao` (`pixelRatio: 2`, `viewDistance: 0`) và mở sẵn bảng cài đặt chiếm 40% màn hình.
+- **Quyết định**:
+  - **Cảm ứng `OrbitControls` (`CityView.ts`)**:
+    - Tăng `dampingFactor = 0.18`, `zoomSpeed = 1.15` để bản đồ bám sát ngón tay ngay lập tức mà vẫn có quán tính mượt.
+    - Chế độ **2D** đặt `touches.TWO = THREE.TOUCH.DOLLY_PAN` (vừa chụm phóng to/thu nhỏ vừa rê 2 ngón); chế độ **3D** đặt `touches.TWO = THREE.TOUCH.DOLLY_ROTATE` (chụm phóng + xoay/nghiêng).
+    - Tự tắt `zoomToCursor` khi bắt đầu chạm (`touchstart` / `pointerdown` với `touch`) để chụm 2 ngón phóng quanh tâm nhìn không bị giật lệch ngang, và bật lại khi dùng chuột (`wheel` / `pointerType === 'mouse'`).
+    - Hỗ trợ **chạm đúp (double-tap)** (2 lần chạm trong `300 ms`, bán kính `28 px`) để bay tới vị trí trên mặt đất trên điện thoại (trình duyệt di động chặn `dblclick` khi `touch-action: none`), và nới ngưỡng nhận diện chạm đơn lên `10 px` để chạm bật/tắt đèn tầng dễ dàng.
+  - **Nhịp khung hình & GPU (`CityView.ts`, `quality.ts`)**:
+    - Tạm hoãn biên dịch ô nhà mới (`ensure(near, want)`) trong lúc ngón tay đang chạm/kéo (`interacting` + `140 ms` sau thao tác), và chỉ dựng các ô nằm trong `viewDistance` (`nearTile`). Lúc khởi tạo chỉ dựng trước các ô trong tầm nhìn thay vì dựng toàn bộ 180 ô.
+    - Khi `bloom.enabled === false` (mặc định ban ngày hoặc khi tắt glow), vẽ trực tiếp qua `renderer.render(scene, camera)` với phần cứng `antialias: true`, bỏ qua hoàn toàn render target `HalfFloatType` và `OutputPass` của `EffectComposer`.
+    - Trong `trafficStep`, gom các xe nằm trong `viewDistance` lên đầu `InstancedMesh` (`o.count = vis`) và chỉ biến đổi/cập nhật buffer nét cạnh cho các xe đang hiển thị (`vehicleLines.geometry.instanceCount = k / 6`).
+    - Thiết bị cảm ứng / màn hình nhỏ (`isMobileDevice()`, `VERSION = 3`) mặc định dùng mức **Trung bình** (`pixelRatio: 1.5`, `viewDistance: 250 m`, cây đơn giản, nhà L2) và mặc định đóng bảng cài đặt bên phải khi mới mở trang (`App.tsx`), kèm `overscroll-behavior: none`, `user-select: none` và bố cục thanh công cụ gọn trên màn hình hẹp (`app.css`, `index.html`).
+
 ---
 
 ## Câu hỏi mở
