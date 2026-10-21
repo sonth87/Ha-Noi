@@ -46,8 +46,7 @@ export function App() {
         <button onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'}>{s.mode === '2d' ? '2D' : '3D'} <kbd>V</kbd></button>
         <button onClick={() => v.rotate(-1)}>⟲ <kbd>Q</kbd></button>
         <button onClick={() => v.rotate(1)}>⟳ <kbd>E</kbd></button>
-        <button onClick={() => v.toggleNight()} aria-pressed={s.night}>{s.night ? 'Đêm' : 'Ngày'} <kbd>N</kbd></button>
-        <button onClick={() => v.toggleTheme()}>{s.theme === 'dark' ? 'Tối' : 'Sáng'} <kbd>T</kbd></button>
+        <button onClick={() => v.toggleDayNight()} aria-pressed={s.night} title="Ngày: giao diện sáng, tắt đèn · Đêm: giao diện tối, bật đèn">{s.night ? 'Đêm' : 'Ngày'} <kbd>N</kbd></button>
         <button onClick={() => setPanel(p => !p)} aria-pressed={panel}>Đèn · chất lượng <kbd>G</kbd></button>
       </header>
       <main>

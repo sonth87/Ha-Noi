@@ -79,7 +79,11 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý: chưa thấy đèn đường → ADR-041: bóng đèn sáng 5 mặt, vùng sáng trên mặt đường, mục Đèn đường (tự động mặc định)
 - [x] Yêu cầu: đèn vườn hoa, kéo dài hết phố Thái Hà, metro 2A trên cao + ga Thái Hà (theo thực tế + đồ ga của `05-metro.js`) → ADR-042: vùng nhiều hình chữ nhật, tải nhiều hộp (thử lại, dự phòng Overpass), `Rail` / `Station`, lịch chạy tàu, cầu cạn, ga, tàu 4 toa, đèn vườn; tăng tốc lăng trụ (L3 ×4), lưới tìm nhà bên, xe thưa hơn, tầm nhìn mặc định 400 m
 - [x] Góp ý: điều khiển 3D khó → ADR-043: kiểu bản đồ (kéo trái di chuyển, phải / Shift xoay, cuộn vào con trỏ, WASD, R/F, +/−, nhấp đúp bay tới, nút Ngã tư / Ga Thái Hà, giữ trong vùng)
-- [ ] Người dùng xem lại: điều khiển mới, phố Thái Hà, metro và ga (gửi ảnh ga thật nếu có — Q3), đèn vườn, đèn đường, độ sáng; fps ở mức Cao
+- [x] Góp ý (ảnh): thu nhỏ thành vệt đen → ADR-044: nét nhạt dần theo px/m, xe bỏ nét / viền / xe máy khi xa, cây đầy đủ → đơn giản; theme mặc định sáng
+- [x] Góp ý (ảnh 2): vẫn quá nhiều chi tiết khi xa → nâng các mốc gấp đôi (L2 từ 4,5 px/m, L3 từ 9; nhạt 8 → 2,5; xe 6 / 4 / 2,5; cây 5)
+- [x] Góp ý: xe ở xa khó nhận ra / viền thì rối → ADR-045: khối xám + viền ngoài mờ; mật độ xe mặc định 30% (cài đặt cũ bị bỏ một lần); một nút Ngày ↔ Đêm (sáng + tắt đèn / tối + bật đèn)
+- [x] Góp ý (ảnh phóng gần): ô tô và xe máy thiếu chi tiết so với `10-diner.js` → ADR-046: ô tô có cabin đồng màu thân + ô kính lùi chừa cột A/B/C có viền, thân bo mượt không nét dọc góc, bánh 12 cạnh đủ viền + mâm + vòm bánh, lưới tản nhiệt nan dọc, đèn pha/hậu có viền, gân hông, khe cửa, tay nắm, gương, nắp ca-pô/cốp, hộp đèn taxi đủ nét; xe máy có chắn bùn, phuộc, cổ lái + đầu đèn + gương, người lái ngồi tự nhiên (thân bo tròn, tay nắm ghi đông, chân đặt sàn, mũ bảo hiểm có kính)
+- [ ] Người dùng xem lại: xe khi phóng gần và ở xa, nút Ngày / Đêm, thu nhỏ, điều khiển, phố Thái Hà, metro và ga (gửi ảnh ga thật nếu có — Q3), đèn vườn, đèn đường, độ sáng; fps ở mức Cao
 
 ## Backlog
 - Mở rộng khu vực ra các phố khác (đã có phố Thái Hà, ADR-042)
