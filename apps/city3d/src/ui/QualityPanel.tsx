@@ -7,7 +7,7 @@ import type { Snapshot } from '@view/CityView';
 const DETAIL = ['L0 · khối', 'L1 · cửa sổ', 'L2 · nhà', 'L3 · mọi chi tiết'];
 
 const TREES: [TreeLook, string][] = [['off', 'Không'], ['simple', 'Đơn giản'], ['full', 'Đầy đủ']];
-const DISTANCE: [number, string][] = [[150, '150 m'], [250, '250 m'], [400, '400 m'], [0, 'Hết']];
+const DISTANCE: [number, string][] = [[150, '150 m'], [250, '250 m'], [400, '400 m'], [800, '800 m'], [1200, '1200 m'], [0, 'Hết']];
 
 const TOGGLES: [keyof QualityOptions, string][] = [
   ['autoDetail', 'Tự giảm chi tiết khi thu nhỏ'], ['wires', 'Cột và dây điện'], ['autoQuality', 'Tự hạ mức khi chậm'], ['windows', 'Cửa sổ'], ['silhouette', 'Nét viền khối'], ['creases', 'Nét cạnh'], ['details', 'Nét chi tiết'], ['bloom', 'Glow (theme tối)'], ['msaa', 'Khử răng cưa'],

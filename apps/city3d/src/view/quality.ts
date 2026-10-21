@@ -52,13 +52,25 @@ export const quality = (level: QualityLevel): Quality => ({ level, ...LEVELS[lev
     (balconies, roofs, signs) about 4.5; below that a building is its block and windows (ADR-044). */
 export function detailFor(pxPerMetre: number, q: Pick<QualityOptions, 'houseDetail' | 'autoDetail'>): 0 | 1 | 2 | 3 {
   if (!q.autoDetail) return q.houseDetail;
-  const want = pxPerMetre >= 9 ? 3 : pxPerMetre >= 4.5 ? 2 : 1;
+  const want = pxPerMetre >= 9 ? 3 : pxPerMetre >= 4.5 ? 2 : pxPerMetre >= 2 ? 1 : 0;
   return Math.min(q.houseDetail, want) as 0 | 1 | 2 | 3;
 }
 
 /** How far out the view is, 0 (close: everything drawn) to 1 (far): from 8 px a metre down to 2.5.
-    With "lower detail when zoomed out" on, lines fade with it and small things go (ADR-044). */
-export const FAR = { near: 8, far: 2.5, vehicleLines: 6, bikes: 2.5, simpleTrees: 5 } as const;
+    With "lower detail when zoomed out" on, lines fade with it and small things go step by step (ADR-044, ADR-049). */
+export const FAR = {
+  near: 8,
+  far: 2.5,
+  vehicleLines: 6,
+  simpleTrees: 5,
+  bikes: 2.5,
+  furniture: 2.2,
+  details: 2.2,
+  vehicles: 1.8,
+  trees: 1.4,
+  creases: 1.1,
+  silhouette: 0.85,
+} as const;
 
 export function farness(pxPerMetre: number, q: Pick<QualityOptions, 'autoDetail'>): number {
   if (!q.autoDetail) return 0;

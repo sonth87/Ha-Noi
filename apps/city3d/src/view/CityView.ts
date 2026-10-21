@@ -216,7 +216,7 @@ export class CityView {
     showcaseGroup.visible = false;
     scene.add(mapGroup, showcaseGroup);
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 4000);
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 7000);
     // the view opens on the area's origin (the crossroads), not the middle of the whole region
     const target = new THREE.Vector3(0, 0, 0);
     camera.zoom = 1.4;
@@ -226,7 +226,7 @@ export class CityView {
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.15;
-    controls.minZoom = 0.5; controls.maxZoom = 40;
+    controls.minZoom = 0.16; controls.maxZoom = 40;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.45;
     // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
     // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
@@ -673,8 +673,10 @@ export class CityView {
 
   /** each frame: the trains by their timetable; the platform edge lights while a train stands there */
   private trainStep() {
+    const hide = this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles;
     const lit = new Set<string>();
     for (const tr of this.trains) {
+      if (hide) { for (const g of tr.cars) g.visible = false; continue; }
       const { head, phase } = trainAt(tr.track, this.sim.t), L = tr.track.length;
       tr.cars.forEach((g, i) => {
         const s = head === null ? NaN : head - METRO.carLen / 2 - i * (METRO.carLen + METRO.gap);
@@ -717,6 +719,7 @@ export class CityView {
       }
       this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
     }
+    if (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles) return;
     const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
     const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, e = mat.elements;
@@ -752,30 +755,41 @@ export class CityView {
   }
 
   // ---------- view distance and the quality stepping down by itself ----------
+  private tileRange() {
+    const m = this.mounted, far = this.snap.quality.viewDistance;
+    if (!m || far <= 0) return 0;
+    return Math.max(far, (FRUSTUM / m.camera.zoom) * 0.95);
+  }
+
   private nearTile(t: TileState) {
     const m = this.mounted;
     if (!m) return true;
-    const far = this.snap.quality.viewDistance, c = m.controls.target;
+    const far = this.tileRange(), c = m.controls.target;
     return far <= 0 || Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
   }
 
   private distanceStep() {
     const m = this.mounted;
     if (!m) return;
-    const far = this.snap.quality.viewDistance, c = m.controls.target;
-    const near = (p: [number, number], r: number) => far <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= far;
+    const far = this.snap.quality.viewDistance, tFar = this.tileRange(), c = m.controls.target;
+    const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
     for (const t of this.tiles) {
       const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-      if (v?.group) v.group.visible = near(t.tile.center, t.tile.radius);
+      if (v?.group) v.group.visible = near(t.tile.center, t.tile.radius, tFar);
     }
-    const q = this.snap.quality;
+    const q = this.snap.quality, px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
+    const trees = this.treeLook();
     for (const s of this.cells) {
       const on = near(s.cell.center, CELL_R), g = s.groups;
-      const trees = this.treeLook();
-      if (g) { g.fixtures.visible = on; g.poles.visible = on && q.wires; g.trees.visible = on && trees === 'full'; g.simple.visible = on && trees === 'simple'; }
-      if (s.wires) s.wires.visible = on && q.wires;
-      if (s.pulses) s.pulses.visible = on && q.wires && this.snap.night;
-      if (s.pools) s.pools.visible = on && this.poolsOn();
+      if (g) {
+        g.fixtures.visible = on && showFurn;
+        g.poles.visible = on && showFurn && q.wires;
+        g.trees.visible = on && trees === 'full';
+        g.simple.visible = on && trees === 'simple';
+      }
+      if (s.wires) s.wires.visible = on && showFurn && q.wires;
+      if (s.pulses) s.pulses.visible = on && showFurn && q.wires && this.snap.night;
+      if (s.pools) s.pools.visible = on && showFurn && this.poolsOn();
     }
   }
 
@@ -865,10 +879,21 @@ export class CityView {
     return g;
   }
 
-  /** line tiers and windows on or off per the quality settings */
+  /** line tiers and windows on or off per the quality settings and zoom level */
   private tiers(g: THREE.Object3D) {
-    const q = this.snap.quality;
-    g.traverse(o => { const t = o.userData.tier as keyof Quality | undefined; if (t) o.visible = q[t] as boolean; });
+    const q = this.snap.quality, auto = q.autoDetail && !this.snap.showcase, px = this.pxPerMetre();
+    g.traverse(o => {
+      const t = o.userData.tier as keyof Quality | undefined;
+      if (!t) return;
+      let on = q[t] as boolean;
+      if (auto && on) {
+        if (t === 'details' && px < FAR.details) on = false;
+        else if (t === 'creases' && px < FAR.creases) on = false;
+        else if (t === 'silhouette' && px < FAR.silhouette) on = false;
+        else if (t === 'windows' && px < FAR.furniture) on = false;
+      }
+      o.visible = on;
+    });
   }
 
   /** things that only show at night (headlight beams: only in the dark theme too) */
@@ -1012,33 +1037,35 @@ export class CityView {
     m.bloom.strength = 0.45 * g; m.bloom.radius = 0.3; m.bloom.threshold = 0.55;
   }
 
-  // ---------- zoomed out: less of the small things (ADR-044) ----------
+  // ---------- zoomed out: less of the small things (ADR-044, ADR-049) ----------
   private far = '';
 
   /** pixels per metre on screen now */
   private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
 
-  /** lines fade, vehicles lose their lines then their outline, bikes go, full trees turn simple —
-      as the view zooms out; applied when the farness moves by a step */
+  /** lines fade, vehicles lose their lines then their outline then hide completely, bikes go, trees simplify then hide —
+      as the view zooms out; applied when the farness moves by a step or crosses a cutoff */
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
-    const px = this.pxPerMetre(), f = this.snap.showcase ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
-    // re-apply on a step of the fade or on crossing any of the thresholds below
-    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${this.snap.showcase ?? ''}`;
+    const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase;
+    const f = !auto ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
+    const fCrease = !auto ? 0 : Math.round(Math.max(0, Math.min(1, (FAR.near - px) / (FAR.near - FAR.creases))) * 20) / 20;
+    const key = `${f}|${fCrease}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
     const css = getComputedStyle(document.documentElement);
     this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
-    this.mats.crease.opacity = 1 - 0.55 * f;
+    this.mats.crease.opacity = 1 - 0.8 * fCrease;
     this.mats.detail.opacity = 1 - 0.85 * f;
     this.mats.wire.opacity = 1 - 0.6 * f;
-    const auto = this.snap.quality.autoDetail;
+    this.tiers(m.scene);
     m.vehicleLines.visible = this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
+    const hideAllVehicles = auto && px < FAR.vehicles;
     for (const [kind, fl] of m.fleets) for (const o of fl.meshes) {
       const shell = o.material === this.vehicleShell;
-      o.visible = !(auto && kind === 'bike' && px < FAR.bikes) && !(shell && !this.snap.quality.silhouette);
+      o.visible = !hideAllVehicles && !(auto && kind === 'bike' && px < FAR.bikes) && !(shell && (!this.snap.quality.silhouette || (auto && px < FAR.silhouette)));
       if (o.userData.night) o.visible = o.visible && this.nightOn(o.userData.night as string);
     }
   }
@@ -1049,10 +1076,12 @@ export class CityView {
     return k === 'beam' ? cars && this.snap.theme === 'dark' : k === 'pool' ? this.poolsOn() : this.snap.night;
   }
 
-  /** the tree look in use: full trees turn simple when zoomed out (with lower detail when zoomed out on) */
+  /** the tree look in use: full trees turn simple when zoomed out, and hide completely when very far out */
   private treeLook() {
-    const q = this.snap.quality;
-    return q.trees === 'full' && q.autoDetail && this.pxPerMetre() < FAR.simpleTrees ? 'simple' : q.trees;
+    const q = this.snap.quality, px = this.pxPerMetre();
+    if (!q.autoDetail || q.trees === 'off') return q.trees;
+    if (px < FAR.trees) return 'off';
+    return q.trees === 'full' && px < FAR.simpleTrees ? 'simple' : q.trees;
   }
 
   // ---------- moving about (ADR-043) ----------

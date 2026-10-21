@@ -17,6 +17,7 @@ describe('quality', () => {
 
   it('lowers the detail when zoomed out, up to the chosen most', () => {
     const q = quality('high');
+    expect(detailFor(1.5, q)).toBe(0);   // very far out: pure building blocks (no windows)
     expect(detailFor(3.6, q)).toBe(1);   // the user's screenshot, 2026-10-21: blocks and windows only
     expect(detailFor(6, q)).toBe(2);
     expect(detailFor(10, q)).toBe(3);
