@@ -63,12 +63,34 @@ export function neighbours(city: City) {
 }
 
 const MAIN = new Set(['primary', 'secondary', 'tertiary']);
+const shopCache = new WeakMap<City, (b: Building) => number>();
+function shopEdgeOf(city: City) {
+  const hit = shopCache.get(city);
+  if (hit) return hit;
+  const G = 64, grid = new Map<string, City['streets']>();
+  for (const s of city.streets) {
+    if (s.layer !== 0 || !MAIN.has(s.kind)) continue;
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of s.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    for (let i = Math.floor((x0 - 30) / G); i <= Math.floor((x1 + 30) / G); i++) for (let j = Math.floor((y0 - 30) / G); j <= Math.floor((y1 + 30) / G); j++) {
+      const k = `${i},${j}`, l = grid.get(k);
+      if (l) l.push(s); else grid.set(k, [s]);
+    }
+  }
+  const fn = (b: Building) => {
+    const p = b.footprint[b.front] ?? b.footprint[0]!;
+    const mains = grid.get(`${Math.floor(p[0] / G)},${Math.floor(p[1] / G)}`);
+    if (!mains) return -1;
+    const f = frontStreet(b.footprint, b.front, mains);
+    return f && f.gap < 25 ? b.front : -1;
+  };
+  shopCache.set(city, fn);
+  return fn;
+}
 
 export function buildBuildings(B: Batch, city: City, list: readonly Building[], level: Detail) {
   const neighbour = neighbours(city);
-  const mains = city.streets.filter(s => s.layer === 0 && MAIN.has(s.kind));
-  /** the front edge of a building on a main street, else −1 */
-  const shopEdge = (b: Building) => { const f = frontStreet(b.footprint, b.front, mains); return f && f.gap < 25 ? b.front : -1; };
+  const shopEdge = shopEdgeOf(city);
   for (const b of list) {
     if (b.model === 'viet-tower') drawMast(B, b);
     if (level >= 2 && b.house) {

@@ -137,6 +137,36 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
   - **Ô tô (`sedan`, `taxi`, `hatch`, `van`)**: góc bo thân chia 5 đoạn (`18° < 20°`) để vòng đáy / đỉnh mượt mà không sinh nét dọc ở góc bo; cabin đồng màu thân (`wall` / `roof`), các ô kính (`glass`, `polygonOffset -1`) lùi vào trong mỗi mặt chừa cột A / B / C và có viền riêng từng ô; bánh 12 cạnh có đủ vòng viền ngoài + đĩa và vòng mâm xe (`hubcap`) như `10-diner.js` + đường vòm bánh; mũi xe có lưới tản nhiệt nan dọc giữa hai đèn pha tròn có viền + cản trước; đuôi xe có đèn hậu có viền + khung biển số + cản sau; hông xe có đường gân ngang, bệ dưới, khe cửa dọc, tay nắm cửa, gương chiếu hậu; mặt trên có đường ghép nắp ca-pô và cốp; hộp đèn taxi có bệ đỡ và đủ nét cạnh + viền bóng; xe van có cabin kính lái xiên, cửa sổ cab vát theo cột A, 3 cửa sổ khoang sau, khe cửa lùa và cửa hậu đôi.
   - **Xe máy (`bike`)**: 2 bánh 12 cạnh có đủ viền + mâm xe hai bên, chắn bùn trước, phuộc trước nối xuống trục bánh; thân tay ga có đường gân hông; yên bo góc + tay dắt sau; cổ lái nối lên cụm đầu đèn pha có viền + ghi đông + đôi gương chiếu hậu; người lái ngồi tự nhiên: thân trên bo tròn (không có cạnh hộp sắc), hai chân gấp đặt lên sàn để chân, hai tay vươn nắm ghi đông, đầu đội mũ bảo hiểm bo tròn có viền và kính chắn.
 
+### ADR-047 · Cây 3D nhiều múi có gốc loe, cành chạc và 3 dáng tán theo mẫu vẽ
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng gửi 2 ảnh mẫu: "các cái cây hiện tại nhìn trông nó khá là đơn giản và xấu, thử mấy kiểu cây thế này xem sao"; góp ý tiếp: bỏ các nét tỉa kiểu vẽ chì, chỉ giữ form dáng tán và khối 3D sạch)
+- **Bối cảnh**: Cây cũ trong `furniture.ts` chỉ là 2 khối lăng trụ bát giác xếp chồng trên một que vuông (`Batch.solid(oct(r))`), sinh 8 nét dọc thẳng đứng trên mặt bên như hai chiếc thùng chồng lên nhau, thân cùng màu lá, không có gốc rễ, không có cành chạc dưới tán và không có độ khối sáng/tối.
+- **Quyết định**:
+  - **Cấu trúc cây đầy đủ (`full`)**:
+    1. **Bồn cây & gốc rễ loe 3D**: tấm bồn cây phẳng ở chân (`B.flat` có viền `detail`); phần gốc cây loe cùng 3–4 rễ bạnh 3D (`taperedTube`) thuôn dần lên thân côn hơi nghiêng tự nhiên, tô màu tường (`--body`) và có vỏ viền bóng (`shell`), không vẽ nét vân dọc kiểu phác chì.
+    2. **Chạc cành 3D lộ dưới tán (`growLimb`)**: ở độ cao `~1,7–2,2 m`, thân tách thành **4–5 cành chính 3D** thuôn dần vươn xiên ra ngoài và lên trên (mỗi cành là ống 3D có khuỷu gấp và nhánh 3D phụ), nằm trong khoảng vòm tối dưới đáy tán để nhìn rõ cấu trúc cành từ cả 2D và 3D.
+    3. **Cụm tán lá 3D 3 sắc độ sạch nét (`foliageLobe`)**: mỗi cụm lá là một khối vòm elip 3D 14 cạnh trơn mượt (không vẽ nét tỉa hay vân lá kiểu vẽ chì bên trong), phân **3 sắc độ theo chiều cao**: mặt đáy và vành dưới cùng tô màu tối (`road` / `--recess`, tạo vùng bóng râm đậm dưới tán làm nổi bật cành chạc), đai giữa tô màu trung gian (`wall` / `--body`), vòm trên đón nắng tô màu sáng (`plant` / `--panel`). Các cụm lá đẩy pháp tuyến cầu mượt vào `B.shell` nên shader viền bóng chỉ vẽ đường bao silhouette sạch sẽ quanh các múi tán.
+  - **3 dáng cây (`habit`, chọn cố định theo `hash(p.id)`)**:
+    - **Dáng 0 (theo form ảnh mẫu 1 — sấu, nhội)**: 4 cành chạc đỡ 5 múi tán vòng dưới và 3 khối vòm lớn lệch nhau ở đỉnh tạo dáng tán vòm đa thùy tròn đầy, hở khoảng tối có cành chạc ở dưới.
+    - **Dáng 1 (theo form ảnh mẫu 2 — bàng, xà cừ)**: 4 rễ bạnh rộng, 5 cành vươn xa đỡ 3 tầng tán dẹt xếp lớp theo chiều ngang (5 đệm lá tầng dưới, 3 đệm tầng giữa, 2 đệm đỉnh).
+    - **Dáng 2 (bằng lăng, hoa sữa)**: thân hơi nghiêng tách 4 cành cao thấp lệch nhau, mỗi cành mang một chùm tán tròn tạo dáng bất đối xứng tự nhiên.
+  - **Cây trong công viên / vườn hoa (`core/furniture.ts`)**: đặt thêm cây bóng mát dọc lối đi (đối diện đèn vườn) và dọc vành đai trong công viên (cách đường và lối đi).
+  - **Cây đơn giản (`simple`, khi thu nhỏ xa)**: thân + 3 đĩa tán tròn 10 cạnh xếp lệch 2 sắc độ (đáy tối, đỉnh sáng), vẫn giữ 0 nét.
+
+### ADR-048 · Chế độ xem công trình riêng trên đế (`iso-glow` diorama) và mở rộng bản đồ 7 khu phố
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng yêu cầu: "đưa thêm 1 tính năng và hiện danh sách các công trình và cho nó lên đế như iso-glow. cái này sau chắc nhiều đấy, nên là để dropdown để select cho dễ thay vì trải dài hết ra. sau đó thì hãy mở rộng khu vực hiện tại ra Láng Hạ, Hoàng Cầu, Ô Chợ Dừa, Nguyễn Lương Bằng, Xã Đàn, Chùa Bộc, Ngã Tư Sở đi.")
+- **Bối cảnh**: Người dùng muốn xem từng công trình lớn hoặc mẫu kiến trúc độc lập trên một chiếc đế mô hình (`plate`) giống các bản vẽ đơn lẻ trong `iso-glow` (`10-diner.js`), chọn gọn qua `<select>` dropdown; đồng thời mở rộng vùng bản đồ 3D từ trục Thái Hà – Tây Sơn ra toàn bộ các trục phố lân cận.
+- **Quyết định**:
+  - **Chế độ Công trình trên đế (`render/showcase.ts`, `CityView.setShowcase`)**:
+    - `showcasesOf(city)` trích xuất danh sách công trình từ mô hình thành phố chia thành 2 nhóm `<optgroup>` trong dropdown **Công trình**:
+      1. **Công trình lớn (từ bản đồ OSM)**: Việt Tower, Novotel Thái Hà, các nhà ga Metro 2A trên cao (Ga Thái Hà, Ga La Thành), cùng toàn bộ các cao ốc có tên nổi bật trên bản đồ (VPBank Tower, Green Diamond, Tòa nhà 101 Láng Hạ, Vinaconex Tower, MIPEC Tower, T&T Capella, D'Le Pont D'or, PeakView Tower, Hoàng Cầu Skyline, Oriental Tower, TTG Tower, Vincom Phạm Ngọc Thạch, OCD Plaza…).
+      2. **Mẫu kiến trúc Hà Nội (trên đế)**: 5 mẫu đặc trưng dựng ở mức chi tiết cao nhất `L3` (nhà ống mặt phố kinh doanh 4 tầng, quán cà phê phố cổ điển 3 tầng, nhà ống hiện đại lệch tầng 5 tầng, nhà phố mái tôn chống nóng 3 tầng, nhà tập thể cũ Hà Nội 5 tầng).
+    - `buildShowcase(city, id)` dịch chuyển mặt bằng công trình về tâm `(0, 0)` ở mức `L3` và đặt lên đế mô hình vát góc 2 tầng kiểu `iso-glow` (`drawPlate`: viền chỉ chìm `detail`, 4 ốc vặn 8 cạnh ở 4 góc đế, đoạn đường nhựa phía trước có vạch phân làn nét đứt, vỉa hè lát gạch nổi 16 cm, cột đèn đường + đèn vườn có vùng sáng ban đêm và hàng cây 3D). Với nhà ga Metro, dựng đoạn cầu cạn, nhà ga 3 tầng và đoàn tàu 4 toa đỗ tại sân ga.
+    - Dùng chung toàn bộ pipeline `Batch` / `Layer` với bản đồ nên đổi Ngày/Đêm, glow, tỉ lệ cửa sáng và click từng tầng bật/tắt đèn đều hoạt động nguyên vẹn.
+  - **Mở rộng vùng dữ liệu OSM (`nga-tu-thai-ha`)**:
+    - Mở rộng `packages/osm-data/data/areas.json` (5 hộp tọa độ chồng lấp tải về 1 tệp `nga-tu-thai-ha.osm.json`, 51.530 node, 11.605 way, 235 relation) và `packages/osm-import/src/area-nga-tu-thai-ha.ts` (10 hình chữ nhật hành lang) bao phủ: **Ngã Tư Sở**, **Tây Sơn – Nguyễn Lương Bằng**, **Ô Chợ Dừa**, **Xã Đàn**, **Chùa Bộc – Phạm Ngọc Thạch**, **Thái Hà – Huỳnh Thúc Kháng**, **Hoàng Cầu – Hồ Hoàng Cầu**, và **Láng Hạ**.
+    - Thêm dropdown **Khu vực** trên thanh công cụ để bay nhanh tới từng khu phố và nhà ga trên bản đồ.
+    - Tối ưu tốc độ nạp và dựng cho bản đồ lớn: lưới không gian 64 m cho đường mặt tiền (`import.ts`, `buildings.ts`), lọc hộp bao trước khi kiểm tra `building:part` (`import.ts`), và lưới 32 m cho kiểm tra lòng đường (`core/furniture.ts`).
+
 ---
 
 ## Câu hỏi mở

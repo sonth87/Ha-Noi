@@ -10,7 +10,7 @@
      7. the area's hand corrections (overrides).
    Every list is sorted by id, so the same extract always gives the same city. Pure. */
 import {
-  applyOverrides, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
+  applyOverrides, bbox, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
   inRect, normalizeRing, pointInRing, polylineLength, area as ringArea, storeyHeights, streetShape,
   type Area, type Building, type BuildingPart, type City, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
 } from '@my-city/core';
@@ -73,7 +73,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const shape = streetShape(kind, Number.isFinite(lanes) ? lanes : undefined, oneway);
     const layer = Number.parseInt(t.layer ?? '0', 10) || 0;
     const bridge = t.bridge && t.bridge !== 'no' && layer > 0;
-    const L = polylineLength(full), prof = bridge ? bridgeProfile(kind, L, layer) : [];
+    const L = polylineLength(full), prof = bridge ? bridgeProfile(kind, L, 1) : [];
     const road = kind !== 'footway' && kind !== 'steps';
     if (road) w.nodes.forEach((nid, i) => degree.set(nid, (degree.get(nid) ?? 0) + (i === 0 || i === w.nodes.length - 1 ? 1 : 2)));
     const pieces = clipPathTo(full, inside);
@@ -81,7 +81,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       const id = pieces.length > 1 ? `s${w.id}-${k}` : `s${w.id}`;
       const s0 = along(full, piece[0]!), s1 = s0 + polylineLength(piece);
       streets.push({
-        id, name: t.name, kind, path: piece, ...shape, oneway, layer,
+        id, name: t.name, kind, path: piece, ...shape, oneway, layer: bridge ? 1 : layer,
         profile: prof.length ? cutProfile(prof, s0, s1) : [], source: src('way', w.id),
       });
       for (const nid of w.nodes) {
@@ -112,16 +112,36 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   }
 
   const keep = outlines.filter(b => inside(centroid(b.ring)));
+  const keepWithBox = keep.map(b => ({ b, box: bbox(b.ring), area: ringArea(b.ring) })).sort((a, b) => a.area - b.area);
   const partsOf = new Map<string, Raw[]>();
   for (const p of partsRaw) {
     const c = centroid(p.ring);
     // the smallest outline holding the part's centre
-    const owner = keep.filter(b => pointInRing(c, b.ring)).sort((a, b) => ringArea(a.ring) - ringArea(b.ring))[0];
+    const owner = keepWithBox.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring))?.b;
     if (!owner) { if (inside(c)) report.orphanParts.push(p.source); continue; }
     partsOf.set(owner.id, [...(partsOf.get(owner.id) ?? []), p]);
   }
 
   const fronts = streets.filter(s => s.kind !== 'footway' && s.kind !== 'steps' && s.layer === 0);
+  const FG = 64, frontGrid = new Map<string, Street[]>();
+  for (const s of fronts) {
+    const sb = bbox(s.path), pad = s.width / 2 + 45;
+    for (let i = Math.floor((sb.x0 - pad) / FG); i <= Math.floor((sb.x1 + pad) / FG); i++) {
+      for (let j = Math.floor((sb.y0 - pad) / FG); j <= Math.floor((sb.y1 + pad) / FG); j++) {
+        const k = `${i},${j}`, l = frontGrid.get(k);
+        if (l) l.push(s); else frontGrid.set(k, [s]);
+      }
+    }
+  }
+  const nearStreets = (ring: readonly Vec2[]) => {
+    const rb = bbox(ring), set = new Set<Street>();
+    for (let i = Math.floor(rb.x0 / FG); i <= Math.floor(rb.x1 / FG); i++) {
+      for (let j = Math.floor(rb.y0 / FG); j <= Math.floor(rb.y1 / FG); j++) {
+        for (const s of frontGrid.get(`${i},${j}`) ?? []) set.add(s);
+      }
+    }
+    return set.size ? [...set] : fronts;
+  };
   const buildings: Building[] = keep.map(b => {
     const kind = guessKind(b.ring, buildingHint(b.t)), own = levelsOf(b.t);
     const levels = own ?? guessLevels(kind, b.source);
@@ -129,11 +149,12 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const parts: BuildingPart[] = raw.length
       ? raw.map(p => ({ id: p.id, footprint: p.ring, z0: 0, floors: storeyHeights(kind, levelsOf(p.t) ?? levels), facade: 'wall', roof: 'flat', source: p.source }))
       : [{ id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, levels), facade: 'wall', roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
-    const front = frontEdge(b.ring, fronts);
+    const localFronts = nearStreets(b.ring);
+    const front = frontEdge(b.ring, localFronts);
     const { w, d } = frontage(b.ring, front);
     const fromOsm = own !== undefined || raw.some(p => levelsOf(p.t) !== undefined);
     // on a main street a house is always a shop (rules.houseFor)
-    const facing = frontStreet(b.ring, front, fronts), on = facing && facing.gap < 25 && MAIN.has(facing.street.kind) ? 'main' : 'minor';
+    const facing = frontStreet(b.ring, front, localFronts), on = facing && facing.gap < 25 && MAIN.has(facing.street.kind) ? 'main' : 'minor';
     const house = raw.length ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
     // a generated house sets its own storey heights (a raised ground floor over a semi-basement…)
     if (house) parts[0] = { ...parts[0]!, floors: houseStoreys(house.spec) };
@@ -141,7 +162,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   });
   for (const b of buildings) {
     const p = b.footprint[b.front]!, q = b.footprint[(b.front + 1) % b.footprint.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    if (!fronts.some(s => nearPath(mid, s.path, s.width / 2 + 40))) report.noStreet.push(b.source);
+    const localFronts = nearStreets(b.footprint);
+    if (!localFronts.some(s => nearPath(mid, s.path, s.width / 2 + 40))) report.noStreet.push(b.source);
   }
 
   // ---------- 4. areas ----------

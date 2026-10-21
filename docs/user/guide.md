@@ -20,7 +20,8 @@ pnpm dev:3d        # http://localhost:5190
 | `W` `A` `S` `D` / phím mũi tên (giữ) | Đi tới / lùi / sang trái / sang phải |
 | `R` / `F` | Nghiêng lên / xuống (3D) |
 | `+` / `−` | Phóng to / thu nhỏ |
-| `H`, nút **Ngã tư** | Về ngã tư; nút **Ga Thái Hà**: bay tới ga |
+| `H`, nút **Ngã tư** | Về Ngã tư Thái Hà; menu **Khu vực**: bay nhanh tới Ngã Tư Sở, Chùa Bộc, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hồ Hoàng Cầu, Láng Hạ, Ga Thái Hà, Ga La Thành |
+| Menu **Công trình** | Chọn xem riêng từng công trình lớn từ OSM, nhà ga Metro hoặc mẫu kiến trúc Hà Nội đặt trên **đế mô hình (`iso-glow`)**; chọn **Bản đồ toàn khu** (hoặc nút **← Bản đồ**) để quay lại bản đồ |
 | `V` | Đổi **2D** (isometric, 4 góc cố định như app cũ) ↔ **3D** (xoay tự do) |
 | `Q` / `E` | Xoay 90° sang trái / phải |
 | Click một tòa | Bật / tắt đèn **tầng** được click |
@@ -30,9 +31,10 @@ pnpm dev:3d        # http://localhost:5190
 
 Trên màn hình cảm ứng: một ngón để di chuyển, hai ngón để phóng to và xoay.
 
-## Khu phố
+## Khu phố & Công trình trên đế
 
-Khu gồm ngã tư và **cả phố Thái Hà** tới cuối phố. Ở đoạn Thái Hà – Yên Lãng có **tuyến metro 2A trên cao** và **ga Thái Hà**: tàu 4 toa chạy hai chiều, dừng ở ga khoảng 25 giây (cửa toa và mép sân ga sáng lên), đoàn sau cách khoảng 70 giây. Nút **Ga Thái Hà** bay thẳng tới ga. Vườn hoa có đèn vườn (theo cài đặt Đèn đường).
+- **Bản đồ mở rộng**: bao phủ **Thái Hà, Tây Sơn, Ngã Tư Sở, Chùa Bộc – Phạm Ngọc Thạch, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hoàng Cầu (và Hồ Hoàng Cầu), Láng Hạ**. Dọc trục Hoàng Cầu – Hào Nam có **tuyến metro 2A trên cao** cùng **ga Thái Hà** và **ga La Thành**: tàu 4 toa chạy hai chiều, dừng ở ga khoảng 25 giây (cửa toa và mép sân ga sáng lên).
+- **Công trình trên đế (`iso-glow`)**: chọn một mục trong dropdown **Công trình** ở thanh trên để đặt riêng công trình đó lên đế mô hình vát góc có đường trước nhà, vỉa hè, cột đèn và cây xanh (vẫn xoay 2D/3D, đổi Ngày/Đêm và click bật đèn từng tầng).
 
 Xe chạy theo đèn tín hiệu ở các nút có đèn: chân trang hiện màu đèn và số giây còn lại của Tây Sơn và Thái Hà. Ô tô lên cầu vượt, xe máy chạy hai mép làn.
 

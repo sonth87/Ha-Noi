@@ -9,9 +9,14 @@ body { background:var(--bg); color:var(--ink); font:12px/1.45 var(--mono); }
 button, select { font:inherit; letter-spacing:inherit; text-transform:inherit; color:var(--ink-hi); background:var(--panel); border:1px solid var(--edge); border-radius:4px; padding:5px 10px; cursor:pointer; }
 button:hover, select:hover { border-color:var(--line); }
 button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+.pick { display:inline-flex; align-items:center; gap:6px; color:var(--ink); }
+.pick select { text-transform:none; letter-spacing:.03em; max-width:260px; }
 kbd { font:inherit; color:var(--ink); margin-left:4px; }
 main { flex:1; display:flex; min-height:0; }
 .stage { flex:1; min-width:0; position:relative; outline:none; touch-action:none; }
+.plaque { position:absolute; left:16px; bottom:16px; pointer-events:none; background:var(--panel); border:1px solid var(--edge); border-radius:4px; padding:8px 12px; display:flex; flex-direction:column; gap:2px; max-width:440px; }
+.plaque b { color:var(--ink-hi); font-weight:500; letter-spacing:.06em; text-transform:uppercase; }
+.plaque span { color:var(--ink); font-size:11px; }
 .panel { width:250px; padding:14px 16px; border-left:1px solid var(--edge); background:var(--panel); overflow:auto; }
 .panel section + section { margin-top:18px; padding-top:14px; border-top:1px solid var(--edge); }
 .row { display:flex; align-items:center; gap:8px; margin:7px 0; color:var(--ink-hi); }

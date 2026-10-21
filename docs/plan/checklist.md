@@ -83,10 +83,12 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý (ảnh 2): vẫn quá nhiều chi tiết khi xa → nâng các mốc gấp đôi (L2 từ 4,5 px/m, L3 từ 9; nhạt 8 → 2,5; xe 6 / 4 / 2,5; cây 5)
 - [x] Góp ý: xe ở xa khó nhận ra / viền thì rối → ADR-045: khối xám + viền ngoài mờ; mật độ xe mặc định 30% (cài đặt cũ bị bỏ một lần); một nút Ngày ↔ Đêm (sáng + tắt đèn / tối + bật đèn)
 - [x] Góp ý (ảnh phóng gần): ô tô và xe máy thiếu chi tiết so với `10-diner.js` → ADR-046: ô tô có cabin đồng màu thân + ô kính lùi chừa cột A/B/C có viền, thân bo mượt không nét dọc góc, bánh 12 cạnh đủ viền + mâm + vòm bánh, lưới tản nhiệt nan dọc, đèn pha/hậu có viền, gân hông, khe cửa, tay nắm, gương, nắp ca-pô/cốp, hộp đèn taxi đủ nét; xe máy có chắn bùn, phuộc, cổ lái + đầu đèn + gương, người lái ngồi tự nhiên (thân bo tròn, tay nắm ghi đông, chân đặt sàn, mũ bảo hiểm có kính)
-- [ ] Người dùng xem lại: xe khi phóng gần và ở xa, nút Ngày / Đêm, thu nhỏ, điều khiển, phố Thái Hà, metro và ga (gửi ảnh ga thật nếu có — Q3), đèn vườn, đèn đường, độ sáng; fps ở mức Cao
+- [x] Góp ý (2 ảnh mẫu cây): cây đơn giản và xấu, bỏ nét tỉa vẽ chì chỉ lấy form dáng tán → ADR-047: cây 3D theo 3 dáng (tán vòm đa thùy như ảnh 1, tán tầng vươn ngang như ảnh 2, tán cụm bất đối xứng), có bồn cây + gốc rễ bạnh 3D, thân côn thuôn, 4–5 cành chạc 3D + nhánh phụ lộ dưới đáy tán, các cụm lá vòm 3D trơn phân 3 sắc độ sáng-trung-tối từ đỉnh xuống đáy kèm viền bóng silhouette sạch (không có nét tỉa bên trong); thêm cây bóng mát trong công viên / vườn hoa
+- [x] Yêu cầu: thêm tính năng chọn công trình qua dropdown để hiện riêng trên đế như `iso-glow`, và mở rộng khu vực ra Láng Hạ, Hoàng Cầu, Ô Chợ Dừa, Nguyễn Lương Bằng, Xã Đàn, Chùa Bộc, Ngã Tư Sở → ADR-048: `render/showcase.ts` + dropdown **Công trình** (công trình lớn OSM, ga Metro 2A và 5 mẫu kiến trúc Hà Nội trên đế vát góc có đường, vỉa hè, đèn, cây 3D); mở rộng `nga-tu-thai-ha` bao phủ toàn bộ 7 khu phố mới + dropdown **Khu vực**; tối ưu lưới không gian cho `import.ts`, `core/furniture.ts` và `buildings.ts`
+- [ ] Người dùng xem lại: chế độ xem công trình trên đế (dropdown **Công trình**), bản đồ mở rộng (Láng Hạ, Hoàng Cầu, Ô Chợ Dừa, Nguyễn Lương Bằng, Xã Đàn, Chùa Bộc, Ngã Tư Sở), cây mới (3 dáng), xe khi phóng gần và ở xa, nút Ngày / Đêm; fps ở mức Cao
 
 ## Backlog
-- Mở rộng khu vực ra các phố khác (đã có phố Thái Hà, ADR-042)
+- Mở rộng thêm sang các quận / phường khác của Hà Nội (đã có Thái Hà, Tây Sơn, Ngã Tư Sở, Chùa Bộc, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hoàng Cầu, Láng Hạ — ADR-048)
 - Nguồn dữ liệu bổ sung ngoài OSM (ảnh vệ tinh, ảnh người dùng chụp); kiểm bản quyền trước
 - Gỡ trang thử 3D khỏi app SVG khi `city3d` thay được (ADR-033)
 - Giữ vòng trong (sân trong) của multipolygon thay vì bỏ

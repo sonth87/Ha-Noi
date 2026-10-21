@@ -28,6 +28,7 @@ import {
 } from '@my-city/core';
 import { beaconsOf, buildBase, buildTile, cityFloors, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
 import { STREET_LAMPS, buildFurniture, signalLamp, type FurnitureCell } from '@render/furniture';
+import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
@@ -61,6 +62,8 @@ export interface Snapshot {
   lowered: string | null;
   lights: LightSettings;
   stats: Layer['stats'];
+  /** id of the standalone showcase diorama currently displayed, or null for the full city map */
+  showcase: string | null;
 }
 
 const ISO_EL = Math.asin(1 / Math.sqrt(3));
@@ -100,6 +103,10 @@ export class CityView {
   readonly floors: string[];
   readonly lanes: Lane[];
   readonly tracks: Track[];
+  readonly showcases: ShowcaseItem[];
+  private readonly showcaseCache = new Map<string, BuiltShowcase>();
+  private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial } | null = null;
+  private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
   private trains: Train[] = [];
   private vehicles: Vehicle[] = [];
   /** every layer built so far: a lamp is painted wherever it appears */
@@ -109,8 +116,9 @@ export class CityView {
   private lit = new Set<string>();
   private timers: ReturnType<typeof setTimeout>[] = [];
   private mounted: {
-    host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; camera: THREE.OrthographicCamera; controls: OrbitControls;
-    composer: EffectComposer; bloom: UnrealBloomPass; beacons: THREE.Mesh[]; fleets: Map<VehicleKind, Fleet>; vehicleLines: LineSegments2; stop: () => void;
+    host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; showcaseGroup: THREE.Group;
+    camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer; bloom: UnrealBloomPass;
+    beacons: THREE.Mesh[]; fleets: Map<VehicleKind, Fleet>; vehicleLines: LineSegments2; stop: () => void;
   } | null = null;
   private turn: { a0: number; a1: number; e0: number; e1: number; t0: number } | null = null;
   private sim = { t: 0, prev: null as Signals | null, phase: -1, slow: 0 };
@@ -164,6 +172,7 @@ export class CityView {
     for (const c of this.cells) for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) this.layers.add(l);
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
+    this.showcases = showcasesOf(city);
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       this.mats.surface.set(s, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
     }
@@ -177,6 +186,7 @@ export class CityView {
     this.snap = {
       mode: '2d', view: 0, heading: 0, theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
+      showcase: null,
     };
   }
 
@@ -197,6 +207,11 @@ export class CityView {
     renderer.domElement.addEventListener('webglcontextlost', onLost);
 
     const scene = new THREE.Scene();
+    const mapGroup = new THREE.Group();
+    const showcaseGroup = new THREE.Group();
+    showcaseGroup.visible = false;
+    scene.add(mapGroup, showcaseGroup);
+
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 4000);
     // the view opens on the area's origin (the crossroads), not the middle of the whole region
     const target = new THREE.Vector3(0, 0, 0);
@@ -215,7 +230,7 @@ export class CityView {
     controls.rotateSpeed = 0.6;
     this.place(camera, controls, azOf(this.snap.view), ISO_EL);
 
-    scene.add(this.group(this.base));
+    mapGroup.add(this.group(this.base));
     // a remount starts from fresh meshes; the built layers are kept
     for (const t of this.tiles) { for (const v of t.layers.values()) v.group = null; t.shown = -1; }
     for (const c of this.cells) {
@@ -225,20 +240,20 @@ export class CityView {
       c.pulses.computeLineDistances();
       c.pools = new THREE.Mesh(c.cell.pools, this.mats.pool);
       c.pools.userData.night = 'pool';
-      scene.add(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple, c.wires, c.pulses, c.pools);
+      mapGroup.add(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple, c.wires, c.pulses, c.pools);
     }
-    const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); scene.add(b); return b; });
+    const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const fleets = new Map<VehicleKind, Fleet>();
     for (const kind of KINDS) {
       const fleet: Fleet = { model: vehicleModel(kind), meshes: [], list: this.vehicles.filter(v => v.kind === kind) };
-      this.fleetMeshes(fleet, scene);
+      this.fleetMeshes(fleet, mapGroup);
       fleets.set(kind, fleet);
     }
-    this.trains = this.tracks.map(track => this.trainMeshes(track, scene));
+    this.trains = this.tracks.map(track => this.trainMeshes(track, mapGroup));
     const vehicleLines = new LineSegments2(this.linesFor(fleets), this.mats.crease);
     vehicleLines.frustumCulled = false;
     vehicleLines.userData.tier = 'creases';
-    scene.add(vehicleLines);
+    mapGroup.add(vehicleLines);
 
     const composer = new EffectComposer(renderer);
     const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.35, 0.5);
@@ -253,9 +268,13 @@ export class CityView {
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
       const pickable: THREE.Object3D[] = [];
-      for (const t of this.tiles) {
-        const g = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null;
-        if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+      if (this.snap.showcase) {
+        showcaseGroup.traverse(o => { if (o.userData.surface) pickable.push(o); });
+      } else {
+        for (const t of this.tiles) {
+          const g = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null;
+          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+        }
       }
       const hit = ray.intersectObjects(pickable, false)[0];
       if (!hit || hit.faceIndex == null) return;
@@ -272,7 +291,7 @@ export class CityView {
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
       ray.setFromCamera(ndc, camera);
-      if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z]);
+      if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
     };
     renderer.domElement.addEventListener('dblclick', onDbl);
 
@@ -297,12 +316,16 @@ export class CityView {
       controls.update();
       this.keepInside();
       this.zoomFade();
-      this.detailStep();
-      this.distanceStep();
-      this.trafficStep(dt);
       const blink = this.snap.night && Math.floor(now / 700) % 2 === 0;
-      for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
-      this.mats.pulse.dashOffset -= dt * 9;
+      if (this.snap.showcase) {
+        if (this.activeShowcase) for (const b of this.activeShowcase.beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
+      } else {
+        this.detailStep();
+        this.distanceStep();
+        this.trafficStep(dt);
+        for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
+        this.mats.pulse.dashOffset -= dt * 9;
+      }
       this.mounted?.composer.render();
       frames++;
       if (now - t0 > 500) {
@@ -316,7 +339,7 @@ export class CityView {
     };
 
     this.mounted = {
-      host, renderer, scene, camera, controls, composer, bloom, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer, bloom, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         renderer.domElement.removeEventListener('pointerdown', onDown);
@@ -336,7 +359,8 @@ export class CityView {
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
     this.nightThings();
-    this.update({ stats: this.shownStats() });
+    if (this.snap.showcase) this.mountShowcase(this.snap.showcase);
+    else this.update({ stats: this.shownStats() });
     raf = requestAnimationFrame(tick);
   }
 
@@ -353,6 +377,92 @@ export class CityView {
   // ---------- commands ----------
   setMode(mode: Mode) { this.update({ mode }); this.applyMode(mode, true); }
   toggleMode() { this.setMode(this.snap.mode === '2d' ? '3d' : '2d'); }
+
+  /** switch between the full city map (id = null) and a standalone diorama showcase on an iso-glow base plate */
+  setShowcase(id: string | null) {
+    if (id === this.snap.showcase) return;
+    const m = this.mounted;
+    if (!id) {
+      this.activeShowcase = null;
+      if (m) {
+        m.showcaseGroup.clear();
+        m.showcaseGroup.visible = false;
+        m.mapGroup.visible = true;
+        const restore = this.savedMapCam;
+        if (restore) {
+          m.controls.target.copy(restore.target);
+          m.camera.zoom = restore.zoom;
+          m.camera.updateProjectionMatrix();
+          this.place(m.camera, m.controls, this.azimuth(), this.elevation());
+        }
+      }
+      this.update({ showcase: null, pending: 0, lit: this.countLit(), floors: this.floors.length, stats: this.shownStats() });
+      return;
+    }
+    if (m && !this.snap.showcase) {
+      this.savedMapCam = { target: m.controls.target.clone(), zoom: m.camera.zoom };
+    }
+    this.mountShowcase(id);
+  }
+
+  private mountShowcase(id: string) {
+    let built = this.showcaseCache.get(id);
+    if (!built) {
+      const next = buildShowcase(this.city, id);
+      if (!next) return;
+      built = next;
+      this.showcaseCache.set(id, built);
+      this.layers.add(built.layer);
+    }
+    const m = this.mounted;
+    const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
+    const beacons: THREE.Mesh[] = [];
+    this.activeShowcase = { built, beacons, doors };
+    if (id.startsWith('station:')) {
+      for (const st of this.city.stations) this.setLamp(stationLamp(st, 'edge'), true, false);
+    }
+    if (m) {
+      m.mapGroup.visible = false;
+      m.showcaseGroup.clear();
+      m.showcaseGroup.visible = true;
+      m.showcaseGroup.add(this.group(built.layer));
+      const poolMesh = new THREE.Mesh(built.pools, this.mats.pool);
+      poolMesh.userData.night = 'pool';
+      m.showcaseGroup.add(poolMesh);
+      for (const p of built.beacons) {
+        const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff);
+        b.position.copy(p);
+        m.showcaseGroup.add(b);
+        beacons.push(b);
+      }
+      for (const c of built.cars) {
+        const model: CarModel = (this.carModels[c.cab ? 1 : 0] ??= carModel(c.cab)), g = new THREE.Group();
+        for (const [part, geo] of model.parts) g.add(new THREE.Mesh(geo, part === 'door' ? doors : this.mats.train[part]));
+        const shell = new THREE.Mesh(model.shell, this.mats.shell); shell.userData.tier = 'silhouette';
+        const lines = new LineSegments2(new LineSegmentsGeometry().setPositions(model.lines), this.mats.crease); lines.userData.tier = 'creases';
+        g.add(shell, lines);
+        g.position.set(c.at[0], c.at[2], c.at[1]);
+        g.rotation.y = c.heading;
+        m.showcaseGroup.add(g);
+      }
+      this.fly = null;
+      m.controls.target.set(0, 0, 0);
+      m.camera.zoom = built.item.zoom;
+      m.camera.updateProjectionMatrix();
+      this.place(m.camera, m.controls, this.azimuth(), this.elevation());
+      this.tiers(m.showcaseGroup);
+      this.paintLayer(built.layer);
+      this.nightThings();
+    }
+    this.update({
+      showcase: id,
+      detail: 3,
+      pending: 0,
+      lit: this.countLit(),
+      floors: built.floors.length || this.floors.length,
+      stats: built.layer.stats,
+    });
+  }
 
   /** turn by 90°; in 3D, turn too, keeping the tilt */
   rotate(dir: 1 | -1) {
@@ -422,12 +532,15 @@ export class CityView {
     for (const st of this.city.stations) this.setLamp(stationLamp(st), on, false);
   }
 
-  private countLit() { return this.floors.reduce((n, f) => n + (this.lit.has(f) ? 1 : 0), 0); }
+  private activeFloors() { return this.activeShowcase?.built.floors.length ? this.activeShowcase.built.floors : this.floors; }
+
+  private countLit() { return this.activeFloors().reduce((n, f) => n + (this.lit.has(f) ? 1 : 0), 0); }
 
   /** every floor on, or every floor off when any is on */
   toggleAll() {
-    const on = !this.floors.some(f => this.lit.has(f));
-    for (const f of this.floors) this.setLamp(f, on, false);
+    const list = this.activeFloors();
+    const on = !list.some(f => this.lit.has(f));
+    for (const f of list) this.setLamp(f, on, false);
     this.update({ lit: this.countLit() });
   }
 
@@ -464,7 +577,7 @@ export class CityView {
       for (const [kind, f] of m.fleets) {
         f.list = this.vehicles.filter(v => v.kind === kind);
         // more than the meshes hold: make them again
-        if (f.list.length > (f.meshes[0]?.instanceMatrix.count ?? 0)) this.fleetMeshes(f, m.scene);
+        if (f.list.length > (f.meshes[0]?.instanceMatrix.count ?? 0)) this.fleetMeshes(f, m.mapGroup);
         for (const o of f.meshes) o.count = f.list.length;
       }
       m.vehicleLines.geometry.dispose();
@@ -476,8 +589,8 @@ export class CityView {
 
   /** a fleet's instanced meshes: one per part, its shell; the head and tail lamps and the taxi sign
       change colour at night, the beams only show at night in the dark theme */
-  private fleetMeshes(f: Fleet, scene: THREE.Scene) {
-    for (const o of f.meshes) { scene.remove(o); o.dispose(); }
+  private fleetMeshes(f: Fleet, parent: THREE.Object3D) {
+    for (const o of f.meshes) { parent.remove(o); o.dispose(); }
     const n = Math.max(1, f.list.length);
     f.meshes = [];
     for (const [part, geo] of f.model.parts) {
@@ -488,7 +601,7 @@ export class CityView {
     const shell = new THREE.InstancedMesh(f.model.shell, this.vehicleShell, n);
     shell.userData.tier = 'silhouette';
     f.meshes.push(shell);
-    for (const o of f.meshes) { o.frustumCulled = false; o.count = f.list.length; scene.add(o); }
+    for (const o of f.meshes) { o.frustumCulled = false; o.count = f.list.length; parent.add(o); }
   }
 
   /** one line buffer for the creases of every vehicle, rewritten each frame */
@@ -501,7 +614,7 @@ export class CityView {
 
   /** a train's four cars, each a group of its parts, its outline and its lines; the last car turned
       round so the train has a cab at both ends */
-  private trainMeshes(track: Track, scene: THREE.Scene): Train {
+  private trainMeshes(track: Track, parent: THREE.Object3D): Train {
     const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const cars = Array.from({ length: METRO.cars }, (_, i) => {
       const cab = i === 0 || i === METRO.cars - 1, model: CarModel = (this.carModels[cab ? 1 : 0] ??= carModel(cab)), g = new THREE.Group();
@@ -511,7 +624,7 @@ export class CityView {
       g.add(shell, lines);
       g.userData.flip = i === METRO.cars - 1;
       g.visible = false;
-      scene.add(g);
+      parent.add(g);
       return g;
     });
     return { track, cars, doors, stopping: false };
@@ -544,6 +657,7 @@ export class CityView {
     t.body.color = tok('--body'); t.top.color = tok('--deck'); t.glass.color = tok('--glass');
     t.win.color = tok(night ? '--accent' : '--recess'); t.head.color = tok(night ? '--accent-hi' : '--detail');
     for (const tr of this.trains) tr.doors.color = tok(tr.stopping ? '--accent-hi' : '--recess');
+    if (this.activeShowcase) this.activeShowcase.doors.color = tok('--accent-hi');
   }
 
   /** each frame: lights by the clock, everyone moves, the instances follow */
@@ -635,7 +749,7 @@ export class CityView {
     if (!v.group && this.mounted) {
       v.group = this.group(v.layer);
       v.group.visible = false;
-      this.mounted.scene.add(v.group);
+      this.mounted.mapGroup.add(v.group);
       this.paintLayer(v.layer);
     }
     return level;
@@ -665,6 +779,7 @@ export class CityView {
   }
 
   private shownStats(): Layer['stats'] {
+    if (this.activeShowcase) return { ...this.activeShowcase.built.layer.stats };
     const s = { ...this.base.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
     for (const t of this.tiles) { const l = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.layer : undefined; if (l) add(l); }
@@ -847,9 +962,9 @@ export class CityView {
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
-    const px = this.pxPerMetre(), f = Math.round(farness(px, this.snap.quality) * 20) / 20;
+    const px = this.pxPerMetre(), f = this.snap.showcase ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
     // re-apply on a step of the fade or on crossing any of the thresholds below
-    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}`;
+    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
@@ -880,15 +995,26 @@ export class CityView {
   }
 
   // ---------- moving about (ADR-043) ----------
-  /** places to fly to: the crossroads (the area's origin) and every station */
+  /** places to fly to: key intersections/corridors in the expanded area and every metro station */
   get places(): { id: string; name: string; at: [number, number] }[] {
-    return [{ id: 'home', name: 'Ngã tư', at: [0, 0] as [number, number] }, ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), at: [s.at[0], s.at[1]] as [number, number] }))];
+    return [
+      { id: 'home', name: 'Ngã tư Thái Hà', at: [0, 0] },
+      { id: 'nga-tu-so', name: 'Ngã Tư Sở', at: [-785, -36] },
+      { id: 'chua-boc', name: 'Chùa Bộc', at: [50, 760] },
+      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng', at: [585, 0] },
+      { id: 'o-cho-dua', name: 'Ô Chợ Dừa', at: [1142, 50] },
+      { id: 'xa-dan', name: 'Xã Đàn', at: [986, 500] },
+      { id: 'hoang-cau', name: 'Hồ Hoàng Cầu', at: [750, -520] },
+      { id: 'lang-ha', name: 'Láng Hạ', at: [260, -1230] },
+      ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), at: [s.at[0], s.at[1]] as [number, number] })),
+    ];
   }
 
   private fly: { from: THREE.Vector3; to: THREE.Vector3; t0: number } | null = null;
 
-  /** glide the view's middle to a point on the ground (the city model's x, y) */
-  flyTo(p: [number, number]) {
+  /** glide the view's middle to a point on the ground (the city model's x, y); switches back to the map if in showcase mode */
+  flyTo(p: [number, number], exitShowcase = true) {
+    if (exitShowcase && this.snap.showcase) this.setShowcase(null);
     const m = this.mounted;
     if (!m) return;
     this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], 0, p[1]), t0: performance.now() };
@@ -920,11 +1046,18 @@ export class CityView {
     m.controls.target.add(step); m.camera.position.add(step);
   }
 
-  /** the view's middle stays within the area (and 60 m round it) */
+  /** the view's middle stays within the area (and 60 m round it), or within the showcase plate */
   private keepInside() {
     const m = this.mounted;
     if (!m) return;
-    const b = this.city.bounds, t = m.controls.target;
+    const t = m.controls.target;
+    if (this.activeShowcase) {
+      const r = this.activeShowcase.built.item.radius;
+      const x = Math.max(-r, Math.min(r, t.x)), z = Math.max(-r, Math.min(r, t.z));
+      if (x !== t.x || z !== t.z) { const d = new THREE.Vector3(x - t.x, 0, z - t.z); t.add(d); m.camera.position.add(d); }
+      return;
+    }
+    const b = this.city.bounds;
     const x = Math.max(b.x0 - 60, Math.min(b.x1 + 60, t.x)), z = Math.max(b.y0 - 60, Math.min(b.y1 + 60, t.z));
     if (x !== t.x || z !== t.z) { const d = new THREE.Vector3(x - t.x, 0, z - t.z); t.add(d); m.camera.position.add(d); }
   }

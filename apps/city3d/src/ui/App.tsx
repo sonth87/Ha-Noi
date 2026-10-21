@@ -38,11 +38,49 @@ export function App() {
     return () => { removeEventListener('keydown', onKey); removeEventListener('keyup', onUp); removeEventListener('blur', onBlur); };
   }, [v]);
 
+  const groups = Array.from(new Set(v.showcases.map(x => x.group)));
+  const currentShowcase = s.showcase ? v.showcases.find(x => x.id === s.showcase) ?? null : null;
+
   return (
     <div className="shell">
       <header className="top">
         <b className="brand"><i className="dot" />My City · 3D</b>
-        {v.places.map(p => <button key={p.id} onClick={() => v.flyTo(p.at)}>{p.name}{p.id === 'home' ? <kbd>H</kbd> : null}</button>)}
+        <label className="pick">
+          <span>Công trình</span>
+          <select
+            aria-label="Chọn công trình xem riêng trên đế"
+            value={s.showcase ?? ''}
+            onChange={e => v.setShowcase(e.target.value || null)}
+          >
+            <option value="">🗺 Bản đồ toàn khu ({v.showcases.length} công trình)</option>
+            {groups.map(g => (
+              <optgroup key={g} label={g}>
+                {v.showcases.filter(x => x.group === g).map(item => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </label>
+        {currentShowcase && (
+          <button onClick={() => v.setShowcase(null)} title="Quay lại bản đồ toàn khu">← Bản đồ</button>
+        )}
+        <label className="pick">
+          <span>Khu vực</span>
+          <select
+            aria-label="Đi tới khu vực trên bản đồ"
+            defaultValue="home"
+            onChange={e => {
+              const p = v.places.find(x => x.id === e.target.value);
+              if (p) v.flyTo(p.at);
+            }}
+          >
+            {v.places.map(p => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+        </label>
+        <button onClick={() => v.flyTo([0, 0])} title="Về Ngã tư Thái Hà">Ngã tư <kbd>H</kbd></button>
         <button onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'}>{s.mode === '2d' ? '2D' : '3D'} <kbd>V</kbd></button>
         <button onClick={() => v.rotate(-1)}>⟲ <kbd>Q</kbd></button>
         <button onClick={() => v.rotate(1)}>⟳ <kbd>E</kbd></button>
@@ -50,7 +88,14 @@ export function App() {
         <button onClick={() => setPanel(p => !p)} aria-pressed={panel}>Đèn · chất lượng <kbd>G</kbd></button>
       </header>
       <main>
-        <div className="stage" ref={host} aria-label={`Ngã tư Thái Hà – Tây Sơn – Chùa Bộc và phố Thái Hà, chế độ ${s.mode}. Kéo để di chuyển${s.mode === '3d' ? ', chuột phải hoặc shift + kéo để xoay và nghiêng' : ''}, cuộn để phóng to vào con trỏ, phím W A S D hoặc mũi tên để đi, nhấp đúp để bay tới, click một tầng để bật đèn.`} />
+        <div className="stage" ref={host} aria-label={`Khu vực Thái Hà – Láng Hạ – Hoàng Cầu – Ô Chợ Dừa – Xã Đàn – Chùa Bộc – Ngã Tư Sở, chế độ ${s.mode}. Kéo để di chuyển${s.mode === '3d' ? ', chuột phải hoặc shift + kéo để xoay và nghiêng' : ''}, cuộn để phóng to vào con trỏ, phím W A S D hoặc mũi tên để đi, nhấp đúp để bay tới, click một tầng để bật đèn.`}>
+          {currentShowcase && (
+            <div className="plaque">
+              <b>{currentShowcase.name}</b>
+              <span>{currentShowcase.subtitle}</span>
+            </div>
+          )}
+        </div>
         {panel && (
           <aside className="panel">
             <LightsPanel lights={s.lights} onChange={p => v.setLights(p)} />
@@ -60,7 +105,9 @@ export function App() {
       </main>
       <footer>
         <span>kéo: di chuyển · {s.mode === '3d' ? 'chuột phải / shift + kéo: xoay, nghiêng · R F: nghiêng · ' : ''}cuộn: phóng vào con trỏ · WASD / mũi tên: đi · +/−: phóng · nhấp đúp: bay tới · click tầng: bật đèn</span>
-        <span className="read">{s.mode} · góc {s.mode === '2d' ? s.view : `${s.heading}°`} · chi tiết L{s.detail} · cửa sáng {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%{s.lit ? ` + ${s.lit} tầng bật tay` : ''} · {s.vehicles} xe · Tây Sơn {LIGHT[s.signals.x]} {s.signals.xLeft}s · Thái Hà {LIGHT[s.signals.y]} {s.signals.yLeft}s · {s.fps} fps</span>
+        <span className="read">
+          {currentShowcase ? `đế mô hình · ${currentShowcase.name}` : 'bản đồ'} · {s.mode} · góc {s.mode === '2d' ? s.view : `${s.heading}°`} · chi tiết L{s.detail} · cửa sáng {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%{s.lit ? ` + ${s.lit} tầng bật tay` : ''}{!currentShowcase ? ` · ${s.vehicles} xe · Tây Sơn ${LIGHT[s.signals.x]} ${s.signals.xLeft}s · Thái Hà ${LIGHT[s.signals.y]} ${s.signals.yLeft}s` : ''} · {s.fps} fps
+        </span>
         <span className="credit">© OpenStreetMap contributors</span>
       </footer>
     </div>

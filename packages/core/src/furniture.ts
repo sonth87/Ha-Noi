@@ -48,7 +48,24 @@ const MAIN = new Set(['primary', 'secondary', 'tertiary']);
 export function streetFurniture(city: City, net: Network = roadNetwork(city)): Furniture {
   const props: Prop[] = [], wires: Wire[] = [];
   const atGrade = net.roads.filter(r => r.layer === 0);
-  const onRoad = (p: Vec2) => atGrade.some(r => closestOnPath(p, r.path).d < r.width / 2 + 0.3);
+  const roadGrid = new Map<string, typeof atGrade>();
+  for (const r of atGrade) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of r.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    const pad = r.width / 2 + 1;
+    const gx0 = Math.floor((x0 - pad) / 32), gx1 = Math.floor((x1 + pad) / 32);
+    const gy0 = Math.floor((y0 - pad) / 32), gy1 = Math.floor((y1 + pad) / 32);
+    for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) {
+      const k = `${gx},${gy}`;
+      let cell = roadGrid.get(k);
+      if (!cell) roadGrid.set(k, cell = []);
+      cell.push(r);
+    }
+  }
+  const onRoad = (p: Vec2) => {
+    const cell = roadGrid.get(`${Math.floor(p[0] / 32)},${Math.floor(p[1] / 32)}`);
+    return cell ? cell.some(r => closestOnPath(p, r.path).d < r.width / 2 + 0.3) : false;
+  };
 
   const roadOf = new Map(net.roads.map(r => [r.id, r])), nodeOf = new Map(net.nodes.map(n => [n.id, n]));
   // along whole streets (runs), so poles and wires carry on across the alleys that cut them
@@ -115,28 +132,45 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     }
   }
 
-  // park lamps: a low lamp post every 14 m along the paths inside parks and gardens, sides
-  // alternating; a park with no mapped path gets a ring of them 3 m in from its edge
+  // park lamps and shade trees inside parks and gardens
   const parks = city.areas.filter(a => a.kind === 'park');
-  const paths = city.streets.filter(s => (s.kind === 'footway' || s.kind === 'steps') && s.layer === 0);
+  const paths = city.streets.filter(s => (s.kind === 'footway' || s.kind === 'steps') && s.layer === 0).map(fw => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of fw.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    return { fw, x0: x0 - 4, y0: y0 - 4, x1: x1 + 4, y1: y1 + 4 };
+  });
   for (const park of parks) {
+    let px0 = Infinity, py0 = Infinity, px1 = -Infinity, py1 = -Infinity;
+    for (const [x, y] of park.polygon) { if (x < px0) px0 = x; if (y < py0) py0 = y; if (x > px1) px1 = x; if (y > py1) py1 = y; }
+    const parkPaths = paths.filter(b => b.x1 >= px0 && b.x0 <= px1 && b.y1 >= py0 && b.y0 <= py1).map(b => b.fw);
+    const onPath = (p: Vec2) => parkPaths.some(fw => closestOnPath(p, fw.path).d < fw.width / 2 + 1.2);
     let n = 0;
-    for (const fw of paths) {
+    const parkTrees: Vec2[] = [];
+    const addParkTree = (id: string, p: Vec2, large: boolean) => {
+      if (p[0] < px0 || p[0] > px1 || p[1] < py0 || p[1] > py1) return;
+      if (!pointInRing(p, park.polygon) || onRoad(p) || onPath(p) || parkTrees.some(q => dist(p, q) < 7)) return;
+      parkTrees.push(p);
+      props.push({ id, kind: 'tree', at: p, z0: 0.03, heading: 0, size: large ? 'large' : 'medium', road: park.id });
+    };
+    for (const fw of parkPaths) {
       const L = polylineLength(fw.path), at = sampler(fw.path);
       for (let s = 3; s < L - 2; s += 14) {
         const side = n % 2 ? 1 : -1, { p } = at(s, side * (fw.width / 2 + 0.6));
-        if (!pointInRing(p, park.polygon) || onRoad(p)) continue;
+        if (p[0] < px0 || p[0] > px1 || p[1] < py0 || p[1] > py1 || !pointInRing(p, park.polygon) || onRoad(p)) continue;
         props.push({ id: `g-${park.id}-${fw.id}-${Math.round(s)}`, kind: 'park-lamp', at: p, z0: 0.05, heading: 0, road: fw.id });
+        addParkTree(`pt-${park.id}-${fw.id}-${Math.round(s)}`, at(s, -side * (fw.width / 2 + 2.8)).p, n % 3 !== 0);
         n++;
       }
     }
-    if (n > 0) continue;
     const ring = park.polygon, L = polylineLength([...ring, ring[0]!]), at = sampler([...ring, ring[0]!]);
     for (let s = 5; s < L; s += 15) {
-      // 3 m inside: try either side of the edge, keep the one in the park
-      const a = at(s, 3).p, b = at(s, -3).p, p = pointInRing(a, ring) ? a : b;
-      if (!pointInRing(p, ring) || onRoad(p)) continue;
-      props.push({ id: `g-${park.id}-ring-${Math.round(s)}`, kind: 'park-lamp', at: p, z0: 0.05, heading: 0, road: park.id });
+      // 3 m inside for lamps (when no paths), 4.8 m inside for park perimeter shade trees
+      if (n === 0) {
+        const a = at(s, 3).p, b = at(s, -3).p, p = pointInRing(a, ring) ? a : b;
+        if (pointInRing(p, ring) && !onRoad(p)) props.push({ id: `g-${park.id}-ring-${Math.round(s)}`, kind: 'park-lamp', at: p, z0: 0.05, heading: 0, road: park.id });
+      }
+      const ta = at(s + 4, 4.8).p, tb = at(s + 4, -4.8).p, tp = pointInRing(ta, ring) ? ta : tb;
+      addParkTree(`pt-${park.id}-ring-${Math.round(s)}`, tp, true);
     }
   }
 

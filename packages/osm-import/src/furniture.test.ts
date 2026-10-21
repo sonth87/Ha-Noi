@@ -19,8 +19,16 @@ describe('street furniture', () => {
   });
 
   it('keeps everything off the carriageways', () => {
-    const atGrade = net.roads.filter(r => r.layer === 0);
-    for (const p of f.props) for (const r of atGrade) expect(closestOnPath(p.at, r.path).d, `${p.id} on ${r.id}`).toBeGreaterThan(r.width / 2 - 0.01);
+    const atGrade = net.roads.filter(r => r.layer === 0).map(r => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+      for (const [x, y] of r.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+      const pad = r.width / 2;
+      return { r, x0: x0 - pad, y0: y0 - pad, x1: x1 + pad, y1: y1 + pad };
+    });
+    for (const p of f.props) for (const { r, x0, y0, x1, y1 } of atGrade) {
+      if (p.at[0] < x0 || p.at[0] > x1 || p.at[1] < y0 || p.at[1] > y1) continue;
+      expect(closestOnPath(p.at, r.path).d, `${p.id} on ${r.id}`).toBeGreaterThan(r.width / 2 - 0.01);
+    }
   });
 
   it('wires only neighbouring poles, and is the same every time', () => {

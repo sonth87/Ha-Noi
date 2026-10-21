@@ -7,6 +7,7 @@ import { buildCityGeometry, buildTile, tilesOf } from './city';
 import { buildHouse } from './house3d';
 import { offsetLine, strip } from './streets';
 import { windowRank } from './lights';
+import { buildShowcase, showcasesOf } from './showcase';
 
 const { city } = loadCity('nga-tu-thai-ha');
 const g = buildCityGeometry(city);
@@ -75,16 +76,21 @@ describe('city geometry', () => {
 const finite = (B: Batch) => [...B.tris.values(), B.win, B.creases, B.details, B.shell.pos].every(a => a.every(Number.isFinite));
 
 describe('detail levels', () => {
+  let l2: ReturnType<typeof buildCityGeometry>;
+  let l3: ReturnType<typeof buildCityGeometry>;
+
   it('adds detail level by level', () => {
-    const tris = ([0, 1, 2, 3] as const).map(l => buildCityGeometry(city, l).stats);
+    const l0 = buildCityGeometry(city, 0);
+    l2 = buildCityGeometry(city, 2);
+    l3 = buildCityGeometry(city, 3);
+    const tris = [l0.stats, g.stats, l2.stats, l3.stats];
     expect(tris[1]!.windows).toBeGreaterThan(tris[0]!.windows);
     expect(tris[2]!.triangles).toBeGreaterThan(tris[1]!.triangles);
     expect(tris[3]!.triangles).toBeGreaterThan(tris[2]!.triangles);
-  }, 60_000);   // the whole area four times over
+  }, 60_000);   // the whole area across all four levels
 
   it('keeps every storey lit-able at L2 and L3', () => {
-    for (const l of [2, 3] as const) {
-      const lg = buildCityGeometry(city, l);
+    for (const lg of [l2, l3]) {
       expect(lg.floors.filter(f => lg.lamps.has(f)).length / lg.floors.length).toBeGreaterThan(0.85);
     }
   }, 60_000);
@@ -126,5 +132,28 @@ describe('the house generator in 3D', () => {
     expect(finite(B)).toBe(true);
     expect(ring).toHaveLength(4);
     expect(houseFor('x', 'tube-house', 4, 4, 16)).toBeDefined();
+  });
+});
+
+describe('standalone showcase dioramas', () => {
+  it('lists OSM landmarks, metro stations and Hanoi archetypes, and builds them on iso-glow plates', () => {
+    const list = showcasesOf(city);
+    expect(list.length).toBeGreaterThan(15);
+    expect(list.some(x => x.id.startsWith('bldg:'))).toBe(true);
+    expect(list.some(x => x.id.startsWith('station:'))).toBe(true);
+    expect(list.some(x => x.id.startsWith('house:'))).toBe(true);
+
+    const sampleIds = [
+      list.find(x => x.id.startsWith('bldg:'))!.id,
+      list.find(x => x.id.startsWith('station:'))!.id,
+      'house:shop',
+      'block:tap-the',
+    ];
+    for (const id of sampleIds) {
+      const built = buildShowcase(city, id);
+      expect(built, id).not.toBeNull();
+      expect(built!.layer.stats.triangles, id).toBeGreaterThan(200);
+      expect(built!.layer.stats.lines, id).toBeGreaterThan(50);
+    }
   });
 });
