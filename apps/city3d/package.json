@@ -1,0 +1,29 @@
+{
+  "name": "@my-city/city3d",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p . && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@fontsource/dm-mono": "^5.3.0",
+    "@my-city/core": "workspace:*",
+    "@my-city/osm-import": "workspace:*",
+    "@my-city/theme": "workspace:*",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "three": "0.170.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "0.170.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "vite": "^8.3.4"
+  }
+}
