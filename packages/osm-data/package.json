@@ -1,0 +1,7 @@
+{
+  "name": "@my-city/osm-data",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "fetch": "node scripts/fetch.mjs", "typecheck": "tsc --noEmit -p .", "lint": "eslint .", "test": "vitest run" }
+}
