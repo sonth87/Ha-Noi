@@ -33,7 +33,7 @@ import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metr
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { Surface } from '@render/batch';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
-import { detailFor, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
+import { FAR, detailFor, farness, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
 
 export type Mode = '2d' | '3d';
@@ -121,13 +121,13 @@ export class CityView {
       vertexShader: SHELL_VERT, fragmentShader: 'uniform vec3 color; void main() { gl_FragColor = vec4(color, 1.0); }',
       side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 24,
     }),
-    crease: new LineMaterial({ linewidth: 1, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
+    crease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     // window outlines are coloured per segment (dark, or the accent when lit): the material stays white
-    detail: new LineMaterial({ linewidth: 1, vertexColors: true, color: 0xffffff, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
-    wire: new LineMaterial({ linewidth: 1 }),
+    detail: new LineMaterial({ linewidth: 1, vertexColors: true, color: 0xffffff, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
+    wire: new LineMaterial({ linewidth: 1, transparent: true }),
     pulse: new LineMaterial({ linewidth: 2, dashed: true, dashSize: 0.8, gapSize: 23, transparent: true }),
     windows: new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
-    vehicle: Object.fromEntries((['body', 'top', 'glass', 'wheel', 'head', 'tail', 'sign'] as VehiclePart[]).map(p => [p, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 })])) as Record<Exclude<VehiclePart, 'beam'>, THREE.MeshBasicMaterial>,
+    vehicle: Object.fromEntries((['body', 'top', 'glass', 'wheel', 'head', 'tail', 'sign'] as VehiclePart[]).map(p => { const onTop = p === 'glass' || p === 'head' || p === 'tail' || p === 'sign'; return [p, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: onTop ? -1 : 1, polygonOffsetUnits: onTop ? -1 : 1 })]; })) as Record<Exclude<VehiclePart, 'beam'>, THREE.MeshBasicMaterial>,
     // a pool of light: the accent fading from the middle out, added onto the ground (iso-glow's light pools)
     pool: new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color() }, opacity: { value: 0.16 } },
@@ -143,6 +143,13 @@ export class CityView {
   };
   /** window fill and outline per shade (iso-glow: lit = accent with an accent-hi outline, hi =
       accent-hi, dim = lit at 45 % over the wall, off = dark) */
+  /** the vehicles' outline: a copy of the shared one, so it can fade without fading the buildings' */
+  private readonly vehicleShell = (() => {
+    const m = this.mats.shell.clone();
+    m.uniforms.res = this.mats.shell.uniforms.res!;   // one resolution for both
+    return m;
+  })();
+  private farF = 0;
   private carModels: CarModel[] = [];
   private colors: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
   private outline: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
@@ -160,13 +167,15 @@ export class CityView {
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       this.mats.surface.set(s, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
     }
-    let theme: Theme = 'dark';
-    try { if (localStorage.getItem('city3d-theme') === 'light') theme = 'light'; } catch { /* default */ }
+    // day (the light theme) by default (user, 2026-10-21); night (the dark theme and the lamps) is
+    // one switch, remembered
+    let theme: Theme = 'light';
+    try { if (localStorage.getItem('city3d-theme') === 'dark') theme = 'dark'; } catch { /* default */ }
     const quality = loadQuality();
     this.vehicles = spawnTraffic(this.lanes, quality.traffic);
     const sig = signalsAt(0);
     this.snap = {
-      mode: '2d', view: 0, heading: 0, theme, night: false, quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
+      mode: '2d', view: 0, heading: 0, theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
     };
   }
@@ -287,6 +296,7 @@ export class CityView {
       this.keysMove(dt);
       controls.update();
       this.keepInside();
+      this.zoomFade();
       this.detailStep();
       this.distanceStep();
       this.trafficStep(dt);
@@ -356,7 +366,12 @@ export class CityView {
     try { localStorage.setItem('city3d-theme', theme); } catch { /* not remembered */ }
     this.applyTheme(theme);
   }
-  toggleTheme() { this.setTheme(this.snap.theme === 'dark' ? 'light' : 'dark'); }
+  /** Ngày ↔ Đêm: the light theme by day, the dark theme and the lamps by night, one switch (ADR-045) */
+  toggleDayNight() {
+    const night = !this.snap.night;
+    this.setNight(night);
+    this.setTheme(night ? 'dark' : 'light');
+  }
 
   setQuality(q: Quality, lowered: string | null = null) {
     const traffic = q.traffic !== this.snap.quality.traffic;
@@ -408,7 +423,6 @@ export class CityView {
   }
 
   private countLit() { return this.floors.reduce((n, f) => n + (this.lit.has(f) ? 1 : 0), 0); }
-  toggleNight() { this.setNight(!this.snap.night); }
 
   /** every floor on, or every floor off when any is on */
   toggleAll() {
@@ -436,8 +450,7 @@ export class CityView {
       case 'v': this.toggleMode(); return true;
       case 'q': this.rotate(-1); return true;
       case 'e': this.rotate(1); return true;
-      case 'n': this.toggleNight(); return true;
-      case 't': this.toggleTheme(); return true;
+      case 'n': case 't': this.toggleDayNight(); return true;
       case ' ': this.toggleAll(); return true;
       default: return false;
     }
@@ -472,7 +485,7 @@ export class CityView {
       if (part === 'beam') mesh.userData.night = 'beam';
       f.meshes.push(mesh);
     }
-    const shell = new THREE.InstancedMesh(f.model.shell, this.mats.shell, n);
+    const shell = new THREE.InstancedMesh(f.model.shell, this.vehicleShell, n);
     shell.userData.tier = 'silhouette';
     f.meshes.push(shell);
     for (const o of f.meshes) { o.frustumCulled = false; o.count = f.list.length; scene.add(o); }
@@ -585,7 +598,8 @@ export class CityView {
     const q = this.snap.quality;
     for (const s of this.cells) {
       const on = near(s.cell.center, CELL_R), g = s.groups;
-      if (g) { g.fixtures.visible = on; g.poles.visible = on && q.wires; g.trees.visible = on && q.trees === 'full'; g.simple.visible = on && q.trees === 'simple'; }
+      const trees = this.treeLook();
+      if (g) { g.fixtures.visible = on; g.poles.visible = on && q.wires; g.trees.visible = on && trees === 'full'; g.simple.visible = on && trees === 'simple'; }
       if (s.wires) s.wires.visible = on && q.wires;
       if (s.pulses) s.pulses.visible = on && q.wires && this.snap.night;
       if (s.pools) s.pools.visible = on && this.poolsOn();
@@ -684,11 +698,8 @@ export class CityView {
   /** things that only show at night (headlight beams: only in the dark theme too) */
   private nightThings() {
     const m = this.mounted;
-    const cars = lightOn(this.snap.lights.vehicle, this.snap.night);
-    if (m) m.scene.traverse(o => {
-      const k = o.userData.night;
-      if (k) o.visible = k === 'beam' ? cars && this.snap.theme === 'dark' : k === 'pool' ? this.poolsOn() : this.snap.night;
-    });
+    if (m) m.scene.traverse(o => { const k = o.userData.night; if (k) o.visible = this.nightOn(k as string); });
+    this.zoomFade(true);
     const css = getComputedStyle(document.documentElement);
     this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
     this.trainColors();
@@ -700,7 +711,11 @@ export class CityView {
   /** vehicles take the theme's colours; their lamps and the taxi sign light at night */
   private vehicleColors(tok: (n: string) => THREE.Color) {
     const v = this.mats.vehicle, night = lightOn(this.snap.lights.vehicle, this.snap.night);
-    v.body.color = tok('--body'); v.top.color = tok('--deck'); v.glass.color = tok('--glass'); v.wheel.color = tok('--recess');
+    // zoomed out a vehicle is a grey block (darker than the road) with a faint outline: it still
+    // reads as a vehicle, with none of the lines inside it (ADR-045)
+    const f = this.farF;
+    v.body.color = tok('--body').lerp(tok('--line'), 0.45 * f); v.top.color = tok('--deck').lerp(tok('--line'), 0.45 * f);
+    (this.vehicleShell.uniforms.color!.value as THREE.Color).copy(tok('--line').lerp(tok('--recess'), 0.6 * f)); v.glass.color = tok('--glass'); v.wheel.color = tok('--recess');
     v.head.color = tok(night ? '--accent-hi' : '--detail');
     v.tail.color = night ? tok('--accent') : tok('--detail');
     v.sign.color = tok(night ? '--accent' : '--recess');
@@ -799,6 +814,7 @@ export class CityView {
     this.nightThings();
     this.resolution();
     this.applyBloom();
+    this.zoomFade(true);
   }
 
   private resolution() {
@@ -818,6 +834,49 @@ export class CityView {
     m.bloom.enabled = this.snap.quality.bloom && this.snap.theme === 'dark' && g > 0;
     // iso-glow: windows barely glow, lamps and signs softly — only the bright accent passes
     m.bloom.strength = 0.45 * g; m.bloom.radius = 0.3; m.bloom.threshold = 0.55;
+  }
+
+  // ---------- zoomed out: less of the small things (ADR-044) ----------
+  private far = '';
+
+  /** pixels per metre on screen now */
+  private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
+
+  /** lines fade, vehicles lose their lines then their outline, bikes go, full trees turn simple —
+      as the view zooms out; applied when the farness moves by a step */
+  private zoomFade(force = false) {
+    const m = this.mounted;
+    if (!m) return;
+    const px = this.pxPerMetre(), f = Math.round(farness(px, this.snap.quality) * 20) / 20;
+    // re-apply on a step of the fade or on crossing any of the thresholds below
+    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}`;
+    if (key === this.far && !force) return;
+    this.far = key;
+    this.farF = f;
+    const css = getComputedStyle(document.documentElement);
+    this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
+    this.mats.crease.opacity = 1 - 0.55 * f;
+    this.mats.detail.opacity = 1 - 0.85 * f;
+    this.mats.wire.opacity = 1 - 0.6 * f;
+    const auto = this.snap.quality.autoDetail;
+    m.vehicleLines.visible = this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
+    for (const [kind, fl] of m.fleets) for (const o of fl.meshes) {
+      const shell = o.material === this.vehicleShell;
+      o.visible = !(auto && kind === 'bike' && px < FAR.bikes) && !(shell && !this.snap.quality.silhouette);
+      if (o.userData.night) o.visible = o.visible && this.nightOn(o.userData.night as string);
+    }
+  }
+
+  /** is a night-only thing on now */
+  private nightOn(k: string) {
+    const cars = lightOn(this.snap.lights.vehicle, this.snap.night);
+    return k === 'beam' ? cars && this.snap.theme === 'dark' : k === 'pool' ? this.poolsOn() : this.snap.night;
+  }
+
+  /** the tree look in use: full trees turn simple when zoomed out (with lower detail when zoomed out on) */
+  private treeLook() {
+    const q = this.snap.quality;
+    return q.trees === 'full' && q.autoDetail && this.pxPerMetre() < FAR.simpleTrees ? 'simple' : q.trees;
   }
 
   // ---------- moving about (ADR-043) ----------

@@ -37,10 +37,10 @@ export interface QualityOptions {
 export interface Quality extends QualityOptions { level: QualityLevel | 'custom' }
 
 export const LEVELS: Record<QualityLevel, QualityOptions> = {
-  low: { traffic: 0.3, wires: false, trees: 'simple', viewDistance: 150, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
-  medium: { traffic: 0.6, wires: true, trees: 'simple', viewDistance: 250, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
-  high: { traffic: 1, wires: true, trees: 'full', viewDistance: 400, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
-  ultra: { traffic: 1, wires: true, trees: 'full', viewDistance: 0, autoQuality: false, houseDetail: 3, autoDetail: false, pixelRatio: 3, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
+  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 150, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
+  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 250, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
+  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 400, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
+  ultra: { traffic: 0.6, wires: true, trees: 'full', viewDistance: 0, autoQuality: false, houseDetail: 3, autoDetail: false, pixelRatio: 3, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
 };
 
 export const LEVEL_NAMES: Record<QualityLevel | 'custom', string> = { low: 'Thấp', medium: 'Trung bình', high: 'Cao', ultra: 'Rất cao', custom: 'Tùy chỉnh' };
@@ -48,11 +48,21 @@ export const LEVEL_NAMES: Record<QualityLevel | 'custom', string> = { low: 'Th�
 export const quality = (level: QualityLevel): Quality => ({ level, ...LEVELS[level] });
 
 /** Detail for how big a metre is on screen (an orthographic view has no "far": things only get
-    small by zooming out). Below 2 px a metre balconies are specks; above 4.5 the small things show. */
+    small by zooming out). A balcony rail or a pot needs about 9 px a metre to read; the house itself
+    (balconies, roofs, signs) about 4.5; below that a building is its block and windows (ADR-044). */
 export function detailFor(pxPerMetre: number, q: Pick<QualityOptions, 'houseDetail' | 'autoDetail'>): 0 | 1 | 2 | 3 {
   if (!q.autoDetail) return q.houseDetail;
-  const want = pxPerMetre >= 4.5 ? 3 : pxPerMetre >= 2 ? 2 : 1;
+  const want = pxPerMetre >= 9 ? 3 : pxPerMetre >= 4.5 ? 2 : 1;
   return Math.min(q.houseDetail, want) as 0 | 1 | 2 | 3;
+}
+
+/** How far out the view is, 0 (close: everything drawn) to 1 (far): from 8 px a metre down to 2.5.
+    With "lower detail when zoomed out" on, lines fade with it and small things go (ADR-044). */
+export const FAR = { near: 8, far: 2.5, vehicleLines: 6, bikes: 2.5, simpleTrees: 5 } as const;
+
+export function farness(pxPerMetre: number, q: Pick<QualityOptions, 'autoDetail'>): number {
+  if (!q.autoDetail) return 0;
+  return Math.max(0, Math.min(1, (FAR.near - pxPerMetre) / (FAR.near - FAR.far)));
 }
 
 /** the next level down, for stepping down by itself (none below low) */
@@ -71,18 +81,20 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
+/** bumped when the defaults change in a way a saved setting should not outlive (2: traffic 30 %) */
+const VERSION = 2;
 
 export function loadQuality(): Quality {
   try {
     const raw = localStorage.getItem(KEY);
     if (raw) {
-      const q = JSON.parse(raw) as Partial<Quality>;
-      return { ...quality('high'), ...q };
+      const { v, ...q } = JSON.parse(raw) as Partial<Quality> & { v?: number };
+      if (v === VERSION) return { ...quality('high'), ...q };
     }
   } catch { /* private mode, blocked storage, bad JSON: use the default */ }
   return quality('high');
 }
 
 export function saveQuality(q: Quality) {
-  try { localStorage.setItem(KEY, JSON.stringify(q)); } catch { /* not remembered, still applied */ }
+  try { localStorage.setItem(KEY, JSON.stringify({ ...q, v: VERSION })); } catch { /* not remembered, still applied */ }
 }

@@ -25,8 +25,7 @@ pnpm dev:3d        # http://localhost:5190
 | `Q` / `E` | Xoay 90° sang trái / phải |
 | Click một tòa | Bật / tắt đèn **tầng** được click |
 | `Space` | Bật hết / tắt hết |
-| `N` | Ngày / đêm |
-| `T` | Theme tối / sáng |
+| `N` hoặc `T`, nút **Ngày / Đêm** | **Ngày** (giao diện sáng, đèn tắt) ↔ **Đêm** (giao diện tối, cửa sổ sáng dần lên, đèn đường và đèn vườn sáng, xung sáng chạy dọc dây điện, xe bật đèn, đèn báo trên ăng-ten Việt Tower nhấp nháy). Mặc định là Ngày; lựa chọn được nhớ. Từng loại đèn vẫn chỉnh riêng ở bảng **Đèn** |
 | `G` | Mở / đóng bảng **Đèn · chất lượng** |
 
 Trên màn hình cảm ứng: một ngón để di chuyển, hai ngón để phóng to và xoay.
@@ -49,8 +48,8 @@ Nút **Đèn · chất lượng** (phím `G`) mở bảng bên phải. Mục **�
 
 Chọn một mức (Thấp → Rất cao) hoặc chỉnh từng tùy chọn:
 - **Chi tiết nhà**: L0 chỉ khối · L1 có cửa sổ · L2 nhà đủ hình (tầng trệt, mái hiên, biển, ban công, mái) · L3 mọi chi tiết nhỏ (chậu cây, cục nóng, bồn nước, ăng-ten…).
-- **Tự giảm khi thu nhỏ**: thu nhỏ đến mức chi tiết không còn nhìn ra thì tự vẽ ít đi (dòng trạng thái hiện mức đang vẽ, ví dụ "chi tiết L2"). Phóng to lại là chi tiết hiện dần, mỗi lúc một ô.
-- **Mật độ xe** (0–100%), **Cột và dây điện**, **Cây** (không / đơn giản / đầy đủ).
+- **Tự giảm chi tiết khi thu nhỏ**: thu nhỏ đến mức chi tiết không còn nhìn ra thì tự vẽ ít đi (dòng trạng thái hiện mức đang vẽ, ví dụ "chi tiết L2"); nét viền nhạt dần, xe ở xa bỏ nét rồi bỏ viền, xe máy ẩn khi rất xa, cây thành dạng đơn giản, nên ở xa không thành vệt đen. Phóng to lại là chi tiết hiện dần.
+- **Mật độ xe** (0–100%, mặc định 30%), **Cột và dây điện**, **Cây** (không / đơn giản / đầy đủ).
 - **Tầm nhìn xa**: chỉ vẽ nhà, đồ phố và xe trong bán kính đã chọn quanh tâm nhìn (đường vẫn vẽ hết).
 - **Tự hạ mức khi chậm**: nếu máy chạy dưới 28 fps suốt 3 giây thì tự xuống một mức và báo trong bảng.
 - Cửa sổ, nét viền khối, nét cạnh, nét chi tiết (viền cửa), glow, khử răng cưa, độ phân giải.

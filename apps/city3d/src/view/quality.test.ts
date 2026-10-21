@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { isHouseLamp, windowRank, windowShade } from '@render/lights';
-import { detailFor, lowerLevel, quality, withOption } from './quality';
+import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
 import { lightOn } from './lights';
 
 describe('quality', () => {
+  it('starts with 30 % traffic', () => {
+    expect(quality('high').traffic).toBe(0.3);
+    expect(quality('medium').traffic).toBe(0.3);
+  });
+
   it('goes back to a named level when the options match it again', () => {
     const q = withOption(quality('high'), { bloom: false });
     expect(q.level).toBe('custom');
@@ -12,10 +17,10 @@ describe('quality', () => {
 
   it('lowers the detail when zoomed out, up to the chosen most', () => {
     const q = quality('high');
-    expect(detailFor(1, q)).toBe(1);
-    expect(detailFor(3, q)).toBe(2);
-    expect(detailFor(6, q)).toBe(3);
-    expect(detailFor(6, quality('medium'))).toBe(2);
+    expect(detailFor(3.6, q)).toBe(1);   // the user's screenshot, 2026-10-21: blocks and windows only
+    expect(detailFor(6, q)).toBe(2);
+    expect(detailFor(10, q)).toBe(3);
+    expect(detailFor(10, quality('medium'))).toBe(2);
     expect(detailFor(0.5, quality('ultra'))).toBe(3);   // no automatic lowering
   });
 });
@@ -48,5 +53,15 @@ describe('light settings', () => {
     }
     expect([lightOn('auto', true), lightOn('auto', false), lightOn('on', false), lightOn('off', true)]).toEqual([true, false, true, false]);
     expect(isHouseLamp('street/lamps') || isHouseLamp('signal/x/go')).toBe(false);
+  });
+});
+
+describe('zoomed out', () => {
+  it('fades from 8 px a metre down to 2.5, and not at all without automatic detail', () => {
+    expect(farness(9, quality('high'))).toBe(0);
+    expect(farness(2, quality('high'))).toBe(1);
+    expect(farness(5.25, quality('high'))).toBeCloseTo(0.5, 6);
+    expect(farness(3.6, quality('high'))).toBeGreaterThan(0.75);
+    expect(farness(1, quality('ultra'))).toBe(0);
   });
 });
