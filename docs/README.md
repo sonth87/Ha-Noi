@@ -1,50 +1,36 @@
 # Tài liệu My City
 
-Tài liệu chia theo **người đọc** và **mục đích**. Mỗi thư mục trả lời một nhóm câu hỏi.
+Monorepo (ADR-032). Tài liệu ở đây là cho **cả repo và app 3D mới**. Tài liệu đầy đủ của app SVG cũ nằm ở [apps/svg/docs/](../apps/svg/docs/README.md) và được **đóng băng** cùng app.
 
 ```
 docs/
-├── product/        Làm cái gì, vì sao, phải đạt gì         ← đọc đầu tiên
-├── user/           Dùng sản phẩm thế nào                  ← người xem / người chỉnh dữ liệu
-├── architecture/   Bên trong được xây ra sao              ← người viết code
-├── plan/           Làm theo thứ tự nào, đang ở đâu         ← theo dõi tiến độ
-└── ai/             Quy tắc cho trợ lý AI làm việc trên dự án ← Claude đọc trước khi làm
+├── product/        Thuật ngữ                                 ← mọi người
+├── architecture/   Mô hình thành phố, nhập OSM, đặc tả nhà, ADR ← người viết code
+├── plan/           Roadmap M1–M5, checklist                   ← theo dõi tiến độ
+└── ai/             Luật cho trợ lý AI, quy ước, quy trình       ← Claude đọc trước khi làm
 ```
 
-## product/ — Sản phẩm
+Tầm nhìn và yêu cầu sản phẩm hiện vẫn ở app cũ; sẽ viết lại cho app mới ở M3.
+
 | File | Nội dung |
 |---|---|
-| [vision.md](product/vision.md) | Ý tưởng, động lực, mục tiêu, non-goals, phạm vi, nguyên tắc, tiêu chí thành công |
-| [requirements.md](product/requirements.md) | Yêu cầu chức năng (FR), phi chức năng (NFR), ràng buộc (C), bảng phím |
-| [glossary.md](product/glossary.md) | Thuật ngữ Việt ↔ tên trong code |
+| [architecture/city-model.md](architecture/city-model.md) | Mô hình thành phố: toạ độ, các kiểu, luật điền phần thiếu, sửa tay |
+| [architecture/osm-import.md](architecture/osm-import.md) | Dữ liệu OSM → mô hình: tải, phép chiếu, bảng tag, các bước, báo cáo, thêm khu mới |
+| [architecture/house-spec.md](architecture/house-spec.md) | Đặc tả nhà của generator (mét) |
+| [architecture/city3d.md](architecture/city3d.md) | App 3D: cấu trúc, dựng hình, camera 2D/3D, màu, chất lượng |
+| [user/guide.md](user/guide.md) | Hướng dẫn dùng app 3D: chạy, phím, bảng chất lượng |
+| [architecture/decisions.md](architecture/decisions.md) | ADR-032 trở đi, câu hỏi mở |
+| [product/glossary.md](product/glossary.md) | Thuật ngữ Việt ↔ code |
+| [plan/roadmap.md](plan/roadmap.md) | M1–M5: mục tiêu, bàn giao, DoD, rủi ro |
+| [plan/checklist.md](plan/checklist.md) | Việc cụ thể từng bước, trạng thái |
+| [ai/README.md](ai/README.md) | Bối cảnh, bản đồ repo, luật A1–A15, lệnh, cách lấy dữ liệu OSM |
+| [ai/conventions.md](ai/conventions.md) | Phụ thuộc giữa các gói, TypeScript, đặt tên, test |
+| [ai/workflow.md](ai/workflow.md) | Quy trình một đầu việc, mẫu ADR |
 
-## user/ — Người dùng
+## Tài liệu app SVG cũ (đóng băng)
 | File | Nội dung |
 |---|---|
-| [guide.md](user/guide.md) | Cách chạy, điều khiển, thêm/sửa nhà và preset, xử lý sự cố |
-
-## architecture/ — Kiến trúc
-| File | Nội dung |
-|---|---|
-| [overview.md](architecture/overview.md) | Các tầng, thư mục, module, build, tọa độ, xoay, thứ tự vẽ, cutaway, ánh sáng, test, hiệu năng |
-| [house-spec.md](architecture/house-spec.md) | Đặc tả dữ liệu một căn nhà, preset v1, luật hợp lệ |
-| [components.md](architecture/components.md) | Bộ phận nhà, đồ phố, landmark: hình học và trạng thái sáng |
-| [decisions.md](architecture/decisions.md) | Nhật ký quyết định (ADR), câu hỏi mở, nhật ký đo đạc |
-
-## plan/ — Kế hoạch
-| File | Nội dung |
-|---|---|
-| [roadmap.md](plan/roadmap.md) | Phase P0–P5: bàn giao, phụ thuộc, tiêu chí hoàn thành (DoD), rủi ro |
-| [checklist.md](plan/checklist.md) | Việc cụ thể từng phase, trạng thái hiện tại |
-
-## ai/ — Cho trợ lý AI
-| File | Nội dung |
-|---|---|
-| [README.md](ai/README.md) | Bối cảnh nhanh, thứ tự đọc, luật bắt buộc |
-| [conventions.md](ai/conventions.md) | Quy ước code, đặt tên, CSS, SVG |
-| [workflow.md](ai/workflow.md) | Quy trình một đầu việc: trước – trong – sau, cập nhật tài liệu |
-
-## Lộ trình đọc gợi ý
-- **Người mới**: `product/vision` → `plan/roadmap` → `plan/checklist`.
-- **Viết code**: thêm `architecture/overview` → `architecture/house-spec` → `ai/conventions`.
-- **Chỉ muốn thêm nhà**: `user/guide` → `architecture/house-spec`.
+| [vision](../apps/svg/docs/product/vision.md) · [requirements](../apps/svg/docs/product/requirements.md) · [glossary](../apps/svg/docs/product/glossary.md) | Tầm nhìn, yêu cầu, thuật ngữ |
+| [house-spec](../apps/svg/docs/architecture/house-spec.md) · [components](../apps/svg/docs/architecture/components.md) | Đặc tả nhà, bộ phận, landmark (cơ sở cho generator mới) |
+| [overview](../apps/svg/docs/architecture/overview.md) · [decisions](../apps/svg/docs/architecture/decisions.md) | Kiến trúc SVG, ADR-001…031 |
+| [guide](../apps/svg/docs/user/guide.md) | Hướng dẫn dùng app cũ |

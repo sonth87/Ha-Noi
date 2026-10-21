@@ -1,177 +1,59 @@
-# Nhật ký quyết định
+# Nhật ký quyết định (ADR)
 
-Mỗi quyết định ghi: **bối cảnh → quyết định → lý do → hệ quả**. Trạng thái: *Đã chốt*, *Mặc định (có thể đổi)*, *Thay thế bởi ADR-xxx*. Không xóa quyết định cũ; nếu đổi thì thêm ADR mới và đánh dấu cái cũ.
+ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architecture/decisions.md](../../apps/svg/docs/architecture/decisions.md) (đóng băng). Các ADR mới bắt đầu từ ADR-032 và ghi ở đây. Mẫu ADR: [workflow](../ai/workflow.md).
 
 ---
 
-### ADR-001 · Renderer SVG 2D (kernel iso-glow `cities`)
-- **Trạng thái**: Đã chốt (2026-10-20)
-- **Bối cảnh**: Có hai lựa chọn: SVG 2D (như `cities/`) hoặc three.js (chế độ 3D của skill). Ban đầu nghiêng về 3D vì cần góc phố thật và footprint méo. Sau đó phạm vi đổi: bản đồ thật để sau, MVP chấp nhận phố thẳng và nhà tương đối.
-- **Quyết định**: Dùng SVG 2D.
-- **Lý do**: đúng chất `cities`; chi tiết mặt tiền (cửa xếp, chuồng cọp, biển) vẽ gọn trên mặt phẳng; phố thẳng thì thứ tự vẽ quản lý được.
-- **Hệ quả**: Phải tự lo thứ tự vẽ (ADR-007) và mặt khuất (ADR-004). Nếu sau này cần bản đồ thật với góc xiên + hàng trăm căn, có thể phải làm bản 3D; dữ liệu giữ nguyên (ADR-002).
-
-### ADR-002 · Tách dữ liệu khỏi renderer
-- **Trạng thái**: Đã chốt
-- **Quyết định**: Nhà là *spec* dữ liệu thuần; renderer đọc spec và sinh SVG.
-- **Lý do**: thêm kiểu nhà bằng dữ liệu; test được; giữ đường lùi sang 3D.
-- **Hệ quả**: Cần `resolveSpec()` và luật hợp lệ; renderer không được chứa "số ma thuật" riêng cho từng preset.
-
-### ADR-003 · Đơn vị 1 m = 10
-- **Trạng thái**: Mặc định (có thể đổi)
-- **Lý do**: số tròn, dễ đọc, khớp tỉ lệ các figure `cities` hiện có (tầng ~26–33 đơn vị).
-- **Hệ quả**: Đổi sau chỉ cần sửa `M` trong `core/units.ts` nếu mọi kích thước đều dùng hằng số ở đó.
-
-### ADR-004 · Xử lý mặt khuất bằng xoay góc nhìn + cutaway
-- **Trạng thái**: Mặc định (có thể đổi) — làm cả hai
-- **Bối cảnh**: Isometric chỉ thấy mặt +x, +y. Dãy nhà phía gần người xem chỉ lộ lưng và che mặt đường.
-- **Quyết định**: (1) Xoay 4 hướng `Q`/`E`, dựng lại SVG từ dữ liệu; (2) cutaway `X` hạ dãy gần xuống tầng 1.
-- **Lý do**: Xoay cho phép xem mọi mặt tiền; cutaway cho cái nhìn tổng thể ngay mà không phải xoay.
-- **Hệ quả**: `facing` là trường bắt buộc; mọi bộ phận nhô ra tính trong hệ cục bộ của nhà; cần bản vẽ mặt lưng.
-
-### ADR-005 · Một file HTML, build bằng Python
-- **Trạng thái**: ~~Đã chốt~~ → **Thay thế bởi ADR-011** (2026-10-20)
-- **Lý do (lúc đó)**: Template iso-glow là một file tự chứa; chạy từ `file://`; không cần npm.
-- **Hệ quả (lúc đó)**: Mã nguồn chia nhiều file trong `src/`, `build.py` nối theo thứ tự cố định. Không dùng ES module.
-
-### ADR-006 · Namespace toàn cục `MC` + test bằng `node:vm`
-- **Trạng thái**: ~~Đã chốt~~ → **Thay thế bởi ADR-011, ADR-014** (2026-10-20)
-- **Lý do (lúc đó)**: Khớp ADR-005 (script thường); test chạy được bằng Node trơn, không package.
-
-### ADR-007 · Thứ tự vẽ bằng sắp xếp topo trên hộp bao
-- **Trạng thái**: Đã chốt
-- **Lý do**: Sắp theo `x+y` đơn giản bị sai khi khối khác kích thước, nhà nhô ra, nhà L. Sắp topo theo luật "nằm hẳn phía sau trên một trục" là đúng với hộp không giao nhau.
-- **Hệ quả**: O(n²); chấp nhận ở quy mô ~1000 item, có phương án chia lưới nếu chậm.
-
-### ADR-008 · Landmark nhận diện bằng hình khối, không logo
-- **Trạng thái**: Đã chốt (theo yêu cầu người dùng)
-- **Quyết định**: Tòa Thái Bình, Novotel vẽ đúng tỉ lệ và hình khối đặc trưng; biển đỉnh là khối sáng trơn; không chữ thương hiệu.
-- **Lý do**: Ưu tiên ý tưởng cốt lõi và thành phần cốt lõi; skill iso-glow cũng không vẽ logo thật.
-
-### ADR-009 · Tên trong code bằng tiếng Anh, tài liệu bằng tiếng Việt
-- **Trạng thái**: Đã chốt
-- **Lý do**: Code nhất quán, không dấu; tài liệu dễ đọc cho người làm. Bảng tra trong [glossary](../product/glossary.md).
-
-### ADR-010 · Palette `city`
-- **Trạng thái**: Mặc định (có thể đổi)
-- **Lý do**: Có sẵn Sodium (đèn đường), Tungsten, Neon… hợp cảnh phố đêm.
-
-### ADR-011 · Vite + TypeScript + React, pnpm
-- **Trạng thái**: Đã chốt (2026-10-20, theo lựa chọn của người dùng). Thay thế ADR-005, ADR-006.
-- **Bối cảnh**: Đã cân nhắc giữa JS thuần một file, Next.js, React, và Vite + TS không framework. Next.js bị loại vì dự án không cần render phía server, backend hay SEO.
-- **Quyết định**: Vite (dev server, build), TypeScript strict, React cho vỏ ứng dụng. Dùng pnpm vì người dùng đang dùng pnpm ở các project khác.
-- **Lý do**: Kiểu dữ liệu chặt cho `HouseSpec` và preset; hot reload khi chỉnh nhà; React hợp với phần giao diện sẽ lớn dần (catalog, bảng chỉnh tham số, nhiều cảnh); dễ deploy thành site tĩnh.
-- **Hệ quả**:
-  - Không còn chạy thẳng từ `file://` bằng bản build mặc định. Muốn gửi một file thì dùng `pnpm build:single` (vite-plugin-singlefile).
-  - Phải port nền tảng iso-glow sang TS/React (ADR-012).
-  - React không được quản lý từng phần tử SVG của cảnh (ADR-013).
-  - Version lúc scaffold (2026-10-20): **Vite 8.3.4**, **React 19.3.1**, **TypeScript 6.0.3**, **Vitest 5.0.5**, **ESLint 10.13** + typescript-eslint 8.72, `@vitejs/plugin-react` 6.1.2. Node 20.19.1, pnpm 10.21.
-  - TypeScript bị ghim ở nhánh **6.0** (`~6.0`): bản 7.0 (viết lại bằng Go) chưa được typescript-eslint hỗ trợ (yêu cầu `< 6.1`). Nâng lên khi typescript-eslint hỗ trợ.
-  - Font **DM Mono** đóng gói qua `@fontsource/dm-mono` thay vì tải từ Google Fonts như template gốc, để không phụ thuộc mạng lúc chạy (NFR-01).
-
-### ADR-012 · Port nền tảng iso-glow sang TypeScript, không nhúng template
-- **Trạng thái**: Đã chốt
-- **Bối cảnh**: Template `gallery.html` của skill là trang JS thuần có vòng đời figure riêng (`FIGS.push`, sidebar, picker). Nhúng nguyên trang đó vào React sẽ tạo ra hai hệ thống giao diện chồng nhau.
-- **Quyết định**: Port **phần nền** sang `src/iso/`: kernel (`P`, `D`, `plane`, `TOP/FRONT/SIDE`, `box`, `boxc`, `rect`, `path`, `slits`), `frame()`, token màu dark/light, CSS glow kit, filter `#glow/#soft/#bloom`, palette `city`/`ember`, logic theme. Vỏ ứng dụng (sidebar, picker, readout) viết lại bằng React. Không port `FIGS.push` hay vòng đời figure.
-- **Lý do**: Giữ nguyên thẩm mỹ và hình học; chỉ một hệ thống UI.
-- **Hệ quả**: Phải đọc các phần cần port trong `gallery.html` (một lần, ở P0). Giữ ghi công MIT (iso-figure của Tolga Cohce, iso-glow) trong `src/iso/LICENSE` và footer "Made with ISO-GLOW". Có snapshot test cho kernel để bảo đảm port khớp bản gốc.
-
-### ADR-013 · React lo vỏ, Controller lo cảnh SVG
-- **Trạng thái**: Đã chốt
-- **Bối cảnh**: Một cảnh có vài nghìn phần tử SVG, xe chạy theo từng frame, bật đèn hàng loạt. Nếu React quản lý từng phần tử thì mỗi lần thay đổi phải đối chiếu lại cả cây, chậm và khó đạt 50 fps.
-- **Quyết định**: `render/` sinh **chuỗi SVG** và gán qua `innerHTML`. Mỗi cảnh có một **SceneController** (TS thuần) giữ state mô phỏng, thao tác DOM trực tiếp (class, transform) và chạy vòng rAF. React chỉ đọc snapshot qua `useSyncExternalStore` để vẽ readout và panel.
-- **Lý do**: Hiệu năng; renderer test được bằng chuỗi; giữ đúng mô hình đã chứng minh hiệu quả của iso-glow.
-- **Hệ quả**: Trạng thái đèn phải áp lại sau mỗi lần dựng lại SVG (controller lo). Chuỗi SVG chỉ được chứa nội dung sinh từ dữ liệu của dự án, và chữ (như `signText`) phải được escape.
-
-### ADR-014 · Kiểm thử bằng Vitest, test đặt cạnh mã
-- **Trạng thái**: Đã chốt. Thay thế phần test của ADR-006.
-- **Quyết định**: Vitest cho unit test (`core/`) và snapshot test (`render/`). File `*.test.ts` đặt cạnh file nguồn. Chưa cần test component React ở MVP.
-- **Lý do**: Đi kèm Vite, cấu hình gần như bằng không, hỗ trợ TS sẵn.
-
-### ADR-015 · Luật phụ thuộc giữa các tầng, cưỡng chế bằng ESLint
-- **Trạng thái**: Đã chốt
-- **Quyết định**: `core/` không import gì ngoài chính nó; `render/` chỉ import `core/` và `iso/kernel`; chỉ `scenes/`, `ui/`, `hooks/`, `iso/*.tsx` được dùng React. Cưỡng chế bằng `no-restricted-imports` theo thư mục.
-- **Lý do**: Giữ dữ liệu và hình học độc lập framework, giữ đường lùi sang renderer khác (ADR-002).
-
-### ADR-016 · Vẽ tay một "nhà mẫu" trước khi viết generator
-- **Trạng thái**: Đã chốt (2026-10-20, người dùng đồng ý)
-- **Bối cảnh**: Khi duyệt P0, người dùng nhận xét căn nhà Hello "vuông vức kiểu tòa nhà, không phải nhà nhỏ". Nhà phố Hà Nội có chất nhờ tỷ lệ hẹp và sâu, mặt tiền mỗi tầng một kiểu, tường hồi trơn, và rất nhiều chi tiết lộn xộn (ban công, chuồng cọp, mái hiên, bồn nước, cục nóng, dây điện).
-- **Quyết định**: Chia P1 thành P1a (vẽ tay một căn nhà mẫu giữa 2 hàng xóm, người dùng duyệt ngoại hình) và P1b (bóc các bộ phận của nhà mẫu thành `render/parts/*` có tham số, rồi mới làm generator và catalog).
-- **Lý do**: Làm generator trước dễ ra nhiều kiểu nhà cùng sai chất. Chốt ngoại hình trên một căn rồi mới nhân lên thì rẻ hơn.
-- **Hệ quả**: `render/reference-house.ts` viết mỗi bộ phận thành một hàm để bóc ra dễ. Thứ tự vẽ tạm thời đặt tay (depthSort đến ở P1b). File này giữ lại làm hình tham chiếu sau khi có generator.
-
-### ADR-017 · Font Be Vietnam Pro cho chữ trên biển hiệu
-- **Trạng thái**: Đã chốt (2026-10-20, người dùng đồng ý). Đóng câu hỏi Q5.
-- **Bối cảnh**: DM Mono (font giao diện của iso-glow) không có bộ ký tự tiếng Việt đầy đủ; các chữ như Ở, Ả, Ắ, Ể hiện bằng font dự phòng, nên biển hiệu phải né dấu.
-- **Quyết định**: Giữ DM Mono cho giao diện và nhãn kỹ thuật. Thêm `@fontsource/be-vietnam-pro` (weight 700) chỉ cho chữ trên biển (`.sign-text`, `.bb-text`, biến CSS `--sign-font`).
-- **Lý do**: Có đủ tiếng Việt; là font sans đậm, gần với chữ biển hiệu thật; đóng gói sẵn nên không cần mạng lúc chạy (NFR-01).
-- **Hệ quả**: Thêm khoảng vài chục KB font (chỉ tải weight 700). Chữ biển giờ viết được đầy đủ tiếng Việt (CẮT TÓC, IN ẤN, CHO THUÊ BIỂN…).
-
-### ADR-018 · Hệ tọa độ cục bộ cho mỗi căn nhà
-- **Trạng thái**: Đã chốt (2026-10-20)
-- **Bối cảnh**: Mỗi căn có thể quay mặt tiền về 4 hướng, và góc nhìn xoay được. Nếu vẽ trực tiếp theo trục x/y thì mỗi bộ phận phải viết 4 lần.
-- **Quyết định**: Mọi bộ phận vẽ trong hệ cục bộ của căn nhà: `a` dọc mặt tiền (trái → phải nhìn từ phố), `b` từ tường sau ra phố, `z` lên. `core/view.ts → localFrame` ánh xạ sang thế giới cho từng hướng; `render/local.ts → LocalDraw` chỉ trả về mặt đứng khi nó là một trong hai mặt nhìn thấy (+x hoặc +y), với trục u luôn chạy trái → phải nhìn từ ngoài vào.
-- **Lý do**: Viết một lần, đúng cho mọi hướng; xoay góc nhìn chỉ là đổi `x, y, facing`. Có test xác nhận "xoay thế giới = tính lại căn nhà" cho mọi hướng × mọi góc.
-- **Hệ quả**: Mặt sau có cửa sổ nhỏ cùng id tầng, nên tầng nào cũng bật đèn được dù mặt tiền đang khuất. Mỗi bộ phận là một item có hộp bao riêng; **bất biến**: các item của cùng một căn không được lồng vào nhau (test với 300 nhà ngẫu nhiên × 4 hướng).
-
-### ADR-019 · Catalog xếp một hàng như dãy phố
-- **Trạng thái**: Đã chốt (2026-10-20). Thay lưới 3 × 2 trong roadmap.
-- **Lý do**: Ở lưới 2 hàng, nhà hàng trước (cao tới 20 m) che mặt tiền nhà hàng sau. Một hàng với mặt tiền thẳng một đường thì không căn nào che căn nào, và trông giống một dãy phố thật.
-- **Hệ quả**: Khi lên 12 preset (P2), hàng dài gấp đôi; nếu quá rộng thì chia 2 hàng cách xa nhau hoặc phân trang.
-
-### ADR-020 · Dãy phố: tường hồi cố định theo dữ liệu, khung phố xoay chung, xe theo làn
-- **Trạng thái**: Đã chốt (2026-10-20, P3)
-- **Bối cảnh**: Ở Catalog, cục nóng treo và biển lớn gắn vào tường hồi đang nhìn thấy (đổi theo góc xoay). Trên phố nhà sát nhau, cách đó làm chúng đâm sang nhà bên ở góc xoay khác.
+### ADR-032 · Monorepo: app SVG đóng băng, app 3D làm mới trên các gói chung
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "tách thành 2 app riêng và không động vào nữa. vẫn giữ script để chạy chứ không bỏ đi", rồi "ok")
+- **Bối cảnh**: Người dùng muốn xoay tự do nhiều góc. Kiến trúc SVG chỉ đúng với bước 90° (ADR-007, ADR-024 của app cũ). Trang thử three.js (ADR-031) cho thấy 3D giữ được phong cách iso-glow ở các khối lớn và mượt hơn. Muốn giữ app cũ nhưng tập trung làm cái mới, và về sau thành phố được **dựng tự động từ dữ liệu** (OSM + sửa tay), thêm phố, thêm nhà không phải sửa bộ vẽ.
 - **Quyết định**:
-  1. `sideEnd` + `sideClear` trong spec: bố cục phố chọn tường hồi có nhà bên thấp hơn và độ cao bắt đầu lộ ra (`peakZ` của nhà bên, tính cả phòng tum, vật trên mái, mái tôn). Bộ phận treo tường chỉ đặt trên `sideClear`.
-  2. Đồ phố (nền, đường, vỉa hè, cột, đèn, cây, dây, làn xe) vẽ trong **khung phố** — cả con phố coi như một "căn nhà" giả, xoay bằng `rotateSpec` + `localFrame` như nhà (ADR-018).
-  3. Xe máy gom theo **làn**: mỗi làn là một item (khối dọc cả phố, cao 1.7 m) nằm giữa hai vỉa hè, nên tự đứng sau dãy xa và trước dãy gần; controller trượt từng xe bằng `transform` theo thời gian, không cần sắp lại mỗi khung hình.
-  4. Dây điện đi **phía trước** cột (phía lòng đường), đèn đường ở **trên** dây, vũng sáng của đèn vẽ trong lớp nền — để không item nào lồng nhau.
-  5. Phóng to (con lăn), kéo (khi đã phóng), nhấp đúp để về khung gốc: chỉ đổi `viewBox`, không dựng lại SVG; mức phóng giữ nguyên khi xoay. Kéo không bị tính là click.
-  6. Cảnh phố mở ra ở chế độ **cutaway bật** (dãy gần chỉ còn tầng 1), vì nếu không dãy gần che hết lòng phố.
-- **Hệ quả**: Test: 3 bố cục × 4 góc × bật/tắt cutaway không có item lồng nhau, không cảnh báo thứ tự vẽ, dựng lại < 300 ms (NFR-04). Ở Catalog, cục nóng/biển lớn giờ cũng cố định bên `+a` (ẩn khi bên đó khuất).
+  - **pnpm workspace** với `apps/*` và `packages/*`.
+  - **`apps/svg`**: toàn bộ app cũ chuyển nguyên trạng (code, core cũ, test, tài liệu, trang thử 3D). **Đóng băng**: không sửa, không phụ thuộc gói mới (luật A14). Vẫn chạy bằng `pnpm dev:svg` / `test:svg` / `build:svg` ở gốc.
+  - **App mới `apps/city3d`** (three.js) có chế độ 2D = camera iso khóa 4 góc và chế độ 3D = xoay tự do; **một bộ vẽ duy nhất**, không duy trì song song hai bộ vẽ.
+  - **Các gói chung**: `core` (mô hình thành phố, generator nhà + preset, luật đồ phố, giao thông, rng; không biết OSM), `osm-data` (dữ liệu OSM thô + script tải, tách khỏi core theo yêu cầu người dùng), `osm-import` (OSM → mô hình thành phố), `theme` (token, bảng màu nhấn).
+  - App mới **kế thừa** từ app cũ: generator nhà có tham số và preset, 2 tòa tháp theo mặt bằng OSM, các nhà cơ bản cấu hình được; mở rộng thêm nhiều kiểu nhà để dựng hàng loạt.
+  - App mới có **cơ chế chất lượng**: mức chung (Thấp / Trung bình / Cao / Rất cao / Tùy chỉnh), mức chi tiết nhà L0–L3, mật độ xe, bật/tắt cột và dây điện, cây, đèn đêm và glow, các lớp nét, tầm nhìn xa (chia ô), LOD theo khoảng cách, tự hạ chất lượng khi fps thấp.
+  - Phạm vi dữ liệu ban đầu: **khu ngã tư hiện tại** (mỗi nhánh 130 m); làm tốt khu này rồi mới mở rộng.
+  - Tài liệu: `docs/` ở gốc cho monorepo và app mới; tài liệu app cũ ở `apps/svg/docs/` (đóng băng). Nhật ký ADR tiếp tục từ ADR-032 ở đây.
+- **Lý do**: Một bộ vẽ thì không bao giờ lệch giữa 2D và 3D; 3D bỏ được cả nhóm lỗi thứ tự vẽ của SVG và mượt hơn. Giữ app cũ tách biệt và đóng băng thì nó chắc chắn không hỏng khi core mới thay đổi. OSM là dữ liệu có giấy phép riêng (ODbL) và có nhịp cập nhật riêng, nên tách thành gói riêng khỏi core.
+- **Hệ quả**: Core mới là bản viết lại/tổng quát hóa của core cũ (phố là polyline cong được, nhà là đa giác bất kỳ), app cũ giữ bản core cũ của riêng nó. Lệnh chạy và đường dẫn đổi (xem `docs/ai/README.md` §4). Test kernel của app cũ phải sửa đường dẫn tới skill (`../../../../.claude/…`) vì thư mục sâu thêm 2 cấp; đây là chỗ sửa duy nhất trong code app cũ.
 
-### ADR-021 · Xưởng nhà, nhà rộng có nửa hầm, tầm với ra vỉa hè
-- **Trạng thái**: Đã chốt (2026-10-21, theo yêu cầu người dùng)
+### ADR-033 · Mô hình thành phố tính bằng mét; giữ trang thử 3D cũ để đối chiếu
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "Q1: theo mét. Q2: giữ lại để đối chiếu, để tránh phải tự viết lại, sau đó mới xóa")
 - **Quyết định**:
-  1. **Xưởng nhà** (`scenes/workshop/`): một căn trên một lô, bảng điều khiển React bên phải chỉnh mọi trường của spec. Bảng đọc snapshot của controller (`input`, `spec` đã gộp, `issues`) và ghi qua `patch()` / `patchFloor()` / `setPreset()` / `random()`; hiển thị giá trị đã gộp, mọi thay đổi là một ghi đè. Chép JSON để thêm preset. Cảnh khai báo bảng qua `SceneDef.Panel`. Đây là FR-31 (vốn ở P2) làm sớm.
-  2. **Nửa hầm** (`basement`): tầng 1 nâng lên đúng chiều cao hầm. Renderer coi như tầng 1 cao hơn (`groundH + basement`) để mọi bộ phận đo từ đỉnh tầng 1 tự đúng; riêng mặt tiền tầng 1 vẽ thêm dải ga-ra phía dưới, và có item bậc tam cấp. `topZ` / `peakZ` cộng cả hầm.
-  3. **Nhà rộng**: `randomHouse` cho 12% nhà rộng 8–12 m (60% trong đó có nửa hầm); mặt tiền tầng trên chia gian ~4 m. Lô ở Catalog rộng theo nhà (`lotWidth`).
-  4. **Tầm với ra vỉa hè** `REACH = 1.9 m`: đồ của nhà không vượt quá, để không đụng cây, cột, dây (lỗi do test phát hiện khi nhà có hầm + chuồng cọp đẩy biển dọc ra xa).
-  5. **Xe máy** vẽ dáng xe tay ga nhìn ngang (bánh xe, thân, yếm, yên, tay lái, người lái) thay cho 2 khối hộp.
-- **Hệ quả**: Phố có ít căn hơn khi gặp nhà rộng (test chấp nhận 16–26 căn/dãy). Biển dọc của nhà mẫu ngắn lại 1.2 → 0.95 m.
+  - Mọi gói mới tính bằng **mét**: `x` đông (dọc trục chính của khu), `y` nam, `z` lên. Đơn vị 1 m = 10 chỉ còn trong `apps/svg`. Generator nhà chuyển sang core thì đổi hết số về mét (kể cả các hằng chiều cao vật trên mái trong `peakZ`, khoảng random trong `randomHouse`).
+  - Trang thử 3D (`apps/svg/lab-3d.html`, ADR-031) **giữ lại** trong app cũ để đối chiếu khi viết `city3d`; chỉ xóa (cùng three.js của app cũ) khi `city3d` đã làm được những gì trang thử làm. Việc xóa này là ngoại lệ được người dùng cho phép với luật A14.
+- **Lý do**: OSM vốn là mét, three.js không quan tâm đơn vị; một đơn vị thật thì số trong dữ liệu, tài liệu và sửa tay đọc ra ngay. Trang thử có sẵn cách dựng nét, bloom, camera; giữ để chép lại thay vì viết lại.
 
-### ADR-022 · Thêm lựa chọn; cắt khối dài theo nhà; bộ xếp chỗ trên mái
-- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "chưa có nhiều option")
+### ADR-034 · Cách tổ chức các gói chung
+- **Trạng thái**: Đã chốt (2026-10-21, M2)
 - **Quyết định**:
-  1. Thêm 14 lựa chọn: `wall`, `bays`, `goods`, `stairHut`, `sideAd`, `sideWindows`; theo tầng `canopy` (ô văng), `laundry`; giá trị mới cho `ground` (`iron`), `awning` (`metal`), `window` (`arch`, `french`, `glass`), `balcony` (`solid`), `roof` (`metal1`, `tile`), `roofItems` (`ac`, `flag`). Tất cả có trong Xưởng nhà và trong nhà ngẫu nhiên.
-  2. **Khối dài gây vòng che khuất.** Test phát hiện vòng lặp thứ tự vẽ (A trước B trước … trước A) khi thêm đồ bày vỉa hè. Nguyên nhân: vỉa hè, dây điện và làn xe là khối dài 100 m, vừa đứng trước vừa đứng sau các thứ dọc phố. Cách chữa: vỉa hè cắt **đúng ranh giới từng căn / ngõ**; dây điện cắt **tại tâm từng cột** (mỗi khoảng có xung riêng); làn xe cắt đoạn 5 m, xe máy được chuyển sang nhóm của đoạn kế tiếp khi chạy qua.
-  3. **Bộ xếp chỗ trên mái** (`roof-items.ts`): mỗi vật thử vị trí quen (giữ nguyên hình các preset cũ), rồi quét tìm chỗ trống; tính cả tum thang, chậu cây và khoảng dưới mái tôn.
-  4. Một vòng che khuất thật (cột cờ – tường chắn – cột đỡ – mái tôn) không có thứ tự vẽ nào thỏa → luật: không cột cờ khi mái tôn che cả mái.
-- **Hệ quả**: Test phố tăng lên 6 bố cục × 4 góc × bật/tắt cutaway; tất cả sạch. Snapshot các preset cũ không đổi.
+  - Các gói trong `packages/*` **xuất thẳng mã TypeScript** (`exports: "./src/index.ts"`), không có bước build: Vite và Vitest đọc thẳng qua liên kết workspace. Mỗi gói có `typecheck`, `lint`, `test` riêng; gốc chạy tất cả bằng `pnpm -r`.
+  - `tsconfig.base.json` ở gốc, các gói kế thừa. **ESLint ở gốc** cho mọi gói mới, cưỡng chế luật phụ thuộc ở conventions §1 (core không import gói nào khác, không React/three, không DOM, không `Math.random`/`Date.now`; osm-import chỉ dùng core và osm-data; osm-data và theme không phụ thuộc gói nào). `apps/svg` giữ config ESLint riêng (đóng băng).
+  - Dữ liệu OSM (`.osm.json`) được import trực tiếp như module JSON (kiểm kiểu mất khoảng 4 s với file 1,4 MB, chấp nhận được). `osm-data` được phép import `../data/*` (dữ liệu nằm cạnh `src/`); các chỗ khác vẫn cấm `../`.
+  - Script tải dữ liệu viết bằng `.mjs` (Node 20 chưa chạy thẳng TypeScript); danh sách khu ở `data/areas.json` để cả script và mã TS cùng đọc.
+  - **Cấu hình và sửa tay của từng khu** nằm trong `osm-import` (`src/area-<id>.ts`), không nằm cạnh dữ liệu thô: `osm-data` chỉ có những gì máy chủ OSM trả về. Cơ chế sửa tay (`applyOverrides`, khóa theo `source`) nằm trong core vì nó không phụ thuộc OSM.
+  - Mô hình thành phố đặt **nhà sinh** lên cạnh mặt tiền thật của tòa nhà; `HouseSpec` mới bỏ `x`, `y`, `facing`.
+  - Nút giao chỉ tính nơi **từ 3 nhánh đường xe chạy** gặp nhau; lối đi bộ không tạo nút giao.
+- **Hệ quả**: Đổi một gói là app mới thấy ngay (không phải build lại). Sửa tay nào không còn khớp dữ liệu (sau khi tải lại) thì test báo ngay.
 
-### ADR-023 · Ô tô trên phố; làn 2.8 m chia 3 vệt
-- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "đường phố thêm ô tô")
-- **Quyết định**: Mỗi làn rộng 2.8 m, 3 vệt: xe máy ở 2 mép, ô tô ở giữa. Mỗi đoạn làn (5 m) có 3 nhóm SVG theo vệt, xếp xa → gần theo góc nhìn, nên xe máy ở mép gần luôn vẽ đè lên ô tô và ở mép xa thì nằm sau; khi xe sang đoạn kế tiếp, controller gắn nó vào nhóm cùng vệt. Xe được vẽ sẵn ở vị trí xuất phát (khung hình tĩnh và khung đầu đã đúng chỗ).
-- **Bài học**: nhóm xe từng dùng class `lane`, trùng class vạch kẻ đường có `stroke-dasharray`; thuộc tính này **kế thừa** xuống mọi nét con nên xe máy (và ô tô) bị vẽ nét đứt. Đổi thành `traffic-lane`. Phát hiện nhờ tự soát hình.
-- **Hệ quả**: Cutaway cắt luôn cây vỉa hè của dãy gần (để nhìn thấy lòng phố).
+### ADR-035 · Bộ vẽ của app 3D
+- **Trạng thái**: Đã chốt (2026-10-21, M3)
+- **Quyết định**:
+  - `apps/city3d`: Vite + React (vỏ) + three.js 0.170.0 (cùng bản với trang thử). Ba tầng `render/` (mô hình → geometry, thuần), `view/` (`CityView`, trình duyệt), `ui/` (React), luật phụ thuộc bằng ESLint gốc. Cổng dev 5190.
+  - **Gom hình theo loại mặt**: cả khu là vài mesh lớn thay vì mỗi tòa một mesh (rủi ro R4). Đèn từng tầng bằng **màu theo đỉnh** trong một mesh cửa sổ duy nhất. Click → tam giác → tòa (bảng đoạn tam giác) → tầng (theo độ cao).
+  - **Vật liệu không chiếu sáng**, màu chỉ từ token CSS (A8); ba lớp nét như skill iso-glow 3D: vỏ viền bóng (đẩy ra 1 px theo pháp tuyến trơn, mặt sau), nét cạnh (`EdgesGeometry` 20°), nét chi tiết (viền cửa). Bloom chỉ ở theme tối.
+  - **Camera trực giao**, 2D = isometric thật khóa 4 góc (trùng app cũ), 3D = OrbitControls; chuyển giữa hai chế độ có chuyển động 450 ms.
+  - Vỉa hè tự cắt khi cắt ngang lòng đường khác; góc giao giữa hai lòng đường tạm để hở (M5).
+  - Mô hình dựng tay chỉ thêm chi tiết (cột ăng-ten Việt Tower), hình khối vẫn từ dữ liệu.
+- **Hệ quả**: Thêm tòa / đường vào dữ liệu là app vẽ ngay. Bundle 2 MB (370 KB gzip), phần lớn là dữ liệu OSM và three.js; tách gói tải sau nếu cần.
 
 ---
 
 ## Câu hỏi mở
 
-| # | Câu hỏi | Cần trước | Mặc định nếu chưa có trả lời |
+| # | Câu hỏi | Khi nào cần | Đang dùng |
 |---|---|---|---|
-| Q1 | Có ảnh nhà ống quanh khu làm mẫu preset không? | P2 | Dựng theo nhà phố Hà Nội phổ biến |
-| Q2 | Ảnh tòa Thái Bình, Novotel, 2 vườn hoa (toàn cảnh + tầng trệt)? | P4 | Phác khối theo [components](components.md) mục C |
-| Q6 | "Tòa Thái Bình" có đúng là Việt Tower (Parkson Thái Hà cũ, 18 tầng) không? Có ảnh 2 tòa nhà và 2 vườn hoa không (công cụ web của AI chỉ đọc được chữ, không xem được ảnh)? | P4 bước 3 | Dựng khối theo số tầng tìm được |
-| Q3 | Mỗi landmark / vườn hoa ở góc nào? | P4 | Bố trí tạm: 2 tòa phía Tây Sơn bắc, 2 vườn phía nam (đổi được trong `layout.js`) |
-| Q4 | Có muốn âm thanh không? | P5 | Không |
-| ~~Q5~~ | ~~Font có tiếng Việt cho biển hiệu~~ → **Đã chốt: ADR-017** | — | — |
-
-## Nhật ký đo đạc
-*(Điền ở P3–P4: fps, thời gian dựng lại, kích thước file.)*
-
-| Ngày | Figure | Số căn | fps | Dựng lại (ms) | Kích thước | Ghi chú |
-|---|---|---|---|---|---|---|
-| | | | | | | |
+| ~~Q1~~ | ~~Mét hay 1 m = 10?~~ | — | Đã chốt: mét (ADR-033) |
+| ~~Q2~~ | ~~Gỡ trang thử 3D cũ khỏi app SVG?~~ | — | Đã chốt: giữ để đối chiếu, xóa khi `city3d` thay được (ADR-033) |

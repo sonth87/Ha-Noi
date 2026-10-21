@@ -1,36 +1,35 @@
 {
   "name": "my-city",
   "private": true,
-  "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc --noEmit && vite build",
-    "preview": "vite preview",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "dev:svg": "pnpm --filter @my-city/svg dev",
+    "build:svg": "pnpm --filter @my-city/svg build",
+    "preview:svg": "pnpm --filter @my-city/svg preview",
+    "test:svg": "pnpm --filter @my-city/svg test",
+    "lint:svg": "pnpm --filter @my-city/svg lint",
+    "typecheck:svg": "pnpm --filter @my-city/svg typecheck",
+    "dev:3d": "pnpm --filter @my-city/city3d dev",
+    "build:3d": "pnpm --filter @my-city/city3d build",
+    "preview:3d": "pnpm --filter @my-city/city3d preview",
+    "test:3d": "pnpm --filter @my-city/city3d test",
+    "lint:3d": "pnpm --filter @my-city/city3d lint",
+    "typecheck:3d": "pnpm --filter @my-city/city3d typecheck",
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "fetch:osm": "pnpm --filter @my-city/osm-data fetch"
   },
-  "dependencies": {
-    "@fontsource/be-vietnam-pro": "^5.3.0",
-    "@fontsource/dm-mono": "^5.3.0",
-    "react": "^19.3.1",
-    "react-dom": "^19.3.1"
-  },
+  "packageManager": "pnpm@10.21.0",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.5",
-    "@types/react": "^19.3.0",
-    "@types/react-dom": "^19.3.0",
-    "@vitejs/plugin-react": "^6.1.2",
     "eslint": "^10.13.0",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.13.0",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.0",
-    "vite": "^8.3.4",
     "vitest": "^5.0.5"
   }
 }

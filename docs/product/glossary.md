@@ -1,5 +1,7 @@
 # Thuật ngữ
 
+Chuyển từ app SVG cũ (ADR-032); thêm thuật ngữ của mô hình thành phố và dữ liệu OSM ở cuối. Thuật ngữ chỉ có ở app cũ được đánh dấu *(app cũ)*.
+
 | Tiếng Việt | Trong code | Giải thích |
 |---|---|---|
 | Nhà ống | `tube` (tên preset) | Nhà mặt tiền hẹp (3–5 m), sâu, nhiều tầng — kiểu nhà phổ biến nhất phố Hà Nội |
@@ -10,7 +12,7 @@
 | Chuồng cọp | `balcony: 'cage'` | Lồng sắt cơi nới ra ngoài ban công/cửa sổ |
 | Lan can | `balcony: 'rail' \| 'solid'` | Rào ban công (song sắt / xây đặc) |
 | Đua ra | `overhang` | Tầng 2 trở lên nhô ra phía vỉa hè |
-| Tầng lùi | `setbackTop` | Tầng trên cùng lùi vào so với mặt tiền |
+| Phòng tum, khoảng lùi | `topRoom`, `topSetback` | Phòng trên mái bằng, lùi vào so với mặt tiền |
 | Biển hộp đèn | `signs: [{ type: 'facade' }]` | Biển ngang trên cửa, sáng về đêm |
 | Biển dọc / biển tròn chìa ra | `'projecting-vertical'` / `'projecting-round'` | Biển gắn vuông góc mặt tiền, chìa ra phố |
 | Biển đứng chữ A | `'standee'` | Biển đặt trên vỉa hè trước quán |
@@ -39,15 +41,34 @@
 | Cây trước nhà | `trees`, `treeSize` | Cây ở mép vỉa hè trước mỗi nhà: trái / phải / hai bên, nhỏ / vừa / to |
 | Ban công ngắn | `balconyWidth: 'short'` | Ban công chỉ rộng hơn ô cửa một chút |
 | Loại cây chậu | `plantKind` | Bụi lá, kim tiền, trúc, cau cảnh, hoa giấy, bụi hoa |
-| Tường hồi | `side wall` (`back.ts`) | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
+| Tường hồi | `side wall` | Tường bên của nhà, lộ ra khi cạnh nhà thấp hơn |
 | Mặt tiền | `facade` | Mặt nhà quay ra phố |
 | Vỉa hè / bó vỉa | `sidewalk` / `curb` | |
 | Cột điện / dây điện | `pole` / `wires` | |
 | Vườn hoa | `garden` | Công viên nhỏ ở góc ngã tư |
-| Cắt lớp | `cutaway` | Chế độ hạ dãy nhà gần người xem xuống tầng 1 |
-| Thứ tự vẽ | `depth sort` / painter's order | Vẽ xa trước, gần sau, vì kernel không có z-buffer |
-| Kernel | `K` | Bộ hàm chiếu isometric của iso-glow (`P`, `D`, `FRONT`, `SIDE`, `TOP`, `box`…) |
+| Cắt lớp | `cutaway` | *(app cũ)* Chế độ hạ dãy nhà gần người xem xuống tầng 1 |
+| Thứ tự vẽ | `depth sort` / painter's order | *(app cũ)* Vẽ xa trước, gần sau, vì kernel SVG không có z-buffer |
+| Kernel | `K` | *(app cũ)* Bộ hàm chiếu isometric của iso-glow (`P`, `D`, `FRONT`, `SIDE`, `TOP`, `box`…) |
 | Spec nhà | `HouseSpec` | Object dữ liệu mô tả một căn nhà ([house-spec](../architecture/house-spec.md)) |
 | Preset | `PRESETS[id]` | Bộ tham số đặt tên, dùng lại |
 | Seed | `seed` | Số khởi tạo random — cùng seed thì cùng kết quả |
 | Lived-in | biến thể `off/dim/hi` | Cửa sổ sáng không đều cho giống có người ở |
+| Mô hình thành phố | `City` | Mọi thứ bộ vẽ cần để vẽ một khu ([city-model](../architecture/city-model.md)) |
+| Đoạn đường | `Street` | Một đường (hoặc một đoạn đường bị cắt ở biên khu): đường tim, bề rộng, làn, vỉa hè, cao độ |
+| Đường tim | `path` | Đường chạy giữa lòng đường |
+| Lòng đường | carriageway, `width` | Phần xe chạy, không gồm vỉa hè |
+| Đường đôi | divided road | Hai chiều xe tách bằng dải phân cách; OSM vẽ thành hai đường một chiều |
+| Nhánh rẽ | `link` | Đường nối giữa hai đường chính |
+| Ngõ, ngách, hẻm | `alley` | Đường nhỏ rẽ từ phố vào khu dân cư |
+| Cầu vượt | bridge, `layer`, `profile` | Đường trên cao; `profile` là cao độ dọc đường tim |
+| Nút giao | `Junction` | Nơi từ 3 nhánh đường xe chạy gặp nhau |
+| Tòa nhà / phần nhà | `Building` / `BuildingPart` | Một tòa; các khối của nó, mỗi khối có số tầng và chiều cao tầng riêng |
+| Mặt bằng | footprint | Hình tòa nhà nhìn từ trên xuống |
+| Cạnh mặt tiền | `front` | Cạnh mặt bằng quay ra phố |
+| Nhà sinh | `house` (`houseFor`) | Nhà do generator dựng trên mặt bằng thật |
+| Mô hình dựng tay | `model` | Công trình đặc biệt có chi tiết riêng (Việt Tower, Novotel…) |
+| Vùng | `Area` | Vườn hoa, cỏ, mặt nước, sân thể thao, đảo giao thông, mặt bằng cầu |
+| Sửa tay | override | Chỉnh dữ liệu theo id nguồn, không mất khi tải lại OSM |
+| Nguồn | `source` | Id gốc của phần tử, ví dụ `osm:way/136257265` |
+| Bản trích OSM | extract | File dữ liệu OSM thô của một khu (`osm-data`) |
+| Khu | area | Một vùng bản đồ được nhập, có gốc toạ độ, góc xoay và biên riêng |
