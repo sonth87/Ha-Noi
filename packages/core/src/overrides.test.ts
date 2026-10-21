@@ -12,7 +12,7 @@ const tower: Building = {
   id: 'b2', kind: 'other', footprint: [[0, 0], [20, 0], [20, 20], [0, 20]], levelsFrom: 'osm', front: 0, source: 'osm:way/2',
   parts: [{ id: 'p', footprint: [[0, 0], [20, 0], [20, 20], [0, 20]], z0: 0, floors: [3, 3], facade: 'wall', roof: 'flat', source: 'osm:way/3' }],
 };
-const city: City = { id: 'c', name: 'c', bounds: { x0: 0, y0: 0, x1: 1, y1: 1 }, streets: [], junctions: [], buildings: [tube, tower], areas: [], features: [], attribution: [] };
+const city: City = { id: 'c', name: 'c', bounds: { x0: 0, y0: 0, x1: 1, y1: 1 }, region: [{ x0: 0, y0: 0, x1: 1, y1: 1 }], streets: [], junctions: [], buildings: [tube, tower], areas: [], features: [], rails: [], stations: [], attribution: [] };
 
 describe('applyOverrides', () => {
   it('changes storeys and keeps the generated house in step', () => {

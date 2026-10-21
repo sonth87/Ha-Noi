@@ -2,7 +2,7 @@
 
 Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật file này **mỗi khi** một việc đổi trạng thái. Checklist của app SVG cũ (P0–P5) ở [apps/svg/docs/plan/checklist.md](../../apps/svg/docs/plan/checklist.md) (đóng băng).
 
-**Bước hiện tại: M3 xong (người dùng duyệt 2026-10-21). Chờ người dùng cho sang M4.**
+**Bước hiện tại: M5 — đường và nút giao, đồ phố, giao thông, chất lượng đầy đủ; code xong, chờ người dùng xem trên `pnpm dev:3d`. (M4 chưa commit.)**
 
 ## Chốt phương án (2026-10-21)
 - [x] Thử three.js trên trang riêng (ADR-031, `apps/svg/lab-3d.html`)
@@ -47,16 +47,50 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Người dùng xem và duyệt ("trông ổn đấy", 2026-10-21); chưa có số fps cụ thể
 
 ## M4 · Nhà 3D nhiều mức chi tiết
-- [ ] (chia việc khi bắt đầu M4)
+- [x] Commit M1–M3 lên nhánh `monorepo-3d` (3 commit)
+- [x] Core: 5 preset mới, `presetPool` theo loại / bề rộng / số tầng, `houseStoreys` (chiều cao tầng nhà sinh khớp spec, kể cả nửa hầm)
+- [x] Sửa lỗi đổi đơn vị trong `peakZ` (nóc mái tôn `0,3 × w`), có test
+- [x] `render/house3d.ts`: nhà sinh ở L2 (tầng trệt + cửa, nửa hầm, mái hiên, biển ngang, 8 kiểu cửa, 4 kiểu ban công, đua ra, mái bằng + tường chắn, phòng tum, tum thang, mái tôn, mái dốc, cửa nhỏ các tường lộ) và L3 (biển chìa, standee, cột xoắn, biển lớn, biển hai bên, ô văng, cục nóng, chậu cây, quần áo, đồ trên mái)
+- [x] `render/buildings.ts`: 4 mức L0–L3; mặt tiền theo loại cho khối lớn (ban công, mặt kính cửa hàng, dải kính văn phòng; L3 cục nóng, bồn nước mái)
+- [x] `render/city.ts`: lớp nền + ô 64 m (26 ô), dựng theo mức khi cần
+- [x] `CityView`: dựng mọi ô ở mức thấp ngay, nâng dần mỗi khung một ô (gần tâm trước); mức chi tiết theo px/m; đèn tầng vẽ lại cho mọi lớp đã dựng
+- [x] Bảng chất lượng: chi tiết nhà L0–L3, tự giảm khi thu nhỏ; sửa `withOption` không trở về mức có tên
+- [x] Test: mọi preset ở L2/L3, mức càng cao càng nhiều chi tiết, ô, chất lượng (city3d 12 test); số đo ở ADR-036
+- [x] Tài liệu: ADR-036, [city3d](../architecture/city3d.md), [house-spec](../architecture/house-spec.md), [hướng dẫn](../user/guide.md)
+- [x] Người dùng xem ("trông ổn đấy", 2026-10-21); góp ý đường gấp khúc → sửa ở M5
 
-## M5 · Đồ phố, giao thông, tầm nhìn, chất lượng đầy đủ
-- [ ] (chia việc khi bắt đầu M5)
+## M5 · Đường, đồ phố, giao thông, tầm nhìn, chất lượng đầy đủ
+- [x] Core `network.ts`: nối đoạn thành đường, làm tròn góc (giữ nút), nút + nhánh, tuyến (cùng tên), lộ trình (qua chỗ đổi tên)
+- [x] Vẽ đường theo mạng: dải liền, mặt nút giao + cung bó vỉa, vỉa hè vòng góc, vỉa hè / vạch dừng đúng chỗ (sửa "gấp khúc" người dùng thấy)
+- [x] Sửa regex nhận ngõ (`\b` không khớp chữ có dấu), có test
+- [x] Core `furniture.ts`: cột điện + dây (vắt qua ngõ), cột đèn / đèn treo, cây, cột đèn tín hiệu theo hướng; không trong nút, không trên lòng đường
+- [x] Core `traffic.ts` viết lại theo làn của lộ trình: vạch dừng theo cụm nút, nhóm pha x/y, bám đuôi, quyết lúc vàng, cầu chỉ ô tô
+- [x] App 3D: đồ phố theo ô và tách lớp; đèn đường + xung sáng dây + đèn xe ban đêm; đèn tín hiệu theo pha; xe instancing, mờ ở đầu / cuối làn
+- [x] Chất lượng: mật độ xe, cột và dây điện, cây (3 kiểu), tầm nhìn xa, tự hạ mức khi fps thấp; chân trang: số xe, màu đèn + giây còn lại
+- [x] Test: mạng đường, đồ phố, làn xe (bản đồ thật); mô hình xe; đồ phố / xe 3D; tự hạ mức (core 36, osm-import 18, city3d 17)
+- [x] Tài liệu: ADR-037, [city-model](../architecture/city-model.md) §7–8, [city3d](../architecture/city3d.md), [hướng dẫn](../user/guide.md)
+- [x] Người dùng xem; góp ý: xe xấu, đèn cửa nên không đều, nhà mặt đường chính là cửa hàng, trước nhà là vỉa hè → ADR-038
+- [x] Xe dựng lại theo iso-glow `07-intersection` + app cũ: thân bo góc, bánh, cabin kính, đèn pha / hậu, hộp đèn taxi, vệt đèn pha ban đêm; xe máy tay ga có người lái; nét cạnh động (~1 ms/khung)
+- [x] Cửa sổ sáng không đều (rất sáng / sáng / mờ / tắt theo seed)
+- [x] Nhà sinh mặt đường chính luôn là cửa hàng có biển; khối nhà lớn mặt đường chính có mặt kính + dải biển tầng 1
+- [x] Sân trước lát nối ra vỉa hè
+- [x] Góp ý: thêm bảng đèn, độ sáng chưa giống iso-glow → ADR-039: mục Đèn (đèn nhà tự động / bật / tắt + số tầng sáng 0–100%, đèn xe tự động / bật / tắt, độ glow), viền cửa sáng `--accent-hi`, cửa mờ 45% trên nền tường, ngưỡng / cường độ bloom
+- [x] Góp ý (ảnh so với iso-glow): quá sáng, 20% mà Novotel sáng trưng / Thái Bình tối → ADR-040: tỉ lệ theo từng ô cửa (rải đều, có test), dải kính chia ô, glow nhẹ
+- [x] Góp ý: chưa thấy đèn đường → ADR-041: bóng đèn sáng 5 mặt, vùng sáng trên mặt đường, mục Đèn đường (tự động mặc định)
+- [x] Yêu cầu: đèn vườn hoa, kéo dài hết phố Thái Hà, metro 2A trên cao + ga Thái Hà (theo thực tế + đồ ga của `05-metro.js`) → ADR-042: vùng nhiều hình chữ nhật, tải nhiều hộp (thử lại, dự phòng Overpass), `Rail` / `Station`, lịch chạy tàu, cầu cạn, ga, tàu 4 toa, đèn vườn; tăng tốc lăng trụ (L3 ×4), lưới tìm nhà bên, xe thưa hơn, tầm nhìn mặc định 400 m
+- [x] Góp ý: điều khiển 3D khó → ADR-043: kiểu bản đồ (kéo trái di chuyển, phải / Shift xoay, cuộn vào con trỏ, WASD, R/F, +/−, nhấp đúp bay tới, nút Ngã tư / Ga Thái Hà, giữ trong vùng)
+- [ ] Người dùng xem lại: điều khiển mới, phố Thái Hà, metro và ga (gửi ảnh ga thật nếu có — Q3), đèn vườn, đèn đường, độ sáng; fps ở mức Cao
 
 ## Backlog
-- Mở rộng khu vực ngoài ngã tư (sau M5)
+- Mở rộng khu vực ra các phố khác (đã có phố Thái Hà, ADR-042)
 - Nguồn dữ liệu bổ sung ngoài OSM (ảnh vệ tinh, ảnh người dùng chụp); kiểm bản quyền trước
 - Gỡ trang thử 3D khỏi app SVG khi `city3d` thay được (ADR-033)
 - Giữ vòng trong (sân trong) của multipolygon thay vì bỏ
 - Làm sạch mặt bằng nhà nhỏ chồng / hở nhau (R5)
-- Góc giao giữa hai lòng đường còn hở nền (M5)
 - Tách dữ liệu OSM khỏi bundle chính (tải sau) nếu trang mở chậm
+- Chữ trên biển hiệu, giấy dán, quảng cáo sơn tường (cần texture chữ)
+- Dựng ô ở lúc rảnh (requestIdleCallback) để bớt khựng khi nâng chi tiết
+- Xe rẽ ở nút giao (hiện chỉ đi thẳng theo lộ trình); xe ở ngõ
+- Vạch sang đường, mũi tên làn rẽ; số đếm ngược trên đèn tín hiệu (cần texture chữ)
+- Cây trước nhà theo `trees` của nhà sinh (hiện cây theo luật vỉa hè)
+- Vùng sáng dưới đèn đường ban đêm

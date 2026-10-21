@@ -18,8 +18,8 @@ export interface OsmExtract {
 export interface OsmArea {
   id: string;
   name: string;
-  /** lon_min, lat_min, lon_max, lat_max */
-  bbox: readonly [number, number, number, number];
+  /** the boxes downloaded and merged, each lon_min, lat_min, lon_max, lat_max */
+  bboxes: readonly (readonly [number, number, number, number])[];
   file: string;
   /** YYYY-MM-DD */
   fetched: string;

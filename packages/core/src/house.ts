@@ -115,6 +115,10 @@ function clampInt(v: number, lo: number, hi: number, field: string, warn: (f: st
   return Math.min(hi, Math.max(lo, n));
 }
 
+/** storey heights of a house, bottom to top: the ground floor (over its semi-basement) and the upper floors */
+export const houseStoreys = (s: Pick<HouseSpec, 'basement' | 'groundH' | 'floors' | 'floorH'>): number[] =>
+  [s.basement + s.groundH, ...Array.from({ length: s.floors }, () => s.floorH)];
+
 /** Top of the house's solid mass (upper floors; roof room and roof items not included). */
 export const topZ = (s: Pick<HouseSpec, 'groundH' | 'floors' | 'floorH' | 'basement'>) => s.basement + s.groundH + s.floors * s.floorH;
 
@@ -127,8 +131,9 @@ export function peakZ(s: HouseSpec): number {
   if (s.roof !== 'flat') return top + 1.4 + (s.roofItems.includes('antenna') ? 2.6 : 0);
   const base = s.topRoom ? top + s.floorH - 0.2 : top;
   let z = Math.max(top + s.parapet, top + 1.5 /* pots, laundry */, base, s.stairHut ? top + 2.4 : 0, ...s.roofItems.map(i => base + (ITEM_H[i] ?? 0)));
-  if (s.roofShelter === 'terrace') z = Math.max(z, top + s.floorH + 0.1 + s.w * 0.03);
-  if (s.roofShelter === 'full') z = Math.max(z, top + 2.4 + s.w * 0.03);
+  // the shelter's ridge rises 0.3 × the frontage above its eaves (old app: round(w · 0.3) in 1 m = 10 units)
+  if (s.roofShelter === 'terrace') z = Math.max(z, top + s.floorH + 0.1 + s.w * 0.3);
+  if (s.roofShelter === 'full') z = Math.max(z, top + 2.4 + s.w * 0.3);
   return z;
 }
 
@@ -149,9 +154,9 @@ const WINDOWS: WindowKind[] = ['tall', 'tall', 'louver', 'glass-doors', 'pair', 
 const BALCONIES: BalconyKind[] = ['rail', 'rail', 'solid', 'glass', 'cage', 'none'];
 
 /** A seeded random house. `base.w`, `base.d` and `base.floors`, when given, are kept (a house built
-    on a real footprint); everything else is picked. */
-export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}): HouseInput {
-  const preset = r.pick(PRESET_IDS);
+    on a real footprint); everything else is picked, the preset from `pool` (default: all). */
+export function randomHouse(r: Rng, id: string, base: Partial<HouseInput> = {}, pool: readonly PresetId[] = PRESET_IDS): HouseInput {
+  const preset = r.pick(pool.length ? pool : PRESET_IDS);
   const p = PRESETS[preset] as Partial<HouseInput>;
   const pitched = base.floors !== undefined ? base.floors === 0 && r.chance(0.7) : p.roof === 'metal2' || r.chance(0.12);
   const roof = pitched ? r.pick(['metal2', 'metal2', 'metal1', 'tile'] as const) : 'flat';

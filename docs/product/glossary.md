@@ -72,3 +72,22 @@ Chuyển từ app SVG cũ (ADR-032); thêm thuật ngữ của mô hình thành 
 | Nguồn | `source` | Id gốc của phần tử, ví dụ `osm:way/136257265` |
 | Bản trích OSM | extract | File dữ liệu OSM thô của một khu (`osm-data`) |
 | Khu | area | Một vùng bản đồ được nhập, có gốc toạ độ, góc xoay và biên riêng |
+| Mức chi tiết | `Detail` L0–L3 | L0 khối · L1 cửa sổ · L2 nhà đủ hình · L3 mọi chi tiết nhỏ |
+| Ô | tile | Hình vuông 64 m; tòa nhà trong một ô được dựng và hiện cùng nhau |
+| Lớp nền | base layer | Mặt đất, đường, vùng, cầu: dựng một lần |
+| Mạng đường | `roadNetwork` | Đường đã nối và làm tròn, nút giao và nhánh, tuyến, lộ trình |
+| Nhánh (của nút giao) | `Arm` | Một đường rời khỏi nút giao |
+| Tuyến | run | Một phố đi thẳng qua các nút giao, cùng tên |
+| Lộ trình | route | Như tuyến nhưng qua được chỗ đổi tên (Thái Hà → Chùa Bộc); xe chạy theo đây |
+| Cung bó vỉa | kerb fillet | Góc vỉa hè lượn tròn ở nút giao |
+| Đồ phố | furniture, `Prop` | Cột điện, cột đèn, cây, cột đèn tín hiệu |
+| Xung sáng | pulse | Chấm sáng chạy dọc dây điện ban đêm |
+| Tầm nhìn xa | view distance | Chỉ vẽ nhà, đồ phố, xe trong bán kính quanh tâm nhìn |
+| Sân trước | forecourt | Khoảng giữa mặt tiền và đường, lát như vỉa hè |
+| Vệt đèn pha | beam | Vùng sáng trên mặt đường trước đầu xe ban đêm |
+| Mặt đường chính | `on: 'main'` | Nhà có mặt tiền nhìn ra đường chính: luôn là cửa hàng |
+| Vùng (của khu) | `region` | Hợp các hình chữ nhật mà mô hình bao phủ |
+| Đường ray / cầu cạn | `Rail`, viaduct | Một đường ray; cầu cạn chở đường sắt trên cao |
+| Ga / sân ga | `Station`, platform | Nhà ga; chỗ đứng chờ cạnh đường ray |
+| Lịch chạy tàu | `Track.plan`, `trainAt` | Vị trí tàu theo thời gian: chạy, phanh, đỗ, rời ga, vắng |
+| Đèn vườn | park lamp | Cột đèn thấp quả cầu trong vườn hoa |

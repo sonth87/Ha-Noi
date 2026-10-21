@@ -94,6 +94,17 @@ describe('the crossroads from OpenStreetMap', () => {
     expect(city.attribution).toEqual(['© OpenStreetMap contributors']);
   });
 
+  it('opens a shop in every generated house on a main street', () => {
+    const main = city.buildings.filter(b => b.house && b.house.input.shop === true && ['fold', 'roll', 'glass'].includes(b.house.spec.ground));
+    expect(main.length).toBeGreaterThan(20);
+  });
+
+  it('names alleys as alleys, accented names too', () => {
+    const ngo = city.streets.filter(s => s.name?.startsWith('Ngõ '));
+    expect(ngo.length).toBeGreaterThan(5);
+    expect(ngo.every(s => s.kind === 'alley')).toBe(true);
+  });
+
   it('applies every hand correction and leaves no part without a building', () => {
     expect(report.unusedOverrides).toEqual([]);
     expect(report.orphanParts).toEqual([]);

@@ -1,9 +1,10 @@
 /* What OSM tags mean for the city model (docs/architecture/osm-import.md §3). One table per kind of
    thing; anything not listed is left out (and counted in the import report). */
-import type { AreaKind, BuildingKind, FeatureKind, StreetKind } from '@my-city/core';
+import type { AreaKind, BuildingKind, FeatureKind, RailKind, StreetKind } from '@my-city/core';
 import type { OsmTags } from '@my-city/osm-data';
 
-const ALLEY = /^(ngõ|ngách|hẻm|kiệt)\b/i;
+// not \b: JavaScript's word boundary does not count accented letters, so "Ngõ 2" would not match
+const ALLEY = /^(ngõ|ngách|hẻm|kiệt)(\s|$)/iu;
 
 export function streetKind(t: OsmTags): StreetKind | undefined {
   const h = t.highway;
@@ -58,6 +59,16 @@ export function featureKind(t: OsmTags): FeatureKind | undefined {
   if (t.highway === 'street_lamp') return 'street-lamp';
   if (t.power === 'pole') return 'power-pole';
   return undefined;
+}
+
+/** a running line: metro (subway, light rail, monorail), rail or tram; not one being built or gone */
+export function railKind(t: OsmTags): RailKind | undefined {
+  switch (t.railway) {
+    case 'subway': case 'light_rail': case 'monorail': return 'metro';
+    case 'rail': case 'narrow_gauge': return 'rail';
+    case 'tram': return 'tram';
+    default: return undefined;
+  }
 }
 
 /** storeys from building:levels, else from height at 3.2 m a storey */

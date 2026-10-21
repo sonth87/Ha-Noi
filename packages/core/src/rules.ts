@@ -6,6 +6,7 @@ import { area, closestOnPath, dist, minRect, type Vec2 } from './geom';
 import type { BuildingKind, StreetKind } from './city';
 import type { HouseInput, HouseSpec } from './house-types';
 import { LIMITS, randomHouse, resolveHouse } from './house';
+import type { PresetId } from './presets';
 import { hash, rng } from './rng';
 
 // ---------- streets ----------
@@ -43,6 +44,12 @@ export function bridgeProfile(kind: StreetKind, length: number, layer: number): 
   if (kind === 'footway' || kind === 'steps') return [[0, FOOTBRIDGE_H], [length, FOOTBRIDGE_H]];
   const H = DECK_H * Math.max(1, layer), ramp = Math.min(length / 3, 100);
   return [[0, 0], [ramp, H], [length - ramp, H], [length, 0]];
+}
+
+/** height of the rail top (m): Line 2A's viaduct runs about 12.5 m above the street (ADR-042) */
+export function railHeight(kind: 'metro' | 'rail' | 'tram', elevated: boolean): number {
+  if (!elevated) return 0;
+  return kind === 'metro' ? 12.5 : 7;
 }
 
 // ---------- buildings ----------
@@ -114,6 +121,19 @@ export function frontEdge(ring: readonly Vec2[], streets: readonly { path: reado
   return best.s < 40 ? best.i : near.s < Infinity ? near.i : 0;
 }
 
+/** the street the front edge looks at (nearest along its outward side), and how far its kerb is */
+export function frontStreet<S extends { path: readonly Vec2[]; width: number }>(ring: readonly Vec2[], front: number, streets: readonly S[]): { street: S; gap: number } | undefined {
+  const p = ring[front]!, q = ring[(front + 1) % ring.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], n = edgeNormal(ring, front);
+  let best: { street: S; gap: number } | undefined;
+  for (const st of streets) {
+    const c = closestOnPath(mid, st.path), v: Vec2 = [c.at[0] - mid[0], c.at[1] - mid[1]];
+    if ((v[0] * n[0] + v[1] * n[1]) / (c.d || 1) <= 0.5) continue;
+    const gap = c.d - st.width / 2;
+    if (!best || gap < best.gap) best = { street: st, gap };
+  }
+  return best;
+}
+
 /** frontage length and depth behind edge `front` */
 export function frontage(ring: readonly Vec2[], front: number): { w: number; d: number } {
   const p = ring[front]!, q = ring[(front + 1) % ring.length]!, n = edgeNormal(ring, front);
@@ -122,15 +142,42 @@ export function frontage(ring: readonly Vec2[], front: number): { w: number; d: 
   return { w: dist(p, q), d };
 }
 
-/** kinds the house generator builds the facade of */
+/** kinds the house generator builds the facade of, and the presets each picks from (by width) */
 export const HOUSE_KINDS: readonly BuildingKind[] = ['tube-house', 'house', 'villa'];
 
+/** where a house stands: on a main street (always a shop), or on an alley or small street */
+export type Frontage = 'main' | 'minor';
+
+/** presets that are homes, not shops: never on a main street */
+const HOMES: readonly PresetId[] = ['3f-tank', 'cap4-tile', 'biet-thu', 'tap-the'];
+
+export function presetPool(kind: BuildingKind, w: number, levels: number, on: Frontage = 'minor'): PresetId[] {
+  let pool: PresetId[];
+  if (kind === 'villa') pool = ['biet-thu'];
+  else if (kind === 'tube-house' || w < 6) pool = levels <= 1 ? ['cap4-metal', 'cap4-tile'] : ['nha-mau', '2f-balcony', '3f-tank', 'tube-5f-cage', 'tube-6f-photo', 'tube-7f-narrow'];
+  else if (levels <= 1) pool = ['cap4-tile', 'cap4-metal'];
+  else pool = levels >= 5 ? ['tap-the', 'wide-plain', 'nha-pho-rong'] : ['wide-plain', 'wide-basement', 'nha-pho-rong', 'biet-thu', 'tap-the'];
+  if (on === 'main') { const shops = pool.filter(p => !HOMES.includes(p)); if (shops.length) pool = shops; }
+  return pool;
+}
+
 /** The generated house for a small building: seeded by its id, on its real frontage and depth,
-    with its storeys. None when the frontage or depth is outside what the generator builds. */
-export function houseFor(id: string, kind: BuildingKind, levels: number, w: number, d: number, extra: Partial<HouseInput> = {}): { input: HouseInput; spec: HouseSpec } | undefined {
+    with its storeys. On a main street it is always an open shop with a shop door (folding, rolling
+    or glass) and a sign or two more; on an alley it is mostly a home, a shop one time in three.
+    None when the frontage or depth is outside what the generator builds. */
+export function houseFor(id: string, kind: BuildingKind, levels: number, w: number, d: number, extra: Partial<HouseInput> = {}, on: Frontage = 'minor'): { input: HouseInput; spec: HouseSpec } | undefined {
   if (!HOUSE_KINDS.includes(kind) || w < LIMITS.minW || w > LIMITS.maxW || d < LIMITS.minD) return undefined;
   const floors = Math.min(LIMITS.maxFloors, Math.max(0, levels - 1));
-  const input: HouseInput = { ...randomHouse(rng(hash(`house:${id}`)), id, { w: round(w), d: round(Math.min(d, 30)), floors }), ...extra };
+  const r = rng(hash(`house:${id}`)), base = randomHouse(r, id, { w: round(w), d: round(Math.min(d, 30)), floors }, presetPool(kind, w, levels, on));
+  const where: Partial<HouseInput> = on === 'main'
+    ? {
+      shop: true,
+      ground: r.pick(['fold', 'roll', 'glass', 'fold'] as const),
+      awning: base.awning === 'none' && r.chance(0.5) ? 'fabric' : base.awning,
+      signs: [...(base.signs ?? []), ...(floors > 0 && w >= 3.4 && r.chance(0.3) ? [{ type: 'side-panels' as const }] : []), ...(r.chance(0.4) ? [{ type: 'standee' as const, text: 'MENU' }] : [])],
+    }
+    : { shop: r.chance(0.33) };
+  const input: HouseInput = { ...base, ...where, ...extra };
   return { input, spec: resolveHouse(input).spec };
 }
 

@@ -18,7 +18,8 @@ Mọi bảng dưới đây **phải khớp** với code (luật A3).
 | Trường | Ý nghĩa |
 |---|---|
 | `id`, `name` | Mã khu (trùng mã trong `osm-data`) và tên hiển thị |
-| `bounds` | Hình chữ nhật mô hình bao phủ (m) |
+| `bounds` | Hộp bao của vùng mô hình (m) |
+| `region` | Vùng mô hình: hợp các hình chữ nhật (ADR-042) |
 | `streets`, `junctions`, `buildings`, `areas`, `features` | Các danh sách, **sắp theo `id`** để cùng dữ liệu luôn ra cùng thứ tự |
 | `attribution` | Dòng ghi nguồn app phải hiện (A15), ví dụ `© OpenStreetMap contributors` |
 
@@ -116,3 +117,25 @@ Lớp sửa tay đặt lên dữ liệu đã nhập, **khóa theo `source`** c�
 ## 6. Đọc mô hình
 
 `partTop(p)`, `floorZ(p, i)`, `buildingHeight(b)`, `buildingLevels(b)`, `floorId(b, n)`, `streetZ(st, s)`. Hình học 2D chung ở `geom.ts`: `normalizeRing`, `signedArea`, `area`, `centroid`, `bbox`, `pointInRing`, `polylineLength`, `closestOnSegment`, `closestOnPath`, `minRect`, `hull`, `clipPath`, `clipRing`, `inRect`.
+
+## 7. Mạng đường (`network.ts`, ADR-037)
+
+Suy ra từ `City` mỗi lần cần (không lưu, có tính quyết định): `roadNetwork(city) → { roads, nodes, runs, routes }`.
+
+| Kiểu | Là gì |
+|---|---|
+| `Road` | Các đoạn `Street` nối tiếp nhau (đúng 2 đoạn gặp nhau ở chỗ nối, không phải nút giao, cùng loại / tên / bề rộng ±0,5 m / chiều / lớp) thành một đường; đoạn hai chiều được quay lại nếu cần. Góc cua làm tròn (Chaikin 2 lượt) giữa đầu đường và nút giao, các điểm đó giữ nguyên. Profile cầu được nối và kéo giãn theo |
+| `NetNode` | Nút giao với các `Arm` xếp theo góc: đường, vị trí dọc đường, chiều (+1 dọc / −1 ngược đường), hướng ra, nửa bề rộng, vỉa hè trái / phải (nhìn ra xa nút) |
+| `Run` (tuyến) | Một phố đi thẳng qua các nút (cùng tên và loại, lệch < 35°, đường một chiều chỉ nối xuôi): `path`, các `parts` (đường, đoạn [from, to], có bị quay không), các nút đi qua. Cho đồ phố |
+| route (lộ trình) | Như tuyến nhưng qua được chỗ đổi tên, lệch < 20°. Cho giao thông |
+
+## 8. Đồ phố và giao thông (`furniture.ts`, `traffic.ts`, ADR-037)
+
+- `streetFurniture(city) → { props, wires }`: `Prop` = `pole` · `lamp` · `lamp-on-pole` · `tree` · `signal`, có vị trí, cao độ chân, hướng, cỡ (cây), nhóm pha (đèn tín hiệu); `Wire` nối hai cột, số sợi. Luật ở ADR-037.
+- `trafficLanes(net)`: `Lane` = đường tâm làn theo chiều xe chạy, độ dài, cao độ, vạch dừng (`s`, nhóm `x`/`y`), chỉ ô tô (cầu), bề rộng. `spawnTraffic(lanes, density)`, `stepTraffic(vehicles, lanes, signals, prev, dt)`, `laneAt(lane, s)`, `signalsAt(t)` (chu kỳ 39 s: xanh 14 / 11 s, vàng 3 s, đỏ toàn phần 4 s).
+
+## 9. Đường sắt và ga (ADR-042)
+
+- `Rail`: `kind` (`metro` · `rail` · `tram`), `path` (đường tâm một đường ray), `elevated` (trên cầu cạn / cầu), `height` (đỉnh ray, m: metro trên cao 12,5 theo `railHeight`), `source`.
+- `Station`: `name`, `kind`, `at`, `platforms` (mặt bằng các sân ga), `source`.
+- `metroTracks(city)` → `Track`: đường ray metro, các điểm dừng (đầu tàu dừng sao cho giữa tàu ở giữa ga), lịch chạy một chu kỳ; `trainAt(track, t)` → vị trí đầu tàu (null khi vắng) và pha (`run` / `brake` / `stop` / `pull` / `away`). `METRO`: 4 toa × 19 m, 13 m/s, 1 m/s², đỗ 25 s, cách 70 s.

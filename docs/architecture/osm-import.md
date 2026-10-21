@@ -12,7 +12,7 @@ Dùng: `loadCity('nga-tu-thai-ha') → { city, report }`.
 
 ## 1. Tải lại dữ liệu
 
-`pnpm fetch:osm nga-tu-thai-ha` ở gốc. Script gọi `https://api.openstreetmap.org/api/0.6/map.json?bbox=…` theo bbox trong `areas.json`, ghi đè file và cập nhật ngày tải. Bản đang dùng: tải ngày 2026-10-21, 4.320 node, 964 way, 82 relation, 1,4 MB. Giấy phép ODbL, ghi "© OpenStreetMap contributors" (A15).
+`pnpm fetch:osm nga-tu-thai-ha` ở gốc. Script gọi `https://api.openstreetmap.org/api/0.6/map.json?bbox=…` cho **từng hộp** trong `bboxes` của `areas.json` (API giới hạn diện tích / số node mỗi lần), gộp lại bỏ trùng, thử lại tối đa 4 lần khi bị ngắt kết nối, và nếu API vẫn hỏng thì lấy cùng các hộp từ Overpass. Bản đang dùng: tải ngày 2026-10-21, 4 hộp, 9.635 node, 2.097 way, 118 relation, 2,8 MB. Giấy phép ODbL, ghi "© OpenStreetMap contributors" (A15).
 
 Bẫy: curl qua HTTP/2 từng bị ngắt (lỗi 35) với phản hồi lớn; `--http1.1` thì được. Script dùng `fetch` của Node (HTTP/1.1) nên không gặp. **Không** gửi thông tin cá nhân (email…) trong User-Agent.
 
@@ -20,7 +20,7 @@ Bẫy: curl qua HTTP/2 từng bị ngắt (lỗi 35) với phản hồi lớn; `
 
 lat/lon → mét: `e = Δlon · 111320 · cos(lat₀)`, `n = Δlat · 110574` (phép chiếu chữ nhật đều quanh gốc, đủ chính xác cho vài trăm mét). Rồi xoay theo `bearing` (độ, ngược chiều kim đồng hồ từ hướng đông) để trục chính của khu nằm theo `+x`: `x = e·cosθ + n·sinθ`, `y = e·sinθ − n·cosθ` (`y` hướng nam).
 
-Khu ngã tư: gốc `21.0092471, 105.8243958` (giữa nút giao), `bearing = 62.5°` (hướng Tây Sơn), biên ±160 m.
+Khu ngã tư: gốc `21.0092471, 105.8243958` (giữa nút giao), `bearing = 62.5°` (hướng Tây Sơn). **Vùng** là hợp các hình chữ nhật (`region`, ADR-042): ngã tư ±160 m, hai dải dọc phố Thái Hà tới cuối phố, một dải dọc tuyến metro 2A quanh ga Thái Hà. Đường cắt theo vùng bằng `clipPathTo`; vùng (công viên…) cắt theo hình chữ nhật chứa tâm của nó.
 
 ## 3. Tag OSM → mô hình (`tags.ts`)
 
@@ -34,6 +34,8 @@ Khu ngã tư: gốc `21.0092471, 105.8243958` (giữa nút giao), `bearing = 62.
 | Gợi ý kiểu | `building=house/apartments/office/commercial/hotel/school/kiosk/…`, `tourism=hotel` | `kind` (xem city-model §4) |
 | Vùng | `leisure=park` · `leisure=garden`, `landuse=grass` · `leisure=pitch` · `leisure=swimming_pool` · `natural=water` · `area:highway=traffic_island` · `place=square` · `man_made=bridge` | `park` · `grass` · `pitch` · `pool` · `water` · `traffic-island` · `plaza` · `bridge` (cắt theo biên) |
 | Điểm | `highway=traffic_signals` · `crossing` · `bus_stop` · `natural=tree` · `highway=street_lamp` · `power=pole` | `Feature` |
+| Đường sắt | `railway=subway/light_rail/monorail` · `rail/narrow_gauge` · `tram` (không lấy `construction`); `bridge` hoặc `layer` > 0 = trên cao | `Rail` (`metro` · `rail` · `tram`), cắt theo vùng |
+| Ga | node `railway=station` / `public_transport=station` (`station=subway` → metro) trong vùng hoặc sát đường ray; `railway=platform` trong 120 m | `Station` + sân ga |
 
 Không có trong bảng thì bỏ qua. Vòng trong của multipolygon (sân trong) hiện bị bỏ và được đếm trong báo cáo.
 
@@ -59,11 +61,11 @@ Mọi danh sách sắp theo id, nên **cùng dữ liệu luôn ra cùng thành p
 | `droppedHoles` | Số vòng trong bị bỏ |
 | `noStreet` | Tòa có mặt tiền không gần đường nào |
 
-Khu ngã tư (2026-10-21): 142 đoạn đường, 63 nút giao (4 có đèn), 129 tòa (81 nhà ống, 32 nhà, 92 tòa có nhà sinh), 134 phần nhà, 37 vùng (2 vườn hoa có tên: Thủy Lợi, Công Đoàn; hồ Tẩm Nguyệt), 20 điểm; 0 sửa tay thừa, 0 phần nhà lạc, 18 vòng trong bị bỏ.
+Khu (2026-10-21, gồm cả phố Thái Hà và metro): 434 đoạn đường, 261 nút giao, 612 tòa (403 nhà sinh), 619 phần nhà, 44 vùng, 106 điểm, 2 đường ray metro, 1 ga (Thái Hà, 2 sân ga); 0 sửa tay thừa, 0 phần nhà lạc. Nhập mất khoảng 0,25–0,4 s.
 
 ## 6. Thêm một khu mới
 
-1. Thêm khu vào `packages/osm-data/data/areas.json` (bbox rộng hơn biên khu một chút để đủ tòa nhà hai bên phố), rồi `pnpm fetch:osm <id>`.
+1. Thêm khu vào `packages/osm-data/data/areas.json` (`bboxes`: một hoặc nhiều hộp, rộng hơn vùng một chút để đủ tòa nhà hai bên phố), rồi `pnpm fetch:osm <id>`.
 2. Thêm file vào `EXTRACTS` trong `packages/osm-data/src/index.ts`.
-3. Tạo `packages/osm-import/src/area-<id>.ts`: gốc, `bearing`, biên, sửa tay; đăng ký trong `AREA_CONFIGS`.
+3. Tạo `packages/osm-import/src/area-<id>.ts`: gốc, `bearing`, vùng (`region`: các hình chữ nhật), sửa tay; đăng ký trong `AREA_CONFIGS`.
 4. Chạy test, đọc báo cáo, đối chiếu với ảnh hoặc f4map (A13).

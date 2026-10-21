@@ -79,6 +79,44 @@ export const PRESETS = {
     window: 'tall', balcony: 'rail', balconyFloors: 'even', plants: 2,
     roofItems: ['tank-h', 'tank-v', 'antenna'], roofShelter: 'full', sideAC: 1, trees: 'left', treeSize: 'large',
   },
+  // ---- M4: more kinds, to build whole streets from data ----
+  'tube-7f-narrow': {
+    label: 'Nhà ống 7 tầng hẹp · thuốc',
+    w: 3.2, d: 16, floors: 6,
+    ground: 'roll', shopName: 'THUỐC', signs: [{ type: 'facade' }, { type: 'projecting-round', text: '+' }],
+    window: 'tall', balcony: 'rail', balconyFloors: 'even', plants: 1,
+    topRoom: true, roofItems: ['tank-v', 'solar'], sideAC: 2,
+  },
+  'cap4-tile': {
+    label: 'Cấp 4 mái ngói',
+    w: 5, d: 12, floors: 0,
+    ground: 'wood', shop: false, signs: [], stickers: 0, roof: 'tile', sideAC: 0, trees: 'left', treeSize: 'medium',
+  },
+  /** an old villa: wide, two storeys over the ground, French windows, a tiled roof */
+  'biet-thu': {
+    label: 'Biệt thự',
+    w: 10, d: 14, floors: 2,
+    ground: 'glass', shop: false, signs: [], stickers: 0, wall: 'stone-base',
+    window: 'french', balcony: 'glass', plants: 2,
+    roof: 'tile', sideAC: 1, trees: 'both', treeSize: 'large',
+  },
+  /** khu tập thể: a wide old block, cages on every floor, no shop */
+  'tap-the': {
+    label: 'Khu tập thể',
+    w: 12, d: 12, floors: 4,
+    ground: 'iron', shop: false, signs: [], stickers: 3, wall: 'paint-old',
+    window: 'pair', balcony: 'cage', plants: 1,
+    upper: [{ laundry: true }, { ac: true }, { laundry: true }, {}],
+    roofItems: ['tank-v', 'tank-h', 'antenna'], roofShelter: 'full', sideAC: 2,
+  },
+  /** a three-bay shop house with glass balconies */
+  'nha-pho-rong': {
+    label: 'Nhà phố 3 gian · thời trang',
+    w: 9, d: 15, floors: 3,
+    ground: 'glass', shopName: 'THỜI TRANG', signs: [{ type: 'facade' }, { type: 'projecting-vertical', text: 'SHOP' }],
+    window: 'glass-doors', balcony: 'glass', plants: 2,
+    topRoom: true, roofShelter: 'terrace', roofItems: ['tank-h', 'solar'], sideAC: 1, trees: 'right', treeSize: 'medium',
+  },
 } as const satisfies Record<string, Preset>;
 
 export type PresetId = keyof typeof PRESETS;

@@ -1,16 +1,24 @@
 /* Ngã tư Thái Hà – Tây Sơn – Chùa Bộc: how to import it, and the hand corrections on top of OSM.
    Origin: the middle of the junction under the Tây Sơn flyover. Bearing: Tây Sơn runs 62.5°
    counter-clockwise from east (toward Ô Chợ Dừa), so it lies along +x and Thái Hà goes north (−y).
-   Bounds: ±160 m, i.e. the four 130 m arms plus the junction (ADR-032). */
+   Region: the crossroads (±160 m: the four 130 m arms and the junction, ADR-032), all of Phố Thái Hà,
+   and Line 2A's viaduct round Thái Hà station (ADR-042). */
 import type { AreaConfig } from './import';
 
 const rep = (h: number, n: number) => Array.from({ length: n }, () => h);
 
 export const NGA_TU_THAI_HA: AreaConfig = {
   area: 'nga-tu-thai-ha',
-  name: 'Ngã tư Thái Hà – Tây Sơn – Chùa Bộc',
+  name: 'Ngã tư Thái Hà – Tây Sơn – Chùa Bộc và phố Thái Hà',
   frame: { origin: [21.0092471, 105.8243958], bearing: 62.5 },
-  bounds: { x0: -160, y0: -160, x1: 160, y1: 160 },
+  // the crossroads (±160 m), Phố Thái Hà to its northern end in two strips (it drifts east going
+  // north), and a strip along metro Line 2A round Thái Hà station (ADR-042)
+  region: [
+    { x0: -160, y0: -160, x1: 160, y1: 160 },
+    { x0: -110, y0: -560, x1: 240, y1: -160 },
+    { x0: 20, y0: -1250, x1: 330, y1: -560 },
+    { x0: -250, y0: -770, x1: 600, y1: -600 },
+  ],
   overrides: {
     buildings: {
       // Tòa Thái Bình (Việt Tower, 1 Thái Hà; ADR-030 of the old app): 18 storeys. A commercial

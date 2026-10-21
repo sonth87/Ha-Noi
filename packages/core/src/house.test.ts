@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, LIMITS, peakZ, randomHouse, resolveHouse, sceneIssues, topZ } from './house';
+import { DEFAULTS, LIMITS, houseStoreys, peakZ, randomHouse, resolveHouse, sceneIssues, topZ } from './house';
 import { PRESET_IDS } from './presets';
 import { hash, rng } from './rng';
 
@@ -67,6 +67,17 @@ describe('heights in metres', () => {
     expect(topZ(spec)).toBeCloseTo(3.8 + 3 * 3.2, 6);
     expect(peakZ(spec)).toBeGreaterThan(topZ(spec));
     expect(peakZ(spec) - topZ(spec)).toBeLessThan(4);
+  });
+});
+
+describe('roof shelter height', () => {
+  it('raises the ridge 0.3 × the frontage above the eaves, as in the old app', () => {
+    const { spec } = resolveHouse({ id: 'sh', w: 4, floors: 3, roofShelter: 'full', roofItems: [] });
+    expect(peakZ(spec)).toBeCloseTo(topZ(spec) + 2.4 + 1.2, 6);
+  });
+  it('stores a raised ground floor in the storey heights', () => {
+    const { spec } = resolveHouse({ id: 'bs', floors: 2, basement: 1.4 });
+    expect(houseStoreys(spec)).toEqual([1.4 + 3.8, 3.2, 3.2]);
   });
 });
 

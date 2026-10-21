@@ -49,6 +49,77 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
   - Mô hình dựng tay chỉ thêm chi tiết (cột ăng-ten Việt Tower), hình khối vẫn từ dữ liệu.
 - **Hệ quả**: Thêm tòa / đường vào dữ liệu là app vẽ ngay. Bundle 2 MB (370 KB gzip), phần lớn là dữ liệu OSM và three.js; tách gói tải sau nếu cần.
 
+### ADR-036 · Mức chi tiết và ô (M4)
+- **Trạng thái**: Đã chốt (2026-10-21, M4)
+- **Quyết định**:
+  - **4 mức chi tiết** cho tòa nhà: L0 khối · L1 thêm cửa sổ · L2 nhà sinh dựng đủ theo generator (tầng trệt, mái hiên, biển, 8 kiểu cửa, 4 kiểu ban công, phần đua ra, mái bằng / dốc, phòng tum, mái tôn), các khối lớn có mặt tiền theo loại (ban công chung cư và trường, mặt kính cửa hàng tầng 1, dải kính văn phòng) · L3 thêm mọi chi tiết nhỏ (biển chìa, standee, cột xoắn, biển lớn tường hồi, ô văng, cục nóng, chậu cây, quần áo phơi, đồ trên mái, bồn nước mái khối lớn).
+  - Camera trực giao **không có "xa"**: vật chỉ nhỏ đi khi thu nhỏ. Nên mức chi tiết tự động tính theo **số pixel cho 1 m trên màn hình**: < 2 px → L1, 2–4,5 px → L2, ≥ 4,5 px → L3, không vượt mức tối đa người dùng chọn. Tắt "tự giảm" thì luôn dùng mức tối đa.
+  - Tòa nhà chia theo **ô 64 m** (khu ngã tư: 26 ô). Mỗi ô dựng riêng theo từng mức, chỉ khi cần, rồi giữ lại. Khi mở trang: mọi ô dựng ngay ở L0–L1 (khoảng 30 ms cả khu); sau đó mỗi khung hình dựng thêm một ô ở mức đang cần, ô gần tâm nhìn trước. Ô cũng là nền cho tầm nhìn xa ở M5.
+  - Mức chất lượng: Thấp = tối đa L1, Trung bình = L2, Cao = L3 (đều tự giảm), Rất cao = luôn L3.
+  - Core: thêm 5 preset (`tube-7f-narrow`, `cap4-tile`, `biet-thu`, `tap-the`, `nha-pho-rong`) và nhóm preset theo loại công trình / bề rộng / số tầng (`presetPool`); chiều cao tầng của nhà sinh lấy từ spec (`houseStoreys`, kể cả nửa hầm).
+- **Sửa kèm**: (1) `peakZ` đổi đơn vị sai ở M2: độ cao nóc mái tôn là `0,3 × w` m, không phải `0,03 × w`. (2) `withOption` so cả trường `level` nên không bao giờ trở về mức có tên; nay chỉ so các tùy chọn.
+- **Số đo** (Node, khu ngã tư): nền 85 ms / 13.000 tam giác; L1 19 ms; L2 165 ms / 31.000 tam giác; L3 260 ms / 52.000 tam giác, 89.000 nét; ô nặng nhất 32 ms ở L3.
+
+### ADR-037 · Mạng đường, đồ phố, giao thông (M5)
+- **Trạng thái**: Đã chốt (2026-10-21, M5)
+- **Bối cảnh**: Người dùng thấy đường "gấp khúc": mỗi đoạn OSM dựng riêng nên chỗ nối có khe; góc cua theo đúng vài điểm OSM; nút giao hở góc; vỉa hè cắt vụn. Đồ phố gần như không có trong OSM khu này. Mô hình giao thông cũ chỉ biết 2 phố thẳng.
+- **Quyết định**:
+  - **Mạng đường** (`core/network.ts`) suy ra từ `City`, không lưu: các đoạn nối tiếp nhau (đúng 2 đoạn gặp nhau, cùng loại, tên, bề rộng, chiều, lớp) nối thành **đường**; góc cua làm tròn bằng Chaikin 2 lượt giữa các điểm cố định (đầu đường, nút giao); **nút** có các **nhánh** (hướng, nửa bề rộng, vỉa hè hai bên); **tuyến** (run) là một phố đi thẳng qua nút giao (cùng tên, lệch < 35°) cho cột, dây, cây; **lộ trình** (route) là như tuyến nhưng qua được chỗ đổi tên (lệch < 20°: Thái Hà → Chùa Bộc) cho xe.
+  - **Nút giao**: giữa hai nhánh kề nhau, lấp nhựa tới cung bó vỉa (bán kính 4 m, 2 m nếu có ngõ / đường nội bộ); hai nhánh cùng có vỉa hè phía đó thì vỉa hè chạy vòng theo cung. Vỉa hè của mỗi đường dừng đúng chỗ cung bắt đầu; vạch làn dừng trước nút.
+  - **Đồ phố bằng luật** (`core/furniture.ts`), suy ra từ `City`, có seed: cột điện mỗi 32 m một bên phố (bên ngoài của mỗi làn đường đôi), dây nối các cột (3–6 sợi, vắt qua miệng ngõ, nhịp ≤ 62 m); cột đèn giữa các cột điện ở đường chính, đèn treo trên cột điện ở đường nhỏ; cây mỗi 8–11 m giữa vỉa hè rộng ≥ 2,5 m; cột đèn tín hiệu ở mỗi hướng xe vào nút có đèn (trừ phía trong cụm nút của đường đôi). Không đặt gì trong vùng nút giao hay trên lòng bất kỳ đường nào.
+  - **Giao thông** (`core/traffic.ts`, viết lại): làn theo lộ trình (một chiều: cả bề rộng; hai chiều: nửa mỗi chiều); vạch dừng trước nút có đèn đầu tiên của mỗi cụm; nhóm pha `x` / `y` theo hướng làn; xe bám đuôi, quyết đi tiếp hay dừng lúc đèn vàng như app cũ; cầu vượt chỉ ô tô; làn là vòng lặp. Vẽ bằng instancing, xe hiện dần / mờ dần ở 8 m đầu và cuối làn.
+  - **App 3D**: đồ phố theo ô 64 m, tách lớp (cột + đèn treo, cột đèn + đèn tín hiệu, cây đầy đủ, cây đơn giản không nét, dây). Ban đêm: đèn đường sáng, xung sáng chạy dọc dây (nét đứt màu nhấn trôi), đèn pha / hậu của xe. Đèn tín hiệu đổi theo pha (một màu nhấn: đèn đang bật sáng, vị trí trên / giữa / dưới cho biết đỏ / vàng / xanh).
+  - **Chất lượng** thêm: mật độ xe (0–100%), cột và dây điện, cây (không / đơn giản / đầy đủ), tầm nhìn xa (150 / 250 / 400 m / hết: ẩn ô nhà, ô đồ phố và xe ở xa tâm nhìn; lớp nền giữ nguyên), tự hạ một mức khi fps < 28 suốt 3 giây (không tự nâng lại). Thấp = 30% xe, không dây, cây đơn giản, 150 m; Trung bình = 60%, có dây, cây đơn giản, 250 m; Cao / Rất cao = 100%, đầy đủ, hết.
+- **Sửa kèm**: regex nhận "Ngõ/Ngách/Hẻm" dùng `\b`, mà `\b` của JavaScript không coi chữ có dấu là chữ cái, nên mọi tên "Ngõ …" bị bỏ sót (thành `service`). Đổi sang `(\s|$)`, có test.
+- **Số đo** (Node): lớp nền 93 ms; mạng đường + đồ phố 79 ms (117 món, 15 nhịp dây, 18 ô); 29 làn, 812 xe ở 100%, mô phỏng 0,16 ms/khung.
+
+### ADR-038 · Xe theo iso-glow, cửa sổ sáng không đều, mặt đường chính là cửa hàng, sân trước lát vỉa hè
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "sao ô tô xe máy nhìn xấu thế? … các đèn của ngôi nhà sẽ có thể sáng không đồng đều … các nhà ở ngoài mặt đường chính sẽ luôn là các cửa hàng … và trước sẽ là vỉa hè")
+- **Quyết định**:
+  - **Xe** dựng theo hình ô tô của figure `07-intersection` (iso-glow) và ô tô / xe máy của app SVG cũ (đã duyệt): ô tô có thân bo góc, 4 bánh, cabin hình thang (kính trước / sau xiên, kính hông chia cột), đèn pha tròn, đèn hậu nhỏ, taxi có hộp đèn nóc; van là một khối cao có hàng kính hông; xe máy theo đúng biên dạng nhìn ngang của app cũ (thân tay ga, gù sau, yếm trước), 2 bánh, yên, ghi đông, người lái. Mỗi bộ phận một màu (thân `--body`, nóc `--deck`, kính `--glass`, bánh `--recess`). Ban đêm: đèn pha `--accent-hi`, đèn hậu và hộp đèn taxi `--accent`, **vệt đèn pha trên mặt đường** (hai vùng sáng phía trước, như `.beam` của iso-glow, chỉ ở theme tối). Nét: viền bóng instancing + nét cạnh tính lại mỗi khung hình (bánh xe và đầu người lái chỉ có viền bóng); mật độ 100% khoảng 48.000 đoạn, khoảng 1 ms/khung.
+  - **Cửa sổ sáng không đều** ("lived-in" của iso-glow): khi một tầng bật, mỗi cửa có sắc độ cố định theo seed (lamp + thứ tự cửa): khoảng 2/10 rất sáng (`--accent-hi`), 5/10 sáng (`--accent`), 2/10 mờ (`--accent` pha 55% về `--recess`), 1/10 vẫn tắt. Đèn đường, đèn tín hiệu sáng đều.
+  - **Nhà mặt đường chính** (cạnh mặt tiền nhìn ra đường primary / secondary / tertiary trong vòng 25 m): nhà sinh **luôn là cửa hàng đang mở** (cửa xếp / cuốn / kính), không lấy các kiểu nhà ở thuần (`3f-tank`, `cap4-tile`, `biet-thu`, `tap-the`), có thể thêm mái hiên, biển hai bên cửa, standee. Nhà trong ngõ phần lớn là nhà ở, khoảng 1/3 có bán hàng. Khối nhà lớn (không phải nhà sinh, không phải công trình dựng tay) quay ra đường chính: tầng 1 phía đó có mặt kính cửa hàng và một dải biển sáng (từ L2).
+  - **Sân trước**: khoảng đất giữa mặt tiền và đường (≤ 15 m) được lát nối ra mép vỉa hè, nâng ngang vỉa hè; đường không có vỉa hè (ngõ) thì lát phẳng ra tới mép đường. Cửa hàng mở thẳng ra vỉa hè như phố Hà Nội.
+- **Hệ quả**: Core: `houseFor(…, on)` với `on = 'main' | 'minor'`, `presetPool(…, on)`, `frontStreet(ring, front, streets)`. App 3D: `render/lights.ts`, `buildForecourts`.
+
+### ADR-039 · Bảng Đèn; màu cửa sáng và glow theo iso-glow
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "nên thêm vào cái bảng để cho người dùng chọn: auto/bật/tắt đèn xe … đèn của nhà cũng thế … bật đèn theo kiểu tất cả, ngẫu nhiên ít/nhiều (thanh trượt 0-100). độ sáng đèn hình như không tương đồng với iso-glow")
+- **Quyết định**:
+  - Mục **Đèn** riêng (không thuộc mức chất lượng), nhớ theo máy: **đèn nhà** tự động / bật / tắt + **số tầng sáng** 0–100% (thứ tự cố định theo seed: kéo thanh chỉ thêm / bớt tầng, không xáo lại; 100% = tất cả); **đèn xe** tự động / bật / tắt (đèn pha, đèn hậu, hộp đèn taxi, vệt đèn pha); **độ glow** 0–200%. Tự động = bật khi tối (`N`). Click một tầng vẫn bật / tắt riêng tầng đó. Đèn đường và đèn tín hiệu theo ngày / đêm như cũ. Mặc định: tự động, 70%, tự động, 100%.
+  - **Màu cửa sáng như iso-glow** (`.fl.on .win`): cửa sáng tô `--accent`, **viền `--accent-hi`**; cửa rất sáng `--accent-hi`; cửa mờ là cửa sáng ở **độ mờ 45% trên nền tường** (pha 55% về `--body`, không phải về `--recess`); cửa tắt `--recess`, viền `--detail`. Viền cửa tô theo từng đoạn (màu theo đỉnh của nét).
+  - **Glow**: ngưỡng bloom 0,35 (chỉ màu nhấn vượt qua, nét `--line` không), cường độ 0,9 × độ glow, bán kính 0,4; tắt hẳn khi độ glow = 0 và ở theme sáng.
+- **Hệ quả**: `view/lights.ts` (`LightSettings`, `litFloors`, `lightOn`), `ui/LightsPanel.tsx`; nút "Đèn · chất lượng" (`G`).
+
+### ADR-040 · Tỉ lệ cửa sáng theo từng ô cửa; dải kính chia ô; glow nhẹ như iso-glow
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng gửi ảnh so với iso-glow: "đèn các ngôi nhà quá sáng … để 20% nhưng Novotel sáng trưng rất nhiều tầng, còn Thái Bình không sáng tầng nào")
+- **Bối cảnh**: ADR-039 chọn tỉ lệ theo **tầng**, xếp theo seed trên cả thành phố, nên tòa trúng nhiều tầng, tòa không tầng nào. Novotel / Việt Tower mỗi tầng là một dải kính liền, bật lên là cả dải sáng, bloom làm lóa. iso-glow rải đèn theo **ô cửa**: tòa nào cũng lốm đốm, cửa gần như không có quầng.
+- **Quyết định**:
+  - Thanh trượt đổi thành **"Cửa sáng" 0–100%**: mỗi ô cửa của nhà có một vị trí cố định trong [0, 1) (`windowRank`, băm FNV-1a rồi trộn bằng bộ trộn cuối của murmur3, vì bit cao của FNV gần như không đổi giữa các chuỗi chỉ khác ký tự cuối); cửa có vị trí dưới tỉ lệ thì sáng. Đều ở mọi tòa (test: hai tòa tháp ở 20% đều trong 15–25%). Kéo thanh chỉ thêm / bớt cửa. Bật đèn (tự động lúc tối) thì tỉ lệ tăng dần trong 0,5 s. Click một tầng vẫn bật **cả tầng** (mỗi cửa một sắc độ); chân trang: "cửa sáng X% + N tầng bật tay". Mặc định 35%.
+  - Dải kính chia thành **ô**: vách kính ô khoảng 1,6 m, dải Việt Tower khoảng 2 m, khung 12 cm giữa các ô.
+  - Glow mặc định nhẹ: cường độ 0,45 × độ glow, bán kính 0,3, ngưỡng 0,55 (cửa `--accent` hầu như không tỏa; cửa rất sáng, đèn đường, đèn tín hiệu tỏa nhẹ).
+- **Thay thế** phần "số tầng sáng" của ADR-039.
+
+### ADR-041 · Đèn đường nhìn thấy được, vùng sáng trên mặt đường, cài đặt đèn đường
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "chưa có đèn đường à? tối thì mặc định đèn đường được bật")
+- **Bối cảnh**: Đèn đường có từ M5 và được bật ban đêm, nhưng phần sáng chỉ là một mặt **úp xuống** dưới chụp đèn: camera nhìn từ trên nên chỉ thấy mặt sau (bị bỏ khi vẽ), không thấy gì.
+- **Quyết định**: Bóng đèn sáng ở **4 mặt bên và mặt dưới**, dưới một nắp tối, nên nhìn từ góc nào cũng thấy một chấm sáng (có glow nhẹ). Mỗi đèn có một **vùng sáng tròn** đường kính 11 m trên mặt đường (màu nhấn mờ dần từ tâm, cộng sáng, như light pool của iso-glow), chỉ ở theme tối. Bảng Đèn thêm **Đèn đường**: tự động (tối thì bật, mặc định) / bật / tắt.
+
+### ADR-042 · Kéo dài hết phố Thái Hà; metro 2A trên cao, ga Thái Hà, tàu; đèn vườn hoa
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "cho thêm đèn ở công viên/vườn hoa … vẽ kéo dài hết đường Thái Hà đi. ở đoạn Thái Hà - Yên Lãng có tàu metro trên cao … xem lại ga tàu thực tế thế nào để vẽ lại … trong ga tàu cũng có những cái như biển bảng, thùng rác … giống như ở 05-metro.js")
+- **Dữ liệu**: Khu `nga-tu-thai-ha` giờ là **hợp 4 hình chữ nhật** trong hệ toạ độ của khu: ngã tư (±160 m), phố Thái Hà tới cuối phố (hai dải, phố lệch dần sang đông khi lên bắc, tới y ≈ −1.250 m), và một dải dọc tuyến **2A Cát Linh – Hà Đông** quanh **ga Thái Hà** (OSM: cầu cạn `railway=subway`, `bridge=viaduct`, `layer=2`, hai đường ray là hai way; ga `railway=station` "Thái Hà" ở x ≈ 285, y ≈ −725, 2 sân ga `railway=platform`). `osm-data` tải **nhiều hộp** rồi gộp bỏ trùng (`bboxes`), thử lại khi API ngắt kết nối, dự phòng Overpass. Khu mới: 612 tòa (403 nhà sinh), 434 đoạn đường, 2 đường ray metro, 1 ga.
+- **Mô hình**: `City.region` (danh sách hình chữ nhật; `bounds` là hộp bao), `City.rails` (`Rail`: loại metro / rail / tram, đường tâm, trên cao không, cao độ đỉnh ray), `City.stations` (`Station`: tên, vị trí, các sân ga). `clipPathTo` cắt đường theo vùng bất kỳ (chia bước, tìm biên bằng chia đôi). Metro trên cao: đỉnh ray 12,5 m (`railHeight`, ước lượng).
+- **Ga Thái Hà** (tìm hiểu: ga trên cao 3 tầng: tầng trệt lối vào, tầng 1 sảnh có bán vé / cửa soát vé / khu thương mại, tầng 2 sân ga; 2 đường ray, 2 **sân ga hai bên**; các ga của tuyến có **mái cong**; mở 6/11/2021). Kích thước cụ thể và hình mái chính xác **không tìm thấy, là ước lượng**: sảnh 6–10 m trên phố, sân ga ở đỉnh ray + 1,05 m, mái vòm cong phủ hai sân ga và hai đường ray, dài theo sân ga OSM (khoảng 100 m). Đồ trong ga theo `05-metro.js` của iso-glow: bảng giờ tàu treo dưới mái (màn hình luôn sáng), mép sân ga sáng khi tàu đang đứng, ghế chờ, thùng rác, lan can, biển tên ga, đèn dưới mái, cầu thang có mái từ sảnh xuống đất hai bên.
+- **Cầu cạn**: dầm hộp 4,6 m dưới mỗi đường ray, lan can phía ngoài, ray; trụ chữ T giữa hai đường ray mỗi 30 m (không trong ga).
+- **Tàu**: mỗi đường ray một đoàn 4 toa (19 m / toa), lịch chạy là hàm của thời gian (`core/metro.ts`): vào khu ở 13 m/s, phanh 1 m/s² dừng với giữa tàu ở giữa ga, đỗ 25 s, tăng tốc rời đi, ra khỏi khu, 70 s sau đoàn sau. Toa: hộp bo góc, dải cửa sổ, 2 cửa mỗi bên, toa đầu / cuối có kính lái và đèn pha; ban đêm cửa sổ sáng, cửa sáng khi tàu đứng ở ga.
+- **Đèn vườn hoa**: cột 3 m quả cầu sáng mỗi 14 m dọc lối đi trong công viên (không có lối thì vòng quanh cách mép 3 m), vùng sáng nhỏ 3,5 m; theo cài đặt Đèn đường. Đèn trong ga cũng theo cài đặt đó.
+- **Hiệu năng** (khu lớn gấp ~5): nét và viền bóng của lăng trụ tính trực tiếp thay vì `EdgesGeometry` + `mergeVertices` (L3 cả khu 2,7 s → 0,64 s, ô nặng nhất 229 → 35 ms); tìm nhà bên cạnh theo lưới 25 m; mật độ xe 100% thưa hơn (xe máy 15 m, ô tô 32 m: 2.380 xe); mức Cao mặc định tầm nhìn 400 m (Rất cao: hết); camera mở ở ngã tư.
+- **Nguồn**: [Thái Hà station (Wikipedia)](https://en.wikipedia.org/wiki/Th%C3%A1i_H%C3%A0_station), [Hanoi Metro Line 2A](https://en.wikipedia.org/wiki/Hanoi_Metro_Line_2A), [Cát Linh station](https://en.wikipedia.org/wiki/C%C3%A1t_Linh_station), [Báo Văn Hóa: thay mái che ga](https://baovanhoa.vn/doi-song/ha-noi-metro-neu-tien-do-va-mai-nha-ga-tau-cat-linh-ha-dong-139867.html).
+
+### ADR-043 · Điều khiển kiểu bản đồ
+- **Trạng thái**: Đã chốt (2026-10-21, người dùng: "điều khiển dạng 3D hơi khó")
+- **Bối cảnh**: OrbitControls mặc định: kéo trái là xoay, di chuyển phải kéo chuột phải (khó trên trackpad), phóng to vào tâm màn hình, không có cách đi nhanh trong khu giờ đã dài hơn 1 km.
+- **Quyết định**: Kéo trái = **di chuyển** trên mặt đất; kéo phải hoặc Shift + kéo = xoay và nghiêng (3D); cuộn = phóng **vào con trỏ**; cảm ứng: 1 ngón di chuyển, 2 ngón phóng / xoay. Phím: W A S D / mũi tên đi (giữ phím, khoảng nửa màn hình mỗi giây, theo hướng đang nhìn), R / F nghiêng lên / xuống (3D), + / − phóng, H về ngã tư. Nhấp đúp = bay tới chỗ đó. Nút trên thanh: **Ngã tư**, **Ga Thái Hà** (mọi ga trong dữ liệu). Tâm nhìn không ra quá vùng 60 m. Thả hết phím khi cửa sổ mất focus.
+
 ---
 
 ## Câu hỏi mở
@@ -57,3 +128,4 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
 |---|---|---|---|
 | ~~Q1~~ | ~~Mét hay 1 m = 10?~~ | — | Đã chốt: mét (ADR-033) |
 | ~~Q2~~ | ~~Gỡ trang thử 3D cũ khỏi app SVG?~~ | — | Đã chốt: giữ để đối chiếu, xóa khi `city3d` thay được (ADR-033) |
+| Q3 | Ga Thái Hà thật: chiều cao các tầng, hình mái, vị trí lối lên? | Khi có ảnh | Đang ước lượng (ADR-042); người dùng gửi ảnh để chỉnh |

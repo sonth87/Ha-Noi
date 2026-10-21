@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CYCLE, CYCLE_T, signalsAt, stepTraffic, type Car, type Signals } from './traffic';
+import { CYCLE, CYCLE_T, signalsAt, spawnTraffic, stepTraffic, type Lane, type Signals } from './traffic';
 
 describe('signals', () => {
   it('never shows green both ways, and always passes through all red', () => {
@@ -22,36 +22,40 @@ describe('signals', () => {
 });
 
 describe('traffic model', () => {
-  // two 200 m streets crossing: X's junction from 100 to 114 m, Y's from 100 to 122 m
-  const roads = { x: { length: 200, gap: [100, 114] as const }, y: { length: 200, gap: [100, 122] as const } };
-  const make = (): Car[] => {
-    const out: Car[] = [];
-    for (const st of ['x', 'y'] as const) for (const [lane, dir] of [[0, -1], [1, 1]] as const) for (let i = 0; i < 6; i++) {
-      const bike = i % 2 === 0, a = [10, 40, 70, 140, 170, 188][i]! + (st === 'y' ? 7 : 0);   // none starts inside a junction
-      out.push({ st, lane, track: bike ? 0 : 1, len: bike ? 1.8 : 4.4, dir, v: bike ? 5 + i * 0.4 : 5.6, a, signal: true });
-    }
-    return out;
-  };
-  const inJunction = (c: Car) => { const g = roads[c.st].gap; return c.a + c.len > g[0] && c.a < g[1]; };
+  // two 200 m lanes: one along x stopping at 95 m for light x, one along y stopping at 90 m for light y
+  const lane = (id: string, path: [number, number][], stop: number, group: 'x' | 'y'): Lane => ({ id, route: id, path, length: 200, profile: [], stops: [{ s: stop, group }], carsOnly: false, width: 3.25 });
+  const lanes = [lane('ax', [[0, 0], [200, 0]], 95, 'x'), lane('ay', [[100, -100], [100, 100]], 90, 'y')];
 
-  it('keeps the junction clear of cross traffic and never lets a vehicle run into the one ahead', () => {
-    const cars = make(), dt = 1 / 30;
+  it('spawns evenly, by density, none on top of another', () => {
+    expect(spawnTraffic(lanes, 0)).toEqual([]);
+    const full = spawnTraffic(lanes, 1), half = spawnTraffic(lanes, 0.5);
+    expect(full.length).toBeGreaterThan(half.length);
+    expect(spawnTraffic(lanes, 1)).toEqual(full);
+  });
+
+  it('never runs a red light, never runs into the one ahead, keeps everything moving', () => {
+    const cars = spawnTraffic(lanes, 1), dt = 1 / 30, moved = new Map(cars.map(c => [c, 0]));
     let prev: Signals | null = null, t = 0;
-    for (let step = 0; step < 30 * 120; step++) {
+    for (let step = 0; step < 30 * 150; step++) {
       t += dt;
-      const sig = signalsAt(t);
-      stepTraffic(cars, roads, sig, prev, dt);
+      const sig = signalsAt(t), before = cars.map(c => c.s);
+      stepTraffic(cars, lanes, sig, prev, dt);
+      cars.forEach((c, i) => {
+        const ln = lanes[c.lane]!, stop = ln.stops[0]!, f0 = before[i]! + c.len, f1 = c.s + c.len;
+        // crossing the line this step on red is only allowed when it decided to go on at yellow
+        if (f0 < stop.s && f1 >= stop.s && sig[stop.group] === 'stop') expect(c.commit, `${c.id} t=${t.toFixed(2)}`).toBe(true);
+        moved.set(c, moved.get(c)! + ((c.s - before[i]! + 200) % 200));
+      });
       prev = sig;
-      const x = cars.some(c => c.st === 'x' && inJunction(c)), y = cars.some(c => c.st === 'y' && inJunction(c));
-      expect(x && y, `t = ${t.toFixed(2)}`).toBe(false);
       if (step % 15 === 0) {
-        const groups = new Map<string, Car[]>();
-        for (const c of cars) { const k = `${c.st}${c.lane}${c.track}`; groups.set(k, [...(groups.get(k) ?? []), c]); }
+        const groups = new Map<string, typeof cars>();
+        for (const c of cars) { const k = `${c.lane}${c.track}`; groups.set(k, [...(groups.get(k) ?? []), c]); }
         for (const g of groups.values()) for (const p of g) for (const q of g) if (p !== q) {
-          const d = (((q.a - p.a) % 200) + 200) % 200;
-          if (d > 0 && d < 100) expect(d).toBeGreaterThanOrEqual(p.dir > 0 ? p.len - 0.05 : 0);
+          const d = (((q.s - p.s) % 200) + 200) % 200;
+          if (d > 0 && d < 100) expect(d).toBeGreaterThanOrEqual(p.len - 0.05);
         }
       }
     }
-  });
+    for (const [c, m] of moved) expect(m, c.id).toBeGreaterThan(150);
+  }, 20_000);   // 150 s of traffic: ~1 s alone, more when every package tests at once
 });

@@ -92,16 +92,44 @@ export interface Feature {
   source: SourceId;
 }
 
+export type RailKind = 'metro' | 'rail' | 'tram';
+
+export interface Rail {
+  id: string;
+  name?: string;
+  kind: RailKind;
+  /** centre line of one track, in its direction of travel when the data gives one */
+  path: Vec2[];
+  /** on a viaduct (or a bridge) above the street */
+  elevated: boolean;
+  /** height of the top of the rails above the street (m), when elevated */
+  height: number;
+  source: SourceId;
+}
+
+export interface Station {
+  id: string;
+  name?: string;
+  kind: RailKind;
+  at: Vec2;
+  /** the platforms (outlines) */
+  platforms: Vec2[][];
+  source: SourceId;
+}
+
 export interface City {
   id: string;
   name: string;
-  /** the part of the world the model covers */
+  /** the part of the world the model covers: the box round it, and the rectangles it is made of */
   bounds: { x0: number; y0: number; x1: number; y1: number };
+  region: { x0: number; y0: number; x1: number; y1: number }[];
   streets: Street[];
   junctions: Junction[];
   buildings: Building[];
   areas: Area[];
   features: Feature[];
+  rails: Rail[];
+  stations: Station[];
   /** data credits the app must show (e.g. "© OpenStreetMap contributors") */
   attribution: string[];
 }

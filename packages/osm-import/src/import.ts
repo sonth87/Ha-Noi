@@ -5,25 +5,26 @@
         (building:part) by containment; storeys from OSM, else from the rules;
      4. areas (parks, grass, water, pitches, pools, islands, bridge outlines), clipped;
      5. point features (lights, crossings, bus stops, trees…) and junctions (where 3+ arms of roads meet; footpaths do not make junctions);
+     5b. rails (metro on its viaduct, railways, trams) clipped to the area, and stations with their platforms;
      6. the front edge of every building, and the generated house for small ones;
      7. the area's hand corrections (overrides).
    Every list is sorted by id, so the same extract always gives the same city. Pure. */
 import {
-  applyOverrides, bridgeProfile, centroid, clipPath, clipRing, closestOnSegment, dist, frontEdge, frontage, guessKind, guessLevels, houseFor,
+  applyOverrides, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
   inRect, normalizeRing, pointInRing, polylineLength, area as ringArea, storeyHeights, streetShape,
-  type Area, type Building, type BuildingPart, type City, type Feature, type Junction, type Overrides, type Rect, type Street, type Vec2,
+  type Area, type Building, type BuildingPart, type City, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
 } from '@my-city/core';
 import type { OsmExtract, OsmNode, OsmRelation, OsmTags, OsmWay } from '@my-city/osm-data';
 import { projector, type Frame } from './frame';
-import { areaKind, buildingHint, featureKind, levelsOf, streetKind } from './tags';
+import { areaKind, buildingHint, featureKind, levelsOf, railKind, streetKind } from './tags';
 
 export interface AreaConfig {
   /** osm-data area id */
   area: string;
   name: string;
   frame: Frame;
-  /** the part of the frame to keep (m) */
-  bounds: Rect;
+  /** the part of the frame to keep: a union of rectangles (m) */
+  region: Rect[];
   overrides: Overrides;
 }
 
@@ -40,10 +41,12 @@ export interface ImportReport {
 }
 
 const src = (type: string, id: number) => `osm:${type}/${id}`;
+const MAIN = new Set(['primary', 'secondary', 'tertiary']);
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: string): { city: City; report: ImportReport } {
-  const P = projector(cfg.frame), R = cfg.bounds;
+  const P = projector(cfg.frame), region = cfg.region, inside = (p: Vec2) => inRegion(p, region);
+  const R: Rect = { x0: Math.min(...region.map(r => r.x0)), y0: Math.min(...region.map(r => r.y0)), x1: Math.max(...region.map(r => r.x1)), y1: Math.max(...region.map(r => r.y1)) };
   const nodes = new Map<number, OsmNode>(), ways = new Map<number, OsmWay>(), relations: OsmRelation[] = [];
   for (const e of data.elements) {
     if (e.type === 'node') nodes.set(e.id, e);
@@ -73,7 +76,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const L = polylineLength(full), prof = bridge ? bridgeProfile(kind, L, layer) : [];
     const road = kind !== 'footway' && kind !== 'steps';
     if (road) w.nodes.forEach((nid, i) => degree.set(nid, (degree.get(nid) ?? 0) + (i === 0 || i === w.nodes.length - 1 ? 1 : 2)));
-    const pieces = clipPath(full, R);
+    const pieces = clipPathTo(full, inside);
     pieces.forEach((piece, k) => {
       const id = pieces.length > 1 ? `s${w.id}-${k}` : `s${w.id}`;
       const s0 = along(full, piece[0]!), s1 = s0 + polylineLength(piece);
@@ -83,7 +86,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       });
       for (const nid of w.nodes) {
         const p = xy.get(nid);
-        if (road && p && inRect(p, R)) { const set = streetNodes.get(nid) ?? new Set(); set.add(id); streetNodes.set(nid, set); }
+        if (road && p && inside(p)) { const set = streetNodes.get(nid) ?? new Set(); set.add(id); streetNodes.set(nid, set); }
       }
     });
   }
@@ -108,13 +111,13 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     outer.forEach((ring, k) => push(isB ? outlines : partsRaw, `r${r.id}${outer.length > 1 ? `-${k}` : ''}`, src('relation', r.id), ring, t));
   }
 
-  const keep = outlines.filter(b => inRect(centroid(b.ring), R));
+  const keep = outlines.filter(b => inside(centroid(b.ring)));
   const partsOf = new Map<string, Raw[]>();
   for (const p of partsRaw) {
     const c = centroid(p.ring);
     // the smallest outline holding the part's centre
     const owner = keep.filter(b => pointInRing(c, b.ring)).sort((a, b) => ringArea(a.ring) - ringArea(b.ring))[0];
-    if (!owner) { if (inRect(c, R)) report.orphanParts.push(p.source); continue; }
+    if (!owner) { if (inside(c)) report.orphanParts.push(p.source); continue; }
     partsOf.set(owner.id, [...(partsOf.get(owner.id) ?? []), p]);
   }
 
@@ -129,10 +132,12 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const front = frontEdge(b.ring, fronts);
     const { w, d } = frontage(b.ring, front);
     const fromOsm = own !== undefined || raw.some(p => levelsOf(p.t) !== undefined);
-    return {
-      id: b.id, name: b.t.name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front,
-      house: raw.length ? undefined : houseFor(b.source, kind, levels, w, d), source: b.source,
-    };
+    // on a main street a house is always a shop (rules.houseFor)
+    const facing = frontStreet(b.ring, front, fronts), on = facing && facing.gap < 25 && MAIN.has(facing.street.kind) ? 'main' : 'minor';
+    const house = raw.length ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
+    // a generated house sets its own storey heights (a raised ground floor over a semi-basement…)
+    if (house) parts[0] = { ...parts[0]!, floors: houseStoreys(house.spec) };
+    return { id: b.id, name: b.t.name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house, source: b.source };
   });
   for (const b of buildings) {
     const p = b.footprint[b.front]!, q = b.footprint[(b.front + 1) % b.footprint.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
@@ -144,7 +149,10 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   const addArea = (id: string, source: string, ring: Vec2[], t: OsmTags) => {
     const kind = areaKind(t);
     if (!kind) return;
-    const clipped = clipRing(normalizeRing(ring), R);
+    // clipped to the rectangle holding its middle (or any vertex of it)
+    const nr = normalizeRing(ring), c = centroid(nr), box = region.find(r => inRect(c, r)) ?? region.find(r => nr.some(q => inRect(q, r)));
+    if (!box) return;
+    const clipped = clipRing(nr, box);
     if (clipped.length >= 3) areas.push({ id, kind, name: t.name, polygon: clipped, source });
   };
   for (const w of ways.values()) if (w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]) addArea(`a${w.id}`, src('way', w.id), path(w), tags(w));
@@ -159,7 +167,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   const features: Feature[] = [];
   for (const n of nodes.values()) {
     const kind = n.tags && featureKind(n.tags), at = xy.get(n.id)!;
-    if (kind && inRect(at, R)) features.push({ id: `n${n.id}`, kind, at, source: src('node', n.id) });
+    if (kind && inside(at)) features.push({ id: `n${n.id}`, kind, at, source: src('node', n.id) });
   }
   const signals = features.filter(f => f.kind === 'traffic-signals');
   const junctions: Junction[] = [];
@@ -170,18 +178,39 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     junctions.push({ id: `j${nid}`, at, streets: [...ids].sort(), signals: signals.some(f => dist(f.at, at) < 20) });
   }
 
+  // ---------- 6b. rails and stations ----------
+  const rails: Rail[] = [];
+  for (const w of ways.values()) {
+    const t = tags(w), kind = railKind(t);
+    if (!kind) continue;
+    const layer = Number.parseInt(t.layer ?? '0', 10) || 0, elevated = (!!t.bridge && t.bridge !== 'no') || layer > 0;
+    const pieces = clipPathTo(path(w), inside);
+    pieces.forEach((piece, k) => rails.push({
+      id: pieces.length > 1 ? `rl${w.id}-${k}` : `rl${w.id}`, name: t.name, kind, path: piece, elevated, height: railHeight(kind, elevated), source: src('way', w.id),
+    }));
+  }
+  const platformRings = [...ways.values()].filter(w => tags(w).railway === 'platform' && w.nodes[0] === w.nodes[w.nodes.length - 1]).map(w => normalizeRing(path(w)));
+  const stations: Station[] = [];
+  for (const n of nodes.values()) {
+    const t = n.tags ?? {};
+    if (t.railway !== 'station' && t.public_transport !== 'station') continue;
+    const at = xy.get(n.id)!, kind = t.station === 'subway' || t.station === 'light_rail' ? 'metro' : t.station === 'tram' ? 'tram' : 'rail';
+    if (!inside(at) && !rails.some(r => r.kind === kind && r.path.some(p => dist(p, at) < 80))) continue;
+    stations.push({ id: `st${n.id}`, name: t.name, kind, at, platforms: platformRings.filter(r => dist(centroid(r), at) < 120), source: src('node', n.id) });
+  }
+
   // ---------- 7. hand corrections ----------
   const base: City = {
-    id: cfg.area, name: cfg.name, bounds: R,
+    id: cfg.area, name: cfg.name, bounds: R, region,
     streets: streets.sort(byId), junctions: junctions.sort(byId), buildings: buildings.sort(byId), areas: areas.sort(byId), features: features.sort(byId),
-    attribution: [attribution],
+    rails: rails.sort(byId), stations: stations.sort(byId), attribution: [attribution],
   };
   const { city, unused } = applyOverrides(base, cfg.overrides);
   report.unusedOverrides = unused;
   report.counts = {
     streets: city.streets.length, junctions: city.junctions.length, buildings: city.buildings.length,
     parts: city.buildings.reduce((s, b) => s + b.parts.length, 0), houses: city.buildings.filter(b => b.house).length,
-    areas: city.areas.length, features: city.features.length,
+    areas: city.areas.length, features: city.features.length, rails: city.rails.length, stations: city.stations.length,
   };
   return { city, report };
 }

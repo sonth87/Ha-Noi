@@ -4,7 +4,8 @@ import { AREAS, loadArea } from './index';
 describe('osm-data', () => {
   it('loads the crossroads extract with its licence', () => {
     const { area, data } = loadArea('nga-tu-thai-ha');
-    expect(area.bbox).toHaveLength(4);
+    expect(area.bboxes.length).toBeGreaterThan(0);
+    for (const b of area.bboxes) expect(b).toHaveLength(4);
     expect(data.license).toContain('odbl');
     expect(data.elements.filter(e => e.type === 'way').length).toBeGreaterThan(500);
     // the two towers are in it

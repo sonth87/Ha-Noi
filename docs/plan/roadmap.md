@@ -45,15 +45,15 @@ Phạm vi dữ liệu: khu ngã tư Thái Hà – Tây Sơn – Chùa Bộc (m�
 **Mục tiêu**: generator nhà dựng nhà 3D ở các mức L0–L3, đủ kiểu để dựng hàng loạt.
 **Bàn giao**: bộ phận nhà 3D (tầng trệt, cửa, ban công, mái, biển, phụ kiện mái…) theo mức chi tiết; kiểu nhà mới (nhà ống, nhà cấp 4, nhà phố có sân, biệt thự, tập thể, chung cư thấp…); LOD theo khoảng cách; gộp hình học / instancing.
 **DoD**:
-- [ ] Mỗi kiểu nhà có preset, dựng được ở 4 mức chi tiết.
-- [ ] Đổi mức chi tiết trong bảng chất lượng có hiệu lực ngay.
+- [x] Mỗi kiểu nhà có preset, dựng được ở 4 mức chi tiết.
+- [x] Đổi mức chi tiết trong bảng chất lượng có hiệu lực ngay.
 - [ ] Cả khu ngã tư ở mức Cao vẫn mượt trên máy người dùng (số fps ghi vào checklist).
 
 ## M5 · Đồ phố, giao thông, tầm nhìn + cơ chế chất lượng đầy đủ
 **Mục tiêu**: phố sống như app cũ, và chỉnh được nặng/nhẹ.
 **Bàn giao**: cột điện, dây điện (xung sáng), đèn đường, cây, đèn tín hiệu, xe (theo mô hình giao thông của core); tùy chọn mật độ xe, bật/tắt cột và dây điện, cây (tắt / đơn giản / đầy đủ), đèn đêm và glow, các lớp nét, khử răng cưa, độ phân giải; tầm nhìn xa (chia ô, mờ ở rìa); mức chung Thấp → Rất cao; tự hạ chất lượng khi fps thấp; cài đặt nhớ theo máy.
 **DoD**:
-- [ ] Mỗi tùy chọn có hiệu lực ngay, không phải tải lại trang.
+- [x] Mỗi tùy chọn có hiệu lực ngay, không phải tải lại trang.
 - [ ] Mức Thấp chạy mượt trên máy yếu; mức Rất cao đầy đủ chi tiết như app cũ.
 - [ ] Người dùng duyệt.
 

@@ -3,7 +3,7 @@
    reports every key that matched nothing, so a stale correction never goes unnoticed. Pure. */
 import type { Building, BuildingKind, BuildingPart, City, SourceId, Street } from './city';
 import type { HouseInput } from './house-types';
-import { resolveHouse } from './house';
+import { houseStoreys, resolveHouse } from './house';
 import { storeyHeights } from './rules';
 
 export interface PartOverride {
@@ -93,6 +93,7 @@ function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>): Bu
   if (house && (ov.house || floors)) {
     const input: HouseInput = { ...house.input, ...(floors ? { floors: floors.length - 1 } : {}), ...ov.house };
     house = { input, spec: resolveHouse(input).spec };
+    if (parts.length === 1) parts = [{ ...parts[0]!, floors: houseStoreys(house.spec) }];
   }
   return { ...b, kind, parts, levelsFrom, house, name: ov.name ?? b.name, model: ov.model ?? b.model, front: ov.front ?? b.front };
 }

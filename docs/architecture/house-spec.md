@@ -8,8 +8,8 @@ Trong code (`packages/core/src/`):
 - `HouseSpec` (đầy đủ, sau khi gộp), `HouseInput` (`id` bắt buộc, mọi trường khác tùy chọn), `FloorSpec`, `SignSpec`, `Issue`: `house-types.ts`.
 - Preset: `PRESETS` trong `presets.ts` (mỗi preset có thêm `label` để hiển thị).
 - `resolveHouse(input) → { spec, issues }`, `sceneIssues(inputs)`, `randomHouse(rng, id, base?)`, `topZ`, `peakZ`: `house.ts`. `randomHouse` giữ nguyên `w`, `d`, `floors` nếu được truyền vào (nhà dựng trên mặt bằng thật).
-- `houseFor(id, kind, levels, w, d)`: nhà sinh cho một tòa nhà của mô hình thành phố, `rules.ts`.
-- Bộ vẽ 3D của nhà: M4 (`apps/city3d`).
+- `houseFor(id, kind, levels, w, d, extra, on)`: nhà sinh cho một tòa nhà của mô hình thành phố, `rules.ts`. `on = 'main'` (mặt tiền nhìn ra đường chính trong 25 m): luôn là cửa hàng đang mở, cửa xếp / cuốn / kính, không lấy kiểu nhà ở thuần, thêm biển; `on = 'minor'`: khoảng 1/3 có bán hàng (ADR-038).
+- Bộ vẽ 3D của nhà: `apps/city3d/src/render/house3d.ts` (mức L2 và L3, xem [city3d](city3d.md) §2). Các preset từ M4: `tube-7f-narrow`, `cap4-tile`, `biet-thu`, `tap-the`, `nha-pho-rong`; `presetPool(kind, w, levels)` chọn nhóm preset hợp với loại công trình.
 
 Mọi bảng dưới đây **phải khớp** với các kiểu trên (luật A3). Đổi một bên thì đổi bên kia trong cùng lần làm.
 
@@ -129,6 +129,11 @@ Kích thước theo mét, đúng như trong code.
 | `tube-5f-cage` | Nhà ống 5 tầng chuồng cọp | 3.8 × 18 | 4 | Đua ra, quán PHỞ BÒ có mái hiên + standee. Tầng 2 lan can 3 chậu, tầng 3 chuồng cọp, tầng 4 chuồng cọp + cửa chớp, tầng 5 cặp cửa nhỏ, có ăng-ten, **mái tôn che toàn bộ mái** |
 | `wide-basement` | Nhà rộng · tầng hầm | 10 × 16 | 4 | Tầng 1 nâng cao trên nửa hầm để xe (1.4 m), cửa kính, NHÀ HÀNG + biển dọc QUÁN, 5 gian cửa mỗi tầng, phòng tum + mái tôn che sân thượng, bồn nằm + NLMT |
 | `wide-plain` | Nhà rộng · thường | 8 × 14 | 3 | Rộng nhưng kết cấu bình thường: cửa xếp + mái hiên, ĐIỆN MÁY, ban công tầng chẵn, mái tôn che cả mái, 2 bồn + ăng-ten |
+| `tube-7f-narrow` | Nhà ống 7 tầng hẹp · thuốc | 3.2 × 16 | 6 | Cửa cuốn, biển ngang + biển tròn "+", ban công tầng chẵn, phòng tum, bồn đứng + NLMT |
+| `cap4-tile` | Cấp 4 mái ngói | 5 × 12 | 0 | Cửa gỗ, nhà ở (không bán hàng), mái ngói 2 dốc |
+| `biet-thu` | Biệt thự | 10 × 14 | 2 | Cửa kính tầng 1, ốp đá chân tường, cửa Pháp có cánh chớp, ban công kính, mái ngói, cây hai bên |
+| `tap-the` | Khu tập thể | 12 × 12 | 4 | Cửa sắt hoa, tường sơn cũ, cặp cửa nhỏ, chuồng cọp mọi tầng, quần áo phơi, mái tôn che cả mái, bồn đứng + nằm + ăng-ten |
+| `nha-pho-rong` | Nhà phố 3 gian · thời trang | 9 × 15 | 3 | Cửa kính, biển ngang + biển dọc, cửa kính ra ban công kính, phòng tum + mái tôn che sân thượng |
 | `tube-6f-photo` | Nhà ống 6 tầng · photo | 3.6 × 15 | 5 | Cửa cuốn, 2 biển dọc PHOTO / IN ẤN hai bên cửa, ban công tầng lẻ, biển quảng cáo lớn CHO THUÊ BIỂN trên tường hồi, phòng tum + **mái tôn che sân thượng** + dây phơi, bồn đứng |
 
 Thêm preset **không được** đòi sửa bộ vẽ. M4 thêm nhiều kiểu nhà mới (nhà ống, cấp 4, nhà phố có sân, biệt thự, tập thể, chung cư thấp…).

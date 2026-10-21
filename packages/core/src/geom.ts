@@ -144,3 +144,36 @@ export function clipRing(ring: readonly Vec2[], r: Rect): Vec2[] {
 }
 const lerpX = (a: Vec2, b: Vec2, x: number): Vec2 => [x, a[1] + ((b[1] - a[1]) * (x - a[0])) / (b[0] - a[0])];
 const lerpY = (a: Vec2, b: Vec2, y: number): Vec2 => [a[0] + ((b[0] - a[0]) * (y - a[1])) / (b[1] - a[1]), y];
+
+/** is p in any of the rectangles */
+export const inRegion = (p: Vec2, region: readonly Rect[]) => region.some(r => inRect(p, r));
+
+/** Clip a polyline to any region given by a membership test: walks each segment in steps of at
+    most `step` m and finds every crossing of the boundary by bisection. Returns the pieces inside. */
+export function clipPathTo(path: readonly Vec2[], inside: (p: Vec2) => boolean, step = 2): Vec2[][] {
+  const out: Vec2[][] = [];
+  let cur: Vec2[] = [];
+  const lerp = (a: Vec2, b: Vec2, t: number): Vec2 => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const edge = (a: Vec2, b: Vec2, inA: boolean) => {   // the boundary point between a and b
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 20; i++) { const m = (lo + hi) / 2; if (inside(lerp(a, b, m)) === inA) lo = m; else hi = m; }
+    return lerp(a, b, inA ? lo : hi);
+  };
+  let prev = path[0]!, inPrev = inside(prev);
+  if (inPrev) cur.push(prev);
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!, b = path[i]!, n = Math.max(1, Math.ceil(dist(a, b) / step));
+    for (let k = 1; k <= n; k++) {
+      const q = lerp(a, b, k / n), inQ = inside(q);
+      if (inQ !== inPrev) {
+        const e = edge(prev, q, inPrev);
+        if (inPrev) { cur.push(e); if (cur.length > 1) out.push(cur); cur = []; }
+        else cur = [e];
+      }
+      prev = q; inPrev = inQ;
+    }
+    if (inPrev) cur.push(b);
+  }
+  if (cur.length > 1) out.push(cur);
+  return out.map(p => p.filter((q, i) => i === 0 || dist(q, p[i - 1]!) > 1e-6)).filter(p => p.length > 1);
+}

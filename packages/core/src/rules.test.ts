@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bridgeProfile, frontEdge, frontage, guessKind, guessLevels, houseFor, storeyHeights, streetShape } from './rules';
+import { bridgeProfile, frontEdge, frontage, guessKind, guessLevels, houseFor, presetPool, storeyHeights, streetShape } from './rules';
 import type { Vec2 } from './geom';
 
 describe('street rules', () => {
@@ -43,6 +43,29 @@ describe('building rules', () => {
     expect(p[1]).toBe(16);
     expect(q[1]).toBe(16);
     expect(frontage(tube, i)).toEqual({ w: 4, d: 16 });
+  });
+
+  it('picks house kinds that fit the building', () => {
+    expect(presetPool('villa', 10, 3)).toEqual(['biet-thu']);
+    expect(presetPool('tube-house', 4, 1)).toEqual(['cap4-metal', 'cap4-tile']);
+    expect(presetPool('tube-house', 4, 5)).not.toContain('tap-the');
+    expect(presetPool('house', 12, 6)).toContain('tap-the');
+    for (const id of ['a', 'b', 'c', 'd', 'e']) {
+      const h = houseFor(id, 'house', 3, 9, 14)!;
+      expect(presetPool('house', 9, 3)).toContain(h.input.preset);
+    }
+  });
+
+  it('makes every house on a main street an open shop with a sign', () => {
+    for (let i = 0; i < 40; i++) {
+      const h = houseFor(`m${i}`, 'tube-house', 4, 4, 15, {}, 'main')!;
+      expect(h.spec.shop).toBe(true);
+      expect(['fold', 'roll', 'glass']).toContain(h.spec.ground);
+      expect(h.spec.signs.length).toBeGreaterThan(0);
+      expect(['3f-tank', 'cap4-tile', 'biet-thu', 'tap-the']).not.toContain(h.input.preset);
+    }
+    const alley = Array.from({ length: 60 }, (_, i) => houseFor(`a${i}`, 'tube-house', 4, 4, 15)!.spec.shop);
+    expect(alley.filter(Boolean).length).toBeLessThan(40);
   });
 
   it('builds a house on a real footprint, or none when it does not fit', () => {

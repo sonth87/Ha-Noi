@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { area, centroid, clipPath, clipRing, closestOnPath, minRect, normalizeRing, pointInRing, polylineLength, signedArea, type Vec2 } from './geom';
+import { area, centroid, clipPath, clipPathTo, clipRing, closestOnPath, inRegion, minRect, normalizeRing, pointInRing, polylineLength, signedArea, type Vec2 } from './geom';
 
 const sq: Vec2[] = [[0, 0], [10, 0], [10, 10], [0, 10]];
 
@@ -34,5 +34,17 @@ describe('geom', () => {
     expect(clipPath([[2, 2], [2, 20], [8, 20], [8, 2]], R)).toHaveLength(2);
     expect(area(clipRing([[-5, -5], [5, -5], [5, 5], [-5, 5]], R))).toBeCloseTo(25, 9);
     expect(clipRing([[20, 20], [30, 20], [30, 30]], R)).toEqual([]);
+  });
+});
+
+describe('regions', () => {
+  it('clips a path to a union of rectangles, in and out again', () => {
+    const region = [{ x0: 0, y0: 0, x1: 10, y1: 10 }, { x0: 20, y0: 0, x1: 30, y1: 10 }];
+    const pieces = clipPathTo([[-5, 5], [35, 5]], p => inRegion(p, region));
+    expect(pieces).toHaveLength(2);
+    expect(pieces[0]![0]![0]).toBeCloseTo(0, 4);
+    expect(pieces[0]!.at(-1)![0]).toBeCloseTo(10, 4);
+    expect(pieces[1]![0]![0]).toBeCloseTo(20, 4);
+    expect(pieces[1]!.at(-1)![0]).toBeCloseTo(30, 4);
   });
 });
