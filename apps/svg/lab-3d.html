@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thử 3D · My City</title>
+    <style>
+      html, body { margin:0; height:100%; background:var(--bg); color:var(--ink); font:12px/1.4 var(--mono); }
+      body { display:flex; flex-direction:column; }
+      header { display:flex; flex-wrap:wrap; gap:8px 16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--edge); text-transform:uppercase; letter-spacing:.12em; }
+      header b { color:var(--ink-hi); font-weight:500; margin-right:auto; }
+      button { font:inherit; text-transform:inherit; letter-spacing:inherit; color:var(--ink-hi); background:var(--panel); border:1px solid var(--edge); border-radius:4px; padding:5px 10px; cursor:pointer; }
+      button:hover { border-color:var(--line); }
+      main { flex:1; display:flex; min-height:0; }
+      #view3d { flex:1; position:relative; min-width:0; }
+      #view3d canvas { display:block; width:100%; height:100%; }
+      #svgpanel { width:min(42vw, 640px); border-left:1px solid var(--edge); display:flex; flex-direction:column; }
+      #svgpanel[hidden] { display:none; }
+      #svgfig { flex:1; min-height:0; }
+      #svgfig svg { width:100%; height:100%; }
+      .cap { padding:8px 16px; border-top:1px solid var(--edge); }
+      footer { display:flex; flex-wrap:wrap; justify-content:space-between; gap:6px 16px; padding:8px 16px; border-top:1px solid var(--edge); }
+      #readout { color:var(--ink-hi); }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>Thử 3D · three.js</b>
+      <button id="b-iso">Góc iso (I)</button>
+      <button id="b-night">Đêm (N)</button>
+      <button id="b-theme">Sáng / tối (T)</button>
+      <button id="b-svg">So sánh SVG (C)</button>
+    </header>
+    <main>
+      <div id="view3d" aria-label="Ngã tư 3D: kéo để xoay, cuộn để phóng to, click một tầng để bật đèn"></div>
+      <aside id="svgpanel" hidden><div id="svgfig"></div><div class="cap" id="svgcap"></div></aside>
+    </main>
+    <footer>
+      <span>kéo chuột xoay tự do · cuộn phóng to · chuột phải kéo để dời · Q/E xoay 90° · click tầng / nhà bật đèn · space bật hết</span>
+      <span id="readout"></span>
+    </footer>
+    <script type="module" src="/src/lab3d/main.ts"></script>
+  </body>
+</html>

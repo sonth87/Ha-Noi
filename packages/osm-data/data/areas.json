@@ -1,0 +1,34 @@
+{
+  "nga-tu-thai-ha": {
+    "name": "Ngã tư Thái Hà – Tây Sơn – Chùa Bộc và phố Thái Hà",
+    "bboxes": [
+      [
+        105.8218,
+        21.00681,
+        105.82699,
+        21.01169
+      ],
+      [
+        105.81861,
+        21.00854,
+        105.82462,
+        21.014
+      ],
+      [
+        105.8133,
+        21.01126,
+        105.8216,
+        21.0176
+      ],
+      [
+        105.81619,
+        21.00926,
+        105.82246,
+        21.01776
+      ]
+    ],
+    "file": "nga-tu-thai-ha.osm.json",
+    "fetched": "2026-10-21",
+    "note": "ngã tư (±160 m) + dải dọc phố Thái Hà tới cuối phố + dải dọc tuyến metro 2A quanh ga Thái Hà; mỗi bbox rộng hơn vùng dùng 40 m"
+  }
+}

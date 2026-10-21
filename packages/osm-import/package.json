@@ -1,0 +1,17 @@
+{
+  "name": "@my-city/osm-import",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "eslint .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@my-city/core": "workspace:*",
+    "@my-city/osm-data": "workspace:*"
+  }
+}

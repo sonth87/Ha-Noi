@@ -1,0 +1,65 @@
+/* Colour tokens and the shared glow vocabulary, ported from iso-glow (MIT) via apps/svg (ADR-032).
+   Colour only through these tokens; the accent tokens are set per palette entry by ThemeProvider. */
+:root {
+  color-scheme: dark;
+  --bg:#0c0d0e; --panel:#141516; --edge:#222426;
+  --line:#3d4144; --detail:#2b2e30; --body:#17181a; --deck:#1b1d1f;
+  --ink:#868b8f; --ink-hi:#e6e8e9; --live:#f4f5f5;
+  --glass:#0f1011; --glass-on:#1a1410; --recess:#0e0f10;
+  --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
+  --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+  color-scheme: light;
+  --bg:#e9eaea; --panel:#f6f6f5; --edge:#d6d8d8;
+  --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
+  --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
+  --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+} }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg:#e9eaea; --panel:#f6f6f5; --edge:#d6d8d8;
+  --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
+  --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
+  --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+}
+
+/* ---------- shared figure vocabulary (inside .stage) ---------- */
+.stage text { font-family:var(--mono); }
+.face { fill:var(--body); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+.face.top { fill:var(--deck); }
+.face.recess { fill:var(--recess); }
+.detail { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+.label { fill:var(--ink); font-family:var(--mono); }
+.glass { fill:var(--glass); transition:fill .3s, stroke .3s; }
+.glass.hot { fill:var(--glass-on); stroke:var(--accent); }
+.halo { fill:var(--accent); opacity:0; transition:opacity .4s; }
+.halo.hot { opacity:.22; }
+.scr { fill:var(--accent-hi); font-family:var(--mono); }
+.scr-accent { fill:var(--accent); }
+.led { fill:var(--detail); transition:fill .2s; }
+.led.hot { fill:var(--accent); }
+.wire { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round; transition:stroke .4s; }
+.wire.hot { stroke:var(--accent); }
+.wire-under { fill:none; stroke:var(--panel); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; }
+.pulse { fill:none; stroke:var(--accent-hi); stroke-width:2.2; stroke-linecap:round; vector-effect:non-scaling-stroke;
+         stroke-dasharray:70 1200; stroke-dashoffset:70; opacity:0; }
+.pulse.go { animation:iso-flow .55s linear; }
+@keyframes iso-flow { 0% { stroke-dashoffset:70; opacity:1; } 90% { opacity:1; } 100% { stroke-dashoffset:-1000; opacity:0; } }
+.press { cursor:pointer; transition:transform 60ms ease-out; }
+.press.down { transform:translateY(3px); }
+.press .face { transition:fill .6s ease-out, stroke .6s ease-out; }
+.press.lit .face, .press.latched .face { fill:var(--accent); stroke:var(--accent-hi); transition:none; }
+.press.lit .face.top, .press.latched .face.top { fill:var(--accent-hi); }
+.press.lit { filter:url(#glow); }
+.press.latched { filter:url(#soft); }
+.press:hover .face.top { stroke:var(--ink); }
+.blink { animation:iso-blink 1s steps(1) infinite; }
+@keyframes iso-blink { 50% { opacity:0; } }
+@media (prefers-reduced-motion:reduce) {
+  .press, .glass, .halo, .press .face, .wire { transition:none; } .blink { animation:none; } .pulse.go { animation:none; }
+}
+
+/* light theme: the same accent, but no ambient glow (GlowDefs also turns the filters into pass-through) */
+:root[data-theme="light"] .halo { display:none !important; }
+@media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) .halo { display:none !important; } }
