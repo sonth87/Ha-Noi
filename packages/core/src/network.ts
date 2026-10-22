@@ -100,13 +100,14 @@ export function roadNetwork(city: City): Network {
 /** roads chained straight through junctions into runs (turning less than `maxTurn` rad; keeping
     to the same name when `named`) */
 function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: number): Run[] {
-  const fits = (a: Road, b: Road) => (!named || a.name === b.name) && a.kind === b.kind && a.oneway === b.oneway && a.layer === b.layer;
+  const ways = (r: Road) => (r.oneway ? r.lanes : Math.max(1, Math.floor(r.lanes / 2)));
+  const fits = (a: Road, b: Road) => (!named || a.name === b.name) && a.kind === b.kind && a.oneway === b.oneway && a.layer === b.layer && (named || (ways(a) > 1) === (ways(b) > 1));
   const byId = new Map(roads.map(r => [r.id, r])), used = new Set<string>(), out: Run[] = [];
   /** the road that goes straight on from `road` (entered along `dirIn`) at its end p */
   const next = (road: Road, p: Vec2, dirIn: Vec2): { road: Road; reversed: boolean } | null => {
     const node = nodes.find(n => same(n.at, p));
     if (!node) return null;
-    let best: { road: Road; reversed: boolean; turn: number } | null = null;
+    let best: { road: Road; reversed: boolean; score: number } | null = null;
     for (const a of node.arms) {
       const r = byId.get(a.road)!;
       if (r === road || used.has(r.id) || !fits(road, r)) continue;
@@ -114,7 +115,8 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
       const L = polylineLength(r.path), fromStart = a.at < 0.5 && a.dir === 1, fromEnd = a.at > L - 0.5 && a.dir === -1;
       if (!fromStart && !(fromEnd && !r.oneway)) continue;
       const turn = Math.acos(Math.max(-1, Math.min(1, a.u[0] * dirIn[0] + a.u[1] * dirIn[1])));
-      if (turn < maxTurn && (!best || turn < best.turn)) best = { road: r, reversed: fromEnd, turn };
+      const score = turn + Math.abs(r.lanes - road.lanes) * 0.05;
+      if (turn < maxTurn && (!best || score < best.score)) best = { road: r, reversed: fromEnd, score };
     }
     return best;
   };
@@ -123,7 +125,7 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
     const p = path[0]!, node = nodes.find(n => same(n.at, p));
     if (!node) return null;
     const d = dist(path[0]!, path[1]!) || 1, out: Vec2 = [(path[1]![0] - p[0]) / d, (path[1]![1] - p[1]) / d];
-    let best: { road: Road; reversed: boolean; turn: number } | null = null;
+    let best: { road: Road; reversed: boolean; score: number } | null = null;
     for (const a of node.arms) {
       const r = byId.get(a.road)!;
       if (r === road || used.has(r.id) || !fits(road, r)) continue;
@@ -131,7 +133,8 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
       const L = polylineLength(r.path), atEnd = a.at > L - 0.5 && a.dir === -1, atStart = a.at < 0.5 && a.dir === 1;
       if (!atEnd && !(atStart && !r.oneway)) continue;
       const turn = Math.acos(Math.max(-1, Math.min(1, -a.u[0] * out[0] - a.u[1] * out[1])));
-      if (turn < maxTurn && (!best || turn < best.turn)) best = { road: r, reversed: !atEnd, turn };
+      const score = turn + Math.abs(r.lanes - road.lanes) * 0.05;
+      if (turn < maxTurn && (!best || score < best.score)) best = { road: r, reversed: !atEnd, score };
     }
     return best;
   };
@@ -139,7 +142,8 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
     const a = end ? path[path.length - 2]! : path[1]!, b = end ? path[path.length - 1]! : path[0]!, d = dist(a, b) || 1;
     return [(b[0] - a[0]) / d, (b[1] - a[1]) / d];
   };
-  for (const start of roads) {
+  const order = named ? roads : [...roads].sort((a, b) => b.lanes - a.lanes || (a.id < b.id ? -1 : 1));
+  for (const start of order) {
     if (used.has(start.id)) continue;
     used.add(start.id);
     let chain: { road: Road; reversed: boolean }[] = [{ road: start, reversed: false }];

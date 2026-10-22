@@ -37,9 +37,9 @@ export interface QualityOptions {
 export interface Quality extends QualityOptions { level: QualityLevel | 'custom' }
 
 export const LEVELS: Record<QualityLevel, QualityOptions> = {
-  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 150, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
-  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 250, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
-  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 400, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
+  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 450, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
+  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 800, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
+  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 1500, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
   ultra: { traffic: 0.6, wires: true, trees: 'full', viewDistance: 0, autoQuality: false, houseDetail: 3, autoDetail: false, pixelRatio: 3, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
 };
 
@@ -93,8 +93,8 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (3: mobile default medium) */
-const VERSION = 3;
+/** bumped when the defaults change in a way a saved setting should not outlive (4: expanded Đống Đa viewDistance) */
+const VERSION = 4;
 
 export function isMobileDevice(): boolean {
   try {

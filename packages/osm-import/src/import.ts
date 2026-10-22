@@ -109,6 +109,11 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   }
   for (const r of relations) {
     const t = tags(r);
+    if (t.type === 'building') {
+      const outWays = r.members.filter(m => m.type === 'way' && (m.role === 'outline' || m.role === 'outer')).map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w && w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]);
+      outWays.forEach((w, k) => push(outlines, `r${r.id}${outWays.length > 1 ? `-${k}` : ''}`, src('relation', r.id), path(w), { building: 'apartments', ...tags(w), ...t }));
+      continue;
+    }
     if (t.type !== 'multipolygon') continue;
     const isB = !!t.building && t.building !== 'no', isP = !!t['building:part'];
     if (!isB && !isP) continue;
@@ -122,8 +127,11 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   const partsOf = new Map<string, Raw[]>();
   for (const p of partsRaw) {
     const c = centroid(p.ring);
-    // the smallest outline holding the part's centre
-    const owner = keepWithBox.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring))?.b;
+    // the smallest outline holding the part's centre (or sharing a vertex/edge with it)
+    const owner = (
+      keepWithBox.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring)) ??
+      keepWithBox.find(x => p.ring.some(v => (v[0] >= x.box.x0 && v[0] <= x.box.x1 && v[1] >= x.box.y0 && v[1] <= x.box.y1 && pointInRing(v, x.b.ring)) || x.b.ring.some(u => dist(u, v) < 0.5)))
+    )?.b;
     if (!owner) { if (inside(c)) report.orphanParts.push(p.source); continue; }
     partsOf.set(owner.id, [...(partsOf.get(owner.id) ?? []), p]);
   }
@@ -152,9 +160,22 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const kind = guessKind(b.ring, buildingHint(b.t)), own = levelsOf(b.t);
     const levels = own ?? guessLevels(kind, b.source);
     const raw = partsOf.get(b.id) ?? [];
+    const bFacade: BuildingPart['facade'] = b.t['building:material'] === 'glass' ? 'glass' : 'wall';
+    const rawParts: BuildingPart[] = raw.map(p => ({
+      id: p.id, footprint: p.ring, z0: 0,
+      floors: storeyHeights(kind, levelsOf(p.t) ?? levels),
+      facade: (p.t['building:material'] ?? b.t['building:material']) === 'glass' ? 'glass' : 'wall',
+      roof: 'flat', source: p.source,
+    }));
+    // When OSM only mapped the tower building:part(s) inside a larger podium outline, keep the base podium too
+    const isBespoke = b.source === 'osm:way/136257265' || b.source === 'osm:way/850419282';
+    const rawArea = raw.reduce((s, p) => s + ringArea(p.ring), 0), baseArea = ringArea(b.ring);
+    const maxPartLevels = raw.length ? Math.max(...raw.map(p => levelsOf(p.t) ?? levels)) : levels;
+    const needPodium = raw.length > 0 && !isBespoke && rawArea < baseArea * 0.82;
+    const podiumLevels = own !== undefined && own < maxPartLevels ? own : Math.min(4, Math.max(1, maxPartLevels - 1));
     const parts: BuildingPart[] = raw.length
-      ? raw.map(p => ({ id: p.id, footprint: p.ring, z0: 0, floors: storeyHeights(kind, levelsOf(p.t) ?? levels), facade: 'wall', roof: 'flat', source: p.source }))
-      : [{ id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, levels), facade: 'wall', roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
+      ? (needPodium ? [...rawParts, { id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, Math.max(1, podiumLevels)), facade: bFacade, roof: 'flat', source: b.source }] : rawParts)
+      : [{ id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, levels), facade: bFacade, roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
     const localFronts = nearStreets(b.ring);
     const front = frontEdge(b.ring, localFronts);
     const { w, d } = frontage(b.ring, front);

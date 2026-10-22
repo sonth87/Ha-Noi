@@ -12,6 +12,7 @@ export default defineConfig({
     alias: {
       '@core': dir('./src/core'),
       '@render': dir('./src/render'),
+      '@building': dir('./src/building'),
       '@iso': dir('./src/iso'),
       '@ui': dir('./src/ui'),
       '@scenes': dir('./src/scenes'),

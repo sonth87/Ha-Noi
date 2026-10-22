@@ -62,9 +62,9 @@ export function renderThaiBinh(K: Kernel, L: LocalFrame, w: number, d: number, i
     add('mast', ca - 9, cb - 9, z0, 18, 18, H + 8, svg);
   }
 
-  // ---- trees in the forecourt on Tây Sơn (b = d), clear of the wedge tip ----
+  // ---- trees in the forecourt on Tây Sơn (b = d), clear of the wedge tip and the chamfered corner ----
   const r = rng(18), tb = d - 28;
-  for (const a of [70, 150, 230, 310, 390, 470]) {
+  for (const a of [70, 150, 230, 310, 375]) {
     const t = parkTree(D, a, tb, 'medium', () => r.next());
     add(`tree-${a}`, a - t.ra, tb - t.rb, 0, 2 * t.ra, 2 * t.rb, t.h, t.svg);
   }

@@ -74,8 +74,10 @@ export interface Lane {
   profile: [number, number][];
   /** where to stop, by distance along it, and for which light */
   stops: { s: number; group: Group }[];
-  /** on a bridge: cars only */
+  /** on a bridge or inner lane: cars only */
   carsOnly: boolean;
+  /** on the outer lane of a multi-lane road: bikes only */
+  bikesOnly?: boolean;
   width: number;
 }
 
@@ -86,47 +88,99 @@ export function trafficLanes(net: Network): Lane[] {
   const out: Lane[] = [];
   for (const route of net.routes) {
     if (!DRIVEN.has(route.kind)) continue;
-    const parts = route.parts.map(p => roads.get(p.road)!), first = parts[0]!;
-    const width = parts.reduce((s, r) => s + r.width, 0) / parts.length, lanes = first.lanes;
+    const parts = route.parts.map(p => ({ ...p, r: roads.get(p.road)! }));
+    const waysOf = (r: Road) => (route.oneway ? r.lanes : Math.max(1, Math.floor(r.lanes / 2)));
+    const offOn = (r: Road, k: number) => {
+      const n = waysOf(r), j = Math.min(k, n - 1);
+      return route.oneway ? -r.width / 2 + ((j + 0.5) * r.width) / n : ((j + 0.5) * (r.width / 2)) / n;
+    };
+    const minWays = Math.min(...parts.map(p => waysOf(p.r))), maxWays = Math.max(...parts.map(p => waysOf(p.r)));
     // the profile of a bridge route (one road on a bridge carries its own)
-    const profile: [number, number][] = route.layer > 0 ? route.parts.flatMap(p => { const r = roads.get(p.road)!, L = p.to - p.from; return (p.reversed ? r.profile.map(([s, z]): [number, number] => [L - s, z]).reverse() : r.profile).map(([s, z]): [number, number] => [s + p.from, z]); }) : [];
+    const profile: [number, number][] = route.layer > 0 ? parts.flatMap(p => { const L = p.to - p.from; return (p.reversed ? p.r.profile.map(([s, z]): [number, number] => [L - s, z]).reverse() : p.r.profile).map(([s, z]): [number, number] => [s + p.from, z]); }) : [];
     const L = polylineLength(route.path);
-    const ways: { off: number; back: boolean }[] = [];
-    if (route.oneway) for (let k = 0; k < lanes; k++) ways.push({ off: -width / 2 + ((k + 0.5) * width) / lanes, back: false });
-    else {
-      const half = Math.max(1, Math.floor(lanes / 2));
-      for (let k = 0; k < half; k++) { const off = ((k + 0.5) * width) / 2 / half; ways.push({ off, back: false }, { off, back: true }); }
-    }
-    ways.forEach(({ off, back }, k) => {
-      let path = offset(route.path, off);
+    const mine = new Set(parts.map(p => p.road));
+
+    const emit = (k: number, nWays: number, back: boolean, subParts: typeof parts, idSuffix: string) => {
+      const s0 = subParts[0]!.from, s1 = subParts[subParts.length - 1]!.to;
+      const basePath = s0 === 0 && s1 === L ? route.path : subParts.reduce<Vec2[]>((acc, p) => {
+        const seg = p.reversed ? [...p.r.path].reverse() : p.r.path;
+        return acc.length ? [...acc, ...seg.slice(1)] : [...seg];
+      }, []);
+      const baseLen = polylineLength(basePath);
+      if (baseLen < 20) return;
+      const sign = back ? -1 : 1;
+      const dAt = (s: number) => {
+        const gs = s0 + s;
+        let idx = subParts.findIndex(p => gs >= p.from && gs <= p.to);
+        if (idx < 0) idx = gs < s0 ? 0 : subParts.length - 1;
+        const cur = subParts[idx]!, d0 = sign * offOn(cur.r, k);
+        // smooth transition over ±4 m across a junction where adjacent parts have different offsets
+        if (idx < subParts.length - 1 && cur.to - gs < 4) {
+          const d1 = sign * offOn(subParts[idx + 1]!.r, k);
+          if (Math.abs(d1 - d0) > 0.05) return d0 + (d1 - d0) * (0.5 * (1 - (cur.to - gs) / 4));
+        }
+        if (idx > 0 && gs - cur.from < 4) {
+          const dPrev = sign * offOn(subParts[idx - 1]!.r, k);
+          if (Math.abs(d0 - dPrev) > 0.05) return dPrev + (d0 - dPrev) * (0.5 * (1 + (gs - cur.from) / 4));
+        }
+        return d0;
+      };
+      let path = offset(basePath, dAt);
       if (back) path = path.reverse();
-      const prof = back ? profile.map(([s, z]): [number, number] => [L - s, z]).reverse() : profile;
+      const subProf = profile.filter(([s]) => s >= s0 - 1e-3 && s <= s1 + 1e-3).map(([s, z]): [number, number] => [s - s0, z]);
+      const prof = back ? subProf.map(([s, z]): [number, number] => [baseLen - s, z]).reverse() : subProf;
       // stop before the first signalled node of each cluster, the crossing road's half width and 2.5 m short
-      const passes = route.nodes.map(n => ({ n: nodes.get(n.node)!, s: back ? L - n.at : n.at })).filter(q => q.n.signals).sort((a, b) => a.s - b.s);
+      const subNodes = route.nodes.filter(n => n.at >= s0 - 0.5 && n.at <= s1 + 0.5);
+      const passes = subNodes.map(n => ({ n: nodes.get(n.node)!, s: back ? s1 - n.at : n.at - s0 })).filter(q => q.n.signals).sort((a, b) => a.s - b.s);
       const stops: Lane['stops'] = [];
       let last: Vec2 | null = null;
       for (const { n, s } of passes) {
         if (last && dist(last, n.at) < 40) continue;
         last = n.at;
-        const mine = new Set(route.parts.map(p => p.road)), cross = Math.max(0, ...n.arms.filter(a => !mine.has(a.road)).map(a => a.half));
+        const cross = Math.max(0, ...n.arms.filter(a => !mine.has(a.road)).map(a => a.half));
         const at = s - cross - 2.5, dir = headingAt(path, at);
-        if (at > 0) stops.push({ s: at, group: Math.abs(Math.cos(dir)) >= Math.abs(Math.sin(dir)) ? 'x' : 'y' });
+        if (at > 0 && at < baseLen) stops.push({ s: at, group: Math.abs(Math.cos(dir)) >= Math.abs(Math.sin(dir)) ? 'x' : 'y' });
       }
-      out.push({ id: `${route.id}#${k}`, route: route.id, path, length: polylineLength(path), profile: prof, stops, carsOnly: route.layer > 0, width: width / Math.max(1, route.oneway ? lanes : ways.length / 2) });
-    });
+      const laneW = subParts.reduce((sum, p) => sum + p.r.width / (route.oneway ? p.r.lanes : 2 * waysOf(p.r)), 0) / subParts.length;
+      const carsOnly = route.layer > 0 || (nWays >= 2 && k === 0);
+      const bikesOnly = route.layer === 0 && nWays >= 2 && k === nWays - 1;
+      out.push({ id: `${route.id}#${idSuffix}`, route: route.id, path, length: polylineLength(path), profile: prof, stops, carsOnly, bikesOnly, width: laneW });
+    };
+
+    const dirs = route.oneway ? [false] : [false, true];
+    let seq = 0;
+    for (let k = 0; k < minWays; k++) {
+      for (const back of dirs) emit(k, minWays, back, parts, `${seq++}`);
+    }
+    for (let k = minWays; k < maxWays; k++) {
+      let i = 0;
+      while (i < parts.length) {
+        if (waysOf(parts[i]!.r) <= k) { i++; continue; }
+        let j = i;
+        while (j + 1 < parts.length && waysOf(parts[j + 1]!.r) > k) j++;
+        const sub = parts.slice(i, j + 1);
+        if (sub[sub.length - 1]!.to - sub[0]!.from >= 40) {
+          for (const back of dirs) emit(k, k + 1, back, sub, `${seq++}`);
+        }
+        i = j + 1;
+      }
+    }
   }
   return out.sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 /** the line `d` m to the right of a path (x east, y south: right of (dx, dy) is (−dy, dx)) */
-function offset(path: readonly Vec2[], d: number): Vec2[] {
+function offset(path: readonly Vec2[], d: number | ((s: number) => number)): Vec2[] {
   const r = (a: Vec2, b: Vec2): Vec2 => { const L = dist(a, b) || 1; return [-(b[1] - a[1]) / L, (b[0] - a[0]) / L]; };
+  let s = 0;
   return path.map((p, i) => {
+    if (i > 0) s += dist(path[i - 1]!, p);
+    const di = typeof d === 'function' ? d(s) : d;
     const n0 = i > 0 ? r(path[i - 1]!, p) : r(p, path[i + 1]!), n1 = i < path.length - 1 ? r(p, path[i + 1]!) : n0;
     let mx = n0[0] + n1[0], my = n0[1] + n1[1];
     const L = Math.hypot(mx, my) || 1; mx /= L; my /= L;
     const k = Math.min(3, 1 / Math.max(0.33, mx * n0[0] + my * n0[1]));
-    return [p[0] + mx * d * k, p[1] + my * d * k];
+    return [p[0] + mx * di * k, p[1] + my * di * k];
   });
 }
 
@@ -158,8 +212,8 @@ function zOf(p: [number, number][], s: number): number {
 
 export type VehicleKind = 'bike' | 'sedan' | 'hatch' | 'taxi' | 'van';
 export const VEHICLE_LEN: Record<VehicleKind, number> = { bike: 1.8, sedan: 4.4, hatch: 3.8, taxi: 4.4, van: 4.8 };
-/** lateral offset of each track inside a lane (m): bikes on the edges, cars in the middle */
-export const TRACKS = [-0.95, 0, 0.95] as const;
+/** lateral offset of each track inside a lane (m): bikes on the two sub-tracks, cars in the middle */
+export const TRACKS = [-0.55, 0, 0.55] as const;
 
 export interface Vehicle {
   id: string;
@@ -176,20 +230,41 @@ export interface Vehicle {
 }
 
 /** Starting traffic, `density` 0–1 of the full amount: per lane and track, evenly spaced, none
-    inside a stop zone. Seeded by the lane ids. */
+    on top of another. Seeded by the lane ids. */
 export function spawnTraffic(lanes: readonly Lane[], density: number): Vehicle[] {
   const out: Vehicle[] = [];
   lanes.forEach((ln, i) => {
     const r = rng(hash(`traffic:${ln.id}`));
-    // spacing at full density: a bike every 15 m on each edge track, a car every 32 m in the middle
-    const tracks: [0 | 1 | 2, number, boolean][] = ln.carsOnly ? [[1, 32, false]] : [[0, 15, true], [2, 15, true], [1, 32, false]];
-    for (const [track, spacing, bikes] of tracks) {
-      const n = Math.floor((ln.length / spacing) * density);
-      const off = r.next() * ln.length;
+    if (ln.carsOnly) {
+      const n = Math.floor((ln.length / 26) * density), off = r.next() * ln.length;
       for (let k = 0; k < n; k++) {
-        const kind: VehicleKind = bikes ? 'bike' : r.pick(['sedan', 'sedan', 'hatch', 'taxi', 'van'] as const);
-        const s = (off + (k * ln.length) / n + (r.next() - 0.5) * 2) % ln.length;
-        out.push({ id: `${ln.id}/${track}/${k}`, kind, lane: i, track, s, v: bikes ? 4.8 + r.next() * 3 : 5.2 + r.next() * 1.4, len: VEHICLE_LEN[kind] });
+        const kind: VehicleKind = r.pick(['sedan', 'sedan', 'hatch', 'taxi', 'van'] as const);
+        const s = ((off + (k * ln.length) / n + (r.next() - 0.5) * 1.5) % ln.length + ln.length) % ln.length;
+        out.push({ id: `${ln.id}/1/${k}`, kind, lane: i, track: 1, s, v: 5.2 + r.next() * 1.4, len: VEHICLE_LEN[kind] });
+      }
+    } else if (ln.bikesOnly) {
+      for (const track of [0, 2] as const) {
+        const n = Math.floor((ln.length / 15) * density), off = r.next() * ln.length;
+        for (let k = 0; k < n; k++) {
+          const s = ((off + (k * ln.length) / n + (r.next() - 0.5) * 1.5) % ln.length + ln.length) % ln.length;
+          out.push({ id: `${ln.id}/${track}/${k}`, kind: 'bike', lane: i, track, s, v: 4.8 + r.next() * 3, len: VEHICLE_LEN.bike });
+        }
+      }
+    } else {
+      // Mixed lane: cars (track 1) and pairs of bikes (tracks 0 & 2) placed in alternating slots so no bike starts inside a car
+      const n = Math.floor((ln.length / 15) * density), off = r.next() * ln.length;
+      for (let k = 0; k < n; k++) {
+        const base = off + (k * ln.length) / n;
+        if (k % 3 === 0) {
+          const kind: VehicleKind = r.pick(['sedan', 'sedan', 'hatch', 'taxi', 'van'] as const);
+          const s = ((base + (r.next() - 0.5) * 1.2) % ln.length + ln.length) % ln.length;
+          out.push({ id: `${ln.id}/1/${k}`, kind, lane: i, track: 1, s, v: 5.2 + r.next() * 1.4, len: VEHICLE_LEN[kind] });
+        } else {
+          for (const track of [0, 2] as const) {
+            const s = ((base + (r.next() - 0.5) * 1.5) % ln.length + ln.length) % ln.length;
+            out.push({ id: `${ln.id}/${track}/${k}`, kind: 'bike', lane: i, track, s, v: 4.8 + r.next() * 3, len: VEHICLE_LEN.bike });
+          }
+        }
       }
     }
   });
@@ -204,35 +279,48 @@ const LOOK = 42;                                // m: how far ahead a stop line 
 /** Advance every vehicle by dt seconds. `prev` is the signal state of the previous step (for the
     yellow decision). Mutates and returns `vehicles`. */
 export function stepTraffic(vehicles: Vehicle[], lanes: readonly Lane[], sig: Signals, prev: Signals | null, dt: number): Vehicle[] {
-  const groups = new Map<string, Vehicle[]>();
+  const byLane = new Map<number, [Vehicle[], Vehicle[], Vehicle[]]>();
   for (const c of vehicles) {
-    const k = `${c.lane}:${c.track}`;
-    let g = groups.get(k);
-    if (!g) groups.set(k, (g = []));
-    g.push(c);
+    let t = byLane.get(c.lane);
+    if (!t) byLane.set(c.lane, (t = [[], [], []]));
+    t[c.track].push(c);
   }
   const speed = new Map<Vehicle, number>();
-  for (const g of groups.values()) {
-    const ln = lanes[g[0]!.lane]!, L = ln.length;
-    g.sort((a, b) => a.s - b.s);
-    g.forEach((c, i) => {
-      const front = c.s + c.len;
-      let free = Infinity;
-      if (g.length > 1) {
-        const ahead = g[(i + 1) % g.length]!;
-        free = ((ahead.s - front) % L + L) % L - (c.len < 3 ? GAP.bike : GAP.car);
+  for (const [laneIdx, tracks] of byLane) {
+    const ln = lanes[laneIdx]!, L = ln.length;
+    for (const g of tracks) g.sort((a, b) => a.s - b.s);
+    const freeIn = (c: Vehicle, g: Vehicle[], gap: number): number => {
+      if (!g.length) return Infinity;
+      let best = Infinity;
+      for (const q of g) {
+        if (q === c) continue;
+        const d = ((q.s - c.s) % L + L) % L;
+        if (d > 0 && d < best) best = d;
       }
-      // the next stop line ahead, and its light
-      const stop = ln.stops.find(st => st.s - STOP_AHEAD - front >= -0.01 && st.s - front < LOOK);
-      if (stop) {
-        const light = sig[stop.group], was = prev?.[stop.group], toLine = stop.s - STOP_AHEAD - front;
-        if (light === 'go') c.commit = true;
-        else if (light === 'wait' && was !== 'wait') c.commit = toLine < c.v * 0.8;
-        else if (light === 'stop' && was !== 'stop') c.commit = false;
-        if (light !== 'go' && c.commit !== true) free = Math.min(free, toLine);
-      } else c.commit = undefined;
-      speed.set(c, Math.min(c.v, Math.max(0, free) * EASE));
-    });
+      return best < Infinity ? best - c.len - gap : Infinity;
+    };
+    for (const g of tracks) {
+      for (const c of g) {
+        const front = c.s + c.len, gap = c.len < 3 ? GAP.bike : GAP.car;
+        // check own track, plus conflicting track(s) in the same lane (cars at 0 overlap bike tracks 0 & 2)
+        let free = freeIn(c, tracks[c.track], gap);
+        if (c.track === 1) {
+          free = Math.min(free, freeIn(c, tracks[0], gap), freeIn(c, tracks[2], gap));
+        } else {
+          free = Math.min(free, freeIn(c, tracks[1], gap));
+        }
+        // the next stop line ahead, and its light
+        const stop = ln.stops.find(st => st.s - STOP_AHEAD - front >= -0.01 && st.s - front < LOOK);
+        if (stop) {
+          const light = sig[stop.group], was = prev?.[stop.group], toLine = stop.s - STOP_AHEAD - front;
+          if (light === 'go') c.commit = true;
+          else if (light === 'wait' && was !== 'wait') c.commit = toLine < c.v * 0.8;
+          else if (light === 'stop' && was !== 'stop') c.commit = false;
+          if (light !== 'go' && c.commit !== true) free = Math.min(free, toLine);
+        } else c.commit = undefined;
+        speed.set(c, Math.min(c.v, Math.max(0, free) * EASE));
+      }
+    }
   }
   for (const c of vehicles) c.s = (c.s + speed.get(c)! * dt) % lanes[c.lane]!.length;
   return vehicles;

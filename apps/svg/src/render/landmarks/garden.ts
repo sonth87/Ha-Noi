@@ -14,10 +14,10 @@ import { TREE } from '@core/units';
 import { rng } from '@core/rng';
 import { LocalDraw } from '@render/local';
 import { treeArt, type Size } from '@render/parts/trees';
-import { ellipse, prism } from '@render/landmarks/shapes';
+import { ellipse, prism, type Pt } from '@render/landmarks/shapes';
 import { f, g } from '@render/svg';
 
-const HEDGE = 4, HEDGE_H = 5;
+const HEDGE = 4, HEDGE_H = 5, CHAMFER = 140;
 
 /** a park tree: drawing plus the half-extents of its box */
 export function parkTree(D: LocalDraw, a: number, b: number, size: Size, r: () => number) {
@@ -36,22 +36,35 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
   const add = (iid: string, a: number, b: number, z: number, la: number, lb: number, h: number, svg: string) =>
     items.push({ id: `${id}:${iid}`, box: L.box(a, b, z, la, lb, h), svg });
   const corner: [number, number] = [toward[0] > 0 ? w : 0, toward[1] > 0 ? d : 0];
+  const cornerEntry: [number, number] = [corner[0] - toward[0] * (CHAMFER / 2), corner[1] - toward[1] * (CHAMFER / 2)];
+  const du = (a: number) => (toward[0] > 0 ? w - a : a);
+  const dw = (b: number) => (toward[1] > 0 ? d - b : b);
+  const inChamfer = (a: number, b: number, pad = 0) => du(a) + dw(b) < CHAMFER + pad;
+
+  const ring: Pt[] = [];
+  for (const [a, b] of [[0, 0], [w, 0], [w, d], [0, d]] as const) {
+    if (a === corner[0] && b === corner[1]) {
+      if ((a === 0 && b === 0) || (a === w && b === d)) ring.push([a, b - toward[1] * CHAMFER], [a - toward[0] * CHAMFER, b]);
+      else ring.push([a - toward[0] * CHAMFER, b], [a, b - toward[1] * CHAMFER]);
+    } else ring.push([a, b]);
+  }
   const ground = (inner: string) => g(D.plane([0, 0, 0.05], [1, 0, 0], [0, 1, 0]), inner);
 
   // ---- layout of paths ----
   const ca = w / 2, cb = d / 2, R0 = 54, R1 = 96, R2 = 112, PW = 14;
   const segs: Seg[] = kind === 'circle'
-    ? [[ca, cb, ca, 0], [ca, cb, ca, d], [ca, cb, 0, cb], [ca, cb, w, cb], [ca, cb, corner[0], corner[1]]]
-    : winding(w, d, corner);
+    ? [[ca, cb, ca, 0], [ca, cb, ca, d], [ca, cb, 0, cb], [ca, cb, w, cb], [ca, cb, cornerEntry[0], cornerEntry[1]]]
+    : winding(w, d, corner, cornerEntry);
   const onPath = (a: number, b: number, pad: number) =>
     segs.some(s => distSeg(a, b, s) < PW / 2 + pad) || (kind === 'circle' && Math.hypot(a - ca, b - cb) < R2 + pad);
 
-  // ---- slab: lawn, paths, plaza ----
+  // ---- slab: chamfered lawn, paths, plaza ----
   {
-    let art = `<rect class="lawn" width="${w}" height="${d}"/>`;
+    const pts = ring.map(p => `${f(p[0])},${f(p[1])}`).join(' ');
+    let art = `<polygon class="lawn" points="${pts}"/>`;
     // butt ends, so a path stops flush with the plot's edge; round joints only inside the plot
     art += `<path class="path-paved" stroke-width="${PW}" d="${segs.map(s => `M${f(s[0])} ${f(s[1])}L${f(s[2])} ${f(s[3])}`).join('')}"/>`;
-    const inside = (a: number, b: number) => a > 0.5 && a < w - 0.5 && b > 0.5 && b < d - 0.5;
+    const inside = (a: number, b: number) => a > 0.5 && a < w - 0.5 && b > 0.5 && b < d - 0.5 && !inChamfer(a, b, 2);
     for (const sg of segs) for (const [a, b] of [[sg[0], sg[1]], [sg[2], sg[3]]] as const) if (inside(a, b)) art += `<circle class="path-fill" cx="${f(a)}" cy="${f(b)}" r="${PW / 2}"/>`;
     if (kind === 'circle') {
       art += `<circle class="path-fill" cx="${ca}" cy="${cb}" r="${R2}"/><circle class="lawn" cx="${ca}" cy="${cb}" r="${R1}"/>`;
@@ -64,13 +77,13 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
     let tufts = '';
     for (let i = 0; i < (w * d) / 260; i++) {
       const a = rnd() * w, b = rnd() * d;
-      if (!onPath(a, b, 2)) tufts += `M${f(a)} ${f(b)}l1.2 -2.2M${f(a + 1.6)} ${f(b)}l.6 -2`;
+      if (!onPath(a, b, 2) && !inChamfer(a, b, 4)) tufts += `M${f(a)} ${f(b)}l1.2 -2.2M${f(a + 1.6)} ${f(b)}l.6 -2`;
     }
     art += `<path class="tuft" d="${tufts}"/>`;
     add('slab', 0, 0, -6, w, d, 6, D.box(0, 0, -6, w, d, 6) + ground(art));
   }
 
-  // ---- hedge round the edge, cut into runs, open where a path leaves ----
+  // ---- hedge round the edge, cut into runs, open where a path leaves or at the chamfered corner ----
   const edges: [number, number, number, number][] = [[0, 0, w, 0], [0, d - HEDGE, w, d - HEDGE], [0, HEDGE, 0, d - HEDGE], [w - HEDGE, HEDGE, w - HEDGE, d - HEDGE]];
   edges.forEach(([a0, b0, a1, b1], ei) => {
     const along = a1 > a0, len = along ? a1 - a0 : b1 - b0;
@@ -83,7 +96,7 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
     };
     for (let t = 0; t <= len; t += 2) {
       const [a, b] = along ? [a0 + t, b0 + HEDGE / 2] : [a0 + HEDGE / 2, b0 + t];
-      if (onPath(a, b, 3)) { flush(t); continue; }
+      if (onPath(a, b, 3) || inChamfer(a, b, 2)) { flush(t); continue; }
       if (start === null) start = t;
       else if (t - start >= 60) { flush(t); start = t; }
     }
@@ -113,6 +126,7 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
   }
   let lamps = 0;
   spots.forEach(([a, b], i) => {
+    if (inChamfer(a, b, 10)) return;
     if (i % 2 === 0) {
       // lamp: a slim post and a globe
       const z = 30, p = D.P(a, b, z + 2.2);
@@ -127,7 +141,7 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
     }
   });
 
-  // ---- trees: a jittered grid over the lawns, off the paths and clear of the hedge ----
+  // ---- trees: a jittered grid over the lawns, off the paths and clear of the hedge and chamfer ----
   const sizes: Size[] = kind === 'circle' ? ['large', 'medium', 'large'] : ['large', 'large', 'medium'];
   const big = TREE.large;
   const stepA = 2 * big.ra + 4, stepB = kind === 'circle' ? 34 : 24;
@@ -139,7 +153,7 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
       const size = sizes[Math.floor(rnd() * sizes.length)]!, k = TREE[size];
       const ta = a + (rnd() - 0.5) * 6, tb = b + (rnd() - 0.5) * 4;
       if (kind === 'circle' && rnd() < 0.18) continue;
-      if (onPath(ta, tb, k.ra * 0.8 + 4)) continue;
+      if (onPath(ta, tb, k.ra * 0.8 + 4) || inChamfer(ta, tb, k.ra + k.rb + 6)) continue;
       const box: [number, number, number, number] = [ta - k.ra, tb - k.rb, ta + k.ra, tb + k.rb];
       if (kept.some(q => box[0] < q[2] && q[0] < box[2] && box[1] < q[3] && q[1] < box[3])) continue;
       kept.push(box);
@@ -150,11 +164,11 @@ export function renderGarden(K: Kernel, L: LocalFrame, kind: 'circle' | 'grove',
   return { items, lamps };
 }
 
-/** the grove's path: from the junction corner, bending through the park to the far side */
-function winding(w: number, d: number, corner: [number, number]): Seg[] {
+/** the grove's path: from the chamfered junction corner, bending through the park to the far side */
+function winding(w: number, d: number, corner: [number, number], entry: [number, number]): Seg[] {
   const sa = corner[0] === 0 ? 1 : -1, sb = corner[1] === 0 ? 1 : -1;
   const P = (u: number, v: number): [number, number] => [corner[0] + sa * u * w, corner[1] + sb * v * d];
-  const pts = [P(0, 0), P(0.22, 0.3), P(0.5, 0.42), P(0.7, 0.66), P(1, 0.74)];
+  const pts = [entry, P(0.32, 0.36), P(0.5, 0.42), P(0.7, 0.66), P(1, 0.74)];
   const branch = [P(0.5, 0.42), P(0.36, 1)];
   const out: Seg[] = [];
   for (let i = 0; i < pts.length - 1; i++) out.push([...pts[i]!, ...pts[i + 1]!]);

@@ -55,8 +55,8 @@ export const SCENES: readonly SceneDef[] = [
     Panel: LandmarksPanel,
   },
   {
-    id: 'pho-thai-ha',
-    name: 'Phố Thái Hà',
+    id: 'pho',
+    name: 'Phố',
     hint: 'q e rotate · x cutaway · n night · t traffic · w wire · wheel zoom · drag pan · dbl-click reset',
     aria: 'Isometric street in Hà Nội, about 100 metres, houses on both sides, sidewalks with poles, wires, street lamps and trees, motorbikes in two lanes. Q and E rotate the view; X cuts the near row down to its ground floor; N switches day and night; T starts or stops the traffic; W sends a pulse along a wire; click a floor to light it; scroll to zoom, drag to pan, double-click to reset.',
     create: () => new StreetController(),

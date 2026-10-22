@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CYCLE, CYCLE_T, signalsAt, spawnTraffic, stepTraffic, type Lane, type Signals } from './traffic';
+import { CYCLE, CYCLE_T, signalsAt, spawnTraffic, stepTraffic, trafficLanes, type Lane, type Signals } from './traffic';
+import type { Network } from './network';
 
 describe('signals', () => {
   it('never shows green both ways, and always passes through all red', () => {
@@ -21,9 +22,39 @@ describe('signals', () => {
   });
 });
 
+describe('trafficLanes', () => {
+  it('places two-way directions on opposite sides of the road and aligns with per-segment lane centers', () => {
+    const net: Network = {
+      roads: [
+        {
+          id: 'r1', name: 'Phố Chùa Bộc', kind: 'secondary',
+          path: [[0, 0], [100, 0]], width: 7, lanes: 2, oneway: false,
+          layer: 0, sidewalk: { left: 3, right: 3 }, profile: [[0, 0], [100, 0]], streets: ['s1'],
+        },
+      ],
+      nodes: [],
+      runs: [],
+      routes: [
+        {
+          id: 'route-0', name: 'Phố Chùa Bộc', kind: 'secondary', oneway: false, layer: 0,
+          parts: [{ road: 'r1', from: 0, to: 100, reversed: false }],
+          nodes: [],
+          path: [[0, 0], [100, 0]],
+        },
+      ],
+    };
+    const built = trafficLanes(net);
+    expect(built).toHaveLength(2);
+    const [fwd, back] = built;
+    // In city coordinates (+x = east, +y = south), right-hand side of +x is y = +1.75, and right-hand side of -x is y = -1.75
+    expect(fwd!.path[0]![1]).toBeCloseTo(1.75, 5);
+    expect(back!.path[0]![1]).toBeCloseTo(-1.75, 5);
+  });
+});
+
 describe('traffic model', () => {
   // two 200 m lanes: one along x stopping at 95 m for light x, one along y stopping at 90 m for light y
-  const lane = (id: string, path: [number, number][], stop: number, group: 'x' | 'y'): Lane => ({ id, route: id, path, length: 200, profile: [], stops: [{ s: stop, group }], carsOnly: false, width: 3.25 });
+  const lane = (id: string, path: [number, number][], stop: number, group: 'x' | 'y'): Lane => ({ id, route: id, path, length: 200, profile: [], stops: [{ s: stop, group }], carsOnly: false, bikesOnly: false, width: 3.25 });
   const lanes = [lane('ax', [[0, 0], [200, 0]], 95, 'x'), lane('ay', [[100, -100], [100, 100]], 90, 'y')];
 
   it('spawns evenly, by density, none on top of another', () => {
@@ -48,9 +79,10 @@ describe('traffic model', () => {
       });
       prev = sig;
       if (step % 15 === 0) {
-        const groups = new Map<string, typeof cars>();
-        for (const c of cars) { const k = `${c.lane}${c.track}`; groups.set(k, [...(groups.get(k) ?? []), c]); }
-        for (const g of groups.values()) for (const p of g) for (const q of g) if (p !== q) {
+        const byLane = new Map<number, typeof cars>();
+        for (const c of cars) byLane.set(c.lane, [...(byLane.get(c.lane) ?? []), c]);
+        for (const g of byLane.values()) for (const p of g) for (const q of g) if (p !== q) {
+          if (p.track !== q.track && p.kind === 'bike' && q.kind === 'bike') continue;
           const d = (((q.s - p.s) % 200) + 200) % 200;
           if (d > 0 && d < 100) expect(d).toBeGreaterThanOrEqual(p.len - 0.05);
         }

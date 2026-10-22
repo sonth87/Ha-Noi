@@ -2,7 +2,7 @@
    for the "Công trình" page: what each one is, where it stands, what it is drawn from. Pure. */
 import type { PlotKind } from '@core/crossroads';
 
-export type LandmarkKind = PlotKind | 'flyover';
+export type LandmarkKind = PlotKind | 'flyover' | 'metro-station';
 
 export interface Landmark {
   id: string;
@@ -82,6 +82,24 @@ export const LANDMARKS: readonly Landmark[] = [
       'Chỉ ô tô được lên cầu (xe máy không)',
       'Nút giao: vạch sang đường 4 phía, vạch dừng, bó vỉa sơn sọc ở 4 góc',
       'Đèn giao thông 4 mặt có số đếm ngược ở mỗi góc',
+    ],
+  },
+  {
+    id: 'metro-station',
+    kind: 'metro-station',
+    name: 'Ga đường sắt trên cao Thái Hà (Metro 2A)',
+    place: 'Phố Hoàng Cầu – Thái Hà (Tuyến 2A Cát Linh – Hà Đông)',
+    facts: [
+      '3 tầng trên cao: gầm xà mũ (5.8 m) + tầng trung chuyển (5.8–10 m) + tầng ke ga & tàu (10–14.8 m) + mái vòm (tới 20.6 m)',
+      'Dài ≈ 76 m thân ga (khu đất 104 × 52 m), rộng 18.8 m vượt trên dải phân cách giữa 2 lòng đường Hoàng Cầu',
+      '4 cầu bộ hành vượt qua lòng đường xuống 4 cụm thang bộ – thang cuốn – thang máy trên vỉa hè ngoài',
+    ],
+    features: [
+      '5 nhịp cột đôi ở dải phân cách giữa với xà mũ chữ Y/T vươn đỡ sàn tầng trung chuyển, hoàn toàn không cản 2 chiều xe chạy dưới gầm',
+      'Tầng trung chuyển có dải cửa sổ kính ngang, lam chắn nắng thép và loggia thoáng hai đầu; bấm vào để bật/tắt đèn (MS/1)',
+      'Tầng ke ga có nan chớp nghiêng, 4 mảng tường đầu ga ốp gạchmosaic hình thoi xanh – trắng đặc trưng Ga Thái Hà và 2 đoàn tàu 4 toa tuyến 2A (MS/2, MS/3)',
+      'Mái vòm đôi chữ C ôm hai bên kết hợp vòm kính lấy sáng và dàn vòm thép ở giữa',
+      '4 lối lên xuống đặt gọn trên vỉa hè ngoài: trụ thang máy đứng + tường trắng giật cấp 6 bậc + mái vòm cong che cầu thang bộ và thang cuốn',
     ],
   },
 ];

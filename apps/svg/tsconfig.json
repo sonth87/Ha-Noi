@@ -18,6 +18,7 @@
     "paths": {
       "@core/*": ["./src/core/*"],
       "@render/*": ["./src/render/*"],
+      "@building/*": ["./src/building/*"],
       "@iso/*": ["./src/iso/*"],
       "@ui/*": ["./src/ui/*"],
       "@scenes/*": ["./src/scenes/*"],
@@ -25,5 +26,5 @@
       "@styles/*": ["./src/styles/*"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "vite.iso-glow.config.ts"]
 }

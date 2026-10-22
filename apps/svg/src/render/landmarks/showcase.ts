@@ -10,10 +10,11 @@ import { buildCrossroads } from '@render/crossroads-scene';
 import { renderNovotel } from '@render/landmarks/novotel';
 import { renderThaiBinh } from '@render/landmarks/thai-binh';
 import { renderGarden } from '@render/landmarks/garden';
+import { MS_SIZE, renderMetroStation } from '@building/metro-station';
 
 export interface Showcase { items: Item[]; floors: string[] }
 
-const CORNER: Record<Exclude<Landmark['kind'], 'flyover'>, Corner> = { 'thai-binh': 'nw', novotel: 'ne', 'garden-circle': 'sw', 'garden-grove': 'se' };
+const CORNER: Record<Exclude<Landmark['kind'], 'flyover' | 'metro-station'>, Corner> = { 'thai-binh': 'nw', novotel: 'ne', 'garden-circle': 'sw', 'garden-grove': 'se' };
 
 let crossroads: Crossroads | null = null;
 
@@ -30,6 +31,11 @@ export function junctionWindow(cr: Crossroads): Record<'x' | 'y', [number, numbe
 
 export function renderLandmark(K: Kernel, lm: Landmark, k: ViewK): Showcase {
   if (lm.kind === 'flyover') return junctionCut(K, k);
+  if (lm.kind === 'metro-station') {
+    const [w, d] = MS_SIZE;
+    const L = localFrame(rotateSpec({ x: 0, y: 0, w, d, facing: 'S' }, k, w / 2, d / 2));
+    return renderMetroStation(K, L, w, d);
+  }
   const corner = CORNER[lm.kind], [w, d] = PLOTS[corner].size;
   const L = localFrame(rotateSpec({ x: 0, y: 0, w, d, facing: 'S' }, k, w / 2, d / 2));
   // the plot's corner toward the junction, as in the crossroads (gardens draw their paths to it)

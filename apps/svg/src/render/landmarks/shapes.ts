@@ -90,14 +90,41 @@ function trimChain(chain: readonly Pt[], d: number): Pt[] {
   return cut(cut([...chain]).reverse()).reverse();
 }
 
-/** Ribbon windows: per floor, one continuous glass band right round the visible side.
+/** Deterministic window variant (' off' | ' dim' | ' hi' | '') matching iso-glow's 01-tower.js */
+function winVar(a: number, b: number, c = 0): string {
+  const x = Math.sin(a * 127.1 + b * 311.7 + c * 74.7 + 19.19) * 43758.5453;
+  const r = x - Math.floor(x);
+  return r < 0.14 ? ' off' : r < 0.34 ? ' dim' : r < 0.50 ? ' hi' : '';
+}
+
+/** Subdivide a 2D chain into individual window panes along its arc length for one floor [za, zb]. */
+function chainPanes(D: LocalDraw, chain: readonly Pt[], za: number, zb: number, floorIdx: number, edgeSeed = 0, pitch = 18): string {
+  let out = '';
+  for (let s = 0; s < chain.length - 1; s++) {
+    const p = chain[s]!, q = chain[s + 1]!;
+    const len = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (len < 1) continue;
+    const cols = Math.max(1, Math.round(len / pitch));
+    const pad = Math.min(0.1, 1.2 / (len / cols));
+    for (let c = 0; c < cols; c++) {
+      const t0 = (c + pad) / cols, t1 = (c + 1 - pad) / cols;
+      const a0 = p[0] + (q[0] - p[0]) * t0, b0 = p[1] + (q[1] - p[1]) * t0;
+      const a1 = p[0] + (q[0] - p[0]) * t1, b1 = p[1] + (q[1] - p[1]) * t1;
+      const v = winVar(edgeSeed + s * 17, floorIdx, c);
+      out += poly(D, [[a0, b0, za], [a1, b1, za], [a1, b1, zb], [a0, b0, zb]], `win${v}`);
+    }
+  }
+  return out;
+}
+
+/** Ribbon windows: per floor, individual window panes with iso-glow off/dim/hi variation round the visible side.
     Floors are numbered from `first`; each is its own .fl group (click to light). */
 export function ribbons(D: LocalDraw, ring: readonly Pt[], id: string, z0: number, floorH: number, n: number, first = 1, glass: readonly [number, number] = [0.28, 0.8]): string {
-  const chain = visibleChain(D, ring);
+  const chain = trimChain(visibleChain(D, ring), 1.5);
   let s = '';
   for (let i = 0; i < n; i++) {
-    const z = z0 + i * floorH;
-    s += `<g class="fl" data-floor="${id}/${first + i}">${poly(D, band(chain, z + floorH * glass[0], z + floorH * glass[1], 1.5), 'win')}</g>`;
+    const z = z0 + i * floorH, za = z + floorH * glass[0], zb = z + floorH * glass[1];
+    s += `<g class="fl" data-floor="${id}/${first + i}"><g class="lights">${chainPanes(D, chain, za, zb, first + i)}</g></g>`;
   }
   return s;
 }
@@ -109,13 +136,16 @@ export function pixelWindows(D: LocalDraw, a: number, b: number, la: number, lb:
   let s = '';
   for (let i = 0; i < n; i++) {
     let inner = '';
-    for (const { fc } of sides) {
+    sides.forEach(({ fc }, sIdx) => {
       const cols = Math.floor((fc!.w - 4) / col), x0 = (fc!.w - cols * col) / 2, y = fc!.h - (i + 1) * floorH;
       let r = '';
-      for (let c = 0; c < cols; c++) if ((c + i) % 2 === 0) r += `<rect class="win" x="${f(x0 + c * col + 1)}" y="${f(y + floorH * 0.18)}" width="${f(col - 2)}" height="${f(floorH * 0.64)}"/>`;
+      for (let c = 0; c < cols; c++) if ((c + i) % 2 === 0) {
+        const v = winVar(sIdx + 3, first + i, c);
+        r += `<rect class="win${v}" x="${f(x0 + c * col + 1)}" y="${f(y + floorH * 0.18)}" width="${f(col - 2)}" height="${f(floorH * 0.64)}"/>`;
+      }
       inner += g(fc!.t, r);
-    }
-    s += `<g class="fl" data-floor="${id}/${first + i}">${inner}</g>`;
+    });
+    s += `<g class="fl" data-floor="${id}/${first + i}"><g class="lights">${inner}</g></g>`;
   }
   return s;
 }
@@ -126,13 +156,16 @@ export function windowRows(D: LocalDraw, a: number, b: number, la: number, lb: n
   let s = '';
   for (let i = 0; i < n; i++) {
     let inner = '';
-    for (const fc of sides) {
+    sides.forEach((fc, sIdx) => {
       const cols = Math.floor((fc!.w - 4) / col), x0 = (fc!.w - cols * col) / 2, y = fc!.h - (i + 1) * floorH;
       let r = '';
-      for (let c = 0; c < cols; c++) r += `<rect class="win" x="${f(x0 + c * col + 2)}" y="${f(y + floorH * 0.22)}" width="${f(col - 4)}" height="${f(floorH * 0.56)}"/>`;
+      for (let c = 0; c < cols; c++) {
+        const v = winVar(sIdx + 11, first + i, c);
+        r += `<rect class="win${v}" x="${f(x0 + c * col + 2)}" y="${f(y + floorH * 0.22)}" width="${f(col - 4)}" height="${f(floorH * 0.56)}"/>`;
+      }
       inner += g(fc!.t, r);
-    }
-    s += `<g class="fl" data-floor="${id}/${first + i}">${inner}</g>`;
+    });
+    s += `<g class="fl" data-floor="${id}/${first + i}"><g class="lights">${inner}</g></g>`;
   }
   return s;
 }
@@ -209,8 +242,10 @@ export function extrude(D: LocalDraw, ring: readonly Pt[], z0: number, z1: numbe
     const floors = Math.round((z1 - z0) / B.floorH);
     for (let k = 0; k < floors; k++) {
       const za = z0 + k * B.floorH + B.floorH * B.glass[0], zb = z0 + k * B.floorH + B.floorH * B.glass[1];
-      s += `<g class="fl" data-floor="${B.id}/${B.first + k}">${poly(D, [[P0[0], P0[1], za], [P1[0], P1[1], za], [P1[0], P1[1], zb], [P0[0], P0[1], zb]], 'win')}</g>`;
+      const panes = chainPanes(D, [P0, P1], za, zb, B.first + k, i * 31 + Math.round(p[0] * 0.1), 18);
+      s += `<g class="fl" data-floor="${B.id}/${B.first + k}"><g class="lights">${panes}</g></g>`;
     }
   }
   return s + poly(D, R.map(p => [p[0], p[1], z1] as LV), 'face top');
 }
+

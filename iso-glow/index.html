@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<script src="js/theme-init.js"></script>
+<script src="js/embed.js"></script>
+<style>
+  html.embed body { padding:0; background:var(--panel); overflow-x:hidden; }
+  html.embed .wrap { max-width:none; gap:0; }
+  html.embed .wrap > .top, html.embed .layout > nav, html.embed .credit { display:none !important; }
+  html.embed .layout { display:block; }
+  html.embed figure { border:0; border-radius:0; }
+  html.embed figure > .cap:first-child { display:none; }
+  html.full, html.full body { height:100%; overflow:hidden; }
+  html.full figure { padding:0; }
+  html.full .cap { display:none !important; }
+  html.full #stageHolder { position:fixed; top:64px; right:24px; bottom:120px; left:236px; aspect-ratio:auto; height:auto; display:grid; place-items:center; }
+  html.full #stage { width:100%; height:100%; max-width:960px; max-height:720px; }
+  @media (max-width: 1100px) { html.full #stageHolder { left:220px; bottom:150px; } }
+</style>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My City · iso-glow collection (21 figures)</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@600;700&family=DM+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg:#0c0d0e; --panel:#141516; --edge:#222426;
+    --line:#3d4144; --detail:#2b2e30; --body:#17181a; --deck:#1b1d1f;
+    --ink:#868b8f; --ink-hi:#e6e8e9; --live:#f4f5f5;
+    --glass:#0f1011; --glass-on:#1a1410; --recess:#0e0f10;
+    --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
+    --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sign-font:"Be Vietnam Pro", system-ui, sans-serif;
+  }
+  @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
+    color-scheme: light;
+    --bg:#e9eaea; --panel:#f6f6f5; --edge:#d6d8d8;
+    --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
+    --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
+    --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+    --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
+  } }
+  :root[data-theme="light"] {
+    color-scheme: light;
+    --bg:#e9eaea; --panel:#f6f6f5; --edge:#d6d8d8;
+    --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
+    --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
+    --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+    --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:13px; padding:20px 16px 32px; }
+  .wrap { max-width:1240px; margin-inline:auto; display:grid; gap:14px; }
+  .top { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 14px; text-transform:uppercase; letter-spacing:.14em; padding:0 4px; }
+  .top .hi { color:var(--ink-hi); margin-right:auto; }
+  .top .dot { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--accent); box-shadow:0 0 8px var(--accent); margin-right:10px; vertical-align:1px; }
+  .arrows { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .arrows button, nav button, #figSelect, .dh-theme { font:inherit; color:inherit; background:var(--panel); border:1px solid var(--edge); border-radius:10px; cursor:pointer; }
+  .arrows button { padding:6px 12px; letter-spacing:.14em; text-transform:uppercase; }
+  .arrows button:hover, #figSelect:hover, .dh-theme:hover { color:var(--ink-hi); border-color:var(--line); }
+  #figSelect { padding:6px 12px; color:var(--ink-hi); border-radius:10px; max-width:290px; letter-spacing:.04em; }
+  .dh-theme { width:32px; height:32px; border-radius:50%; display:grid; place-items:center; padding:0; font-size:14px; }
+  .swatches { display:flex; align-items:center; gap:4px; padding:4px; border:1px solid var(--edge); border-radius:999px; width:fit-content; }
+  .swatches button { width:26px; height:26px; border-radius:50%; border:1px solid transparent; background:none; cursor:pointer; display:grid; place-items:center; padding:0; }
+  .swatches button i { width:12px; height:12px; border-radius:50%; background:var(--sw); border:1px solid var(--line); box-shadow:0 0 0 0 var(--sw); transition:box-shadow .2s, transform .2s; }
+  .swatches button:hover i { transform:scale(1.15); }
+  .swatches button[aria-checked="true"] { border-color:var(--line); }
+  .swatches button[aria-checked="true"] i { box-shadow:0 0 10px 1px var(--sw); }
+  .swatches button:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+  .layout { display:grid; grid-template-columns:250px minmax(0,1fr); grid-template-rows:auto 1fr; grid-template-areas:"nav fig" "credit fig"; gap:14px; align-items:start; }
+  .layout > nav { grid-area:nav; max-height:660px; overflow-y:auto; scrollbar-width:thin; }
+  .layout > figure { grid-area:fig; }
+  .layout > .credit { grid-area:credit; }
+  .credit { align-self:end; display:grid; gap:6px; padding:4px 12px 16px; font-size:12px; line-height:1.5; letter-spacing:.04em; }
+  .credit .by { color:var(--line); }
+  .credit .nm { color:var(--ink-hi); }
+  nav { display:grid; gap:3px; background:var(--panel); border:1px solid var(--edge); border-radius:22px; padding:12px; }
+  nav button { display:flex; gap:10px; align-items:center; text-align:left; padding:7px 11px; border-color:transparent; background:none; letter-spacing:.04em; font-size:12px; }
+  nav button .n { color:var(--line); font-size:11px; transition:color .2s; flex:none; }
+  nav button:hover { color:var(--ink-hi); }
+  nav button[aria-current="true"] { color:var(--ink-hi); border-color:var(--edge); background:var(--bg); }
+  nav button[aria-current="true"] .n { color:var(--accent); text-shadow:0 0 8px var(--accent); }
+  figure { margin:0; background:var(--panel); border:1px solid var(--edge); border-radius:22px; padding:22px 26px; display:grid; gap:6px; min-width:0; }
+  .cap { display:flex; flex-wrap:wrap; justify-content:space-between; gap:4px 18px; text-transform:uppercase; letter-spacing:.14em; }
+  .cap .hi { color:var(--ink-hi); text-transform:none; letter-spacing:.05em; }
+  #stageHolder { aspect-ratio:4/3; border-radius:14px; transition:background .5s; background:radial-gradient(ellipse 50% 45% at 50% 52%, transparent, transparent); overflow:hidden; }
+  #stageHolder.glow { background:radial-gradient(ellipse 50% 45% at 50% 52%, var(--accent-dim), transparent 72%); }
+  #stage { width:100%; height:100%; display:block; touch-action:none; user-select:none; -webkit-user-select:none; }
+  #stage:focus { outline:none; }
+  #stage:focus-visible { outline:1px dashed var(--line); outline-offset:4px; border-radius:8px; }
+  .fx { position:absolute; width:0; height:0; overflow:hidden; }
+  @media (max-width: 860px) {
+    .layout { grid-template-columns:1fr; grid-template-rows:auto; grid-template-areas:"nav" "fig" "credit"; }
+    .credit { padding:4px 8px 0; display:flex; flex-wrap:wrap; align-items:center; gap:8px 14px; }
+    nav { position:relative; top:0; max-height:none; display:flex; overflow-x:auto; border-radius:16px; padding:8px; scrollbar-width:none; }
+    nav button { flex:none; padding:8px 10px; }
+    figure { padding:16px; }
+  }
+
+  /* ---------- shared figure vocabulary (iso-glow) ---------- */
+  #stage text { font-family:var(--mono); }
+  .face { fill:var(--body); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+  .face.top { fill:var(--deck); }
+  .face.recess { fill:var(--recess); }
+  .detail { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .label { fill:var(--ink); font-family:var(--mono); }
+  .glass { fill:var(--glass); transition:fill .3s, stroke .3s; }
+  .glass.hot { fill:var(--glass-on); stroke:var(--accent); }
+  .halo { fill:var(--accent); opacity:0; transition:opacity .4s; }
+  .halo.hot { opacity:.22; }
+  .scr { fill:var(--accent-hi); font-family:var(--mono); }
+  .scr-accent { fill:var(--accent); }
+  .led { fill:var(--detail); transition:fill .2s; }
+  .led.hot { fill:var(--accent); }
+  .wire { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; stroke-linejoin:round; transition:stroke .4s; }
+  .wire.hot { stroke:var(--accent); }
+  .wire-under { fill:none; stroke:var(--panel); stroke-width:3.5; stroke-linecap:round; stroke-linejoin:round; }
+  .pulse { fill:none; stroke:var(--accent-hi); stroke-width:2.2; stroke-linecap:round; vector-effect:non-scaling-stroke;
+           stroke-dasharray:70 1200; stroke-dashoffset:70; opacity:0; }
+  .pulse.go { animation:flow .55s linear; }
+  @keyframes flow { 0% { stroke-dashoffset:70; opacity:1; } 90% { opacity:1; } 100% { stroke-dashoffset:-1000; opacity:0; } }
+  .press { cursor:pointer; transition:transform 60ms ease-out; }
+  .press.down { transform:translateY(3px); }
+  .press .face { transition:fill .6s ease-out, stroke .6s ease-out; }
+  .press.lit .face, .press.latched .face { fill:var(--accent); stroke:var(--accent-hi); transition:none; }
+  .press.lit .face.top, .press.latched .face.top { fill:var(--accent-hi); }
+  .press.lit { filter:url(#glow); }
+  .press.latched { filter:url(#soft); }
+  .press:hover .face.top { stroke:var(--ink); }
+  .blink { animation:blink 1s steps(1) infinite; }
+  @keyframes blink { 50% { opacity:0; } }
+  @keyframes iso-blink { 50% { opacity:0; } }
+
+  /* ---------- My City shared classes (city.css) ---------- */
+  .fl { cursor:pointer; }
+  .fl .win { fill:var(--recess); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .25s, opacity .25s; }
+  .fl:hover .win { stroke:var(--ink); }
+  .fl.on .win { fill:var(--accent); stroke:var(--accent-hi); }
+  .fl.on .win.hi { fill:var(--accent-hi); }
+  .fl.on .win.dim { opacity:.45; }
+  .fl.on .win.off { fill:var(--recess); stroke:var(--detail); }
+  .fl.on .lights { filter:url(#soft); }
+  .fl.on .halo { opacity:.38; }
+  .house { cursor:pointer; }
+  .mull { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+
+  .sign-board { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .3s; }
+  .sign-text { fill:var(--ink); font-family:var(--sign-font); font-weight:700; }
+  .sign-ink { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .fl.on .sign, .lightbox.on { filter:url(#soft); }
+  .fl.on .sign-board, .lightbox.on .sign-board { fill:var(--accent); stroke:var(--accent-hi); }
+  .fl.on .sign-text, .lightbox.on .sign-text { fill:var(--panel); }
+  .lightbox.on .sign-ink { stroke:var(--panel); }
+
+  .bb-face { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; transition:fill .4s, stroke .4s; }
+  .bb-text { fill:var(--line); font-family:var(--sign-font); font-weight:700; transition:fill .4s; }
+  .billboard.on .bb-face { fill:var(--glass-on); stroke:var(--accent); }
+  .billboard.on .bb-text { fill:var(--accent-hi); filter:url(#soft); }
+
+  .sticker { fill:var(--detail); }
+  .sticker-ink { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+
+  .stripe { fill:none; stroke:var(--line); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+  .fl.on .stripe { stroke:var(--accent); }
+  .fl.on .barber-stripes { animation:barber-spin .9s linear infinite; }
+  @keyframes barber-spin { from { transform:translateY(0); } to { transform:translateY(2.4px); } }
+
+  .rail { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+  .mast { fill:none; stroke:var(--line); stroke-width:1.2; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+  .pipe { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .stain { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.8; }
+  .face.plant { fill:var(--deck); }
+  .leaf { fill:var(--deck); stroke:var(--ink); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+  .leaf-line { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+  .stem { fill:none; stroke:var(--ink); stroke-width:1; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+  .vine { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .flower { fill:var(--ink); }
+  .face.crown, .face.plant { fill:var(--deck); stroke:var(--ink); stroke-linejoin:round; }
+  .face.trunk { fill:var(--body); }
+  .branch { stroke-width:1; }
+  .glint { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.7; }
+  .glass-panel { fill:var(--glass-on); fill-opacity:.22; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .face.solar { fill:var(--recess); }
+  .face.awning { fill:var(--deck); }
+  .face.metal { fill:var(--deck); }
+  .face.flag { fill:var(--deck); }
+  .finish { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.75; }
+  .peel { fill:var(--recess); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; opacity:.85; }
+  .ad-box { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .ad-paint { fill:var(--line); font-family:var(--sign-font); font-weight:700; }
+
+  .road { fill:var(--recess); }
+  .lane { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; stroke-dasharray:8 7; }
+  .wheel { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .lane-solid { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .traffic-lane.off { display:none; }
+  .vehicle .lamp.on .bulb { filter:none; }
+  .vehicle .lamp.on .bulb.tail { fill:var(--accent); }
+  .car-glass { fill:var(--glass); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .face.taxi-sign { fill:var(--recess); }
+  .lamp.on .face.taxi-sign { fill:var(--accent); stroke:var(--accent-hi); }
+
+  .lamp .bulb { fill:var(--detail); transition:fill .3s; }
+  .lamp.on .bulb { fill:var(--accent-hi); filter:url(#glow); }
+  .lamp.on .halo, .lamp-pool.on .halo { opacity:.32; }
+  .spill.on .halo { opacity:.3; }
+
+  [data-lot] { cursor:pointer; }
+  .lot-sel { fill:none; stroke:none; }
+  [data-lot].sel .lot-sel { stroke:var(--accent); stroke-width:1.4; vector-effect:non-scaling-stroke; }
+  .lot-label { fill:var(--ink); font-family:var(--mono); }
+  [data-lot].sel .lot-label { fill:var(--accent-hi); }
+
+  .crown-edge { fill:var(--deck); stroke:var(--ink); stroke-width:2; vector-effect:non-scaling-stroke; stroke-linejoin:round; }
+  .crown-fill { fill:var(--deck); stroke:none; }
+  .limb { fill:none; stroke:var(--ink); stroke-width:1.2; vector-effect:non-scaling-stroke; stroke-linecap:round; }
+
+  .zebra { fill:var(--line); opacity:.55; }
+  .stop-line { fill:none; stroke:var(--ink); stroke-width:1.6; vector-effect:non-scaling-stroke; }
+  .curb-paint { fill:none; stroke:var(--ink); stroke-width:2; vector-effect:non-scaling-stroke; }
+  .sig-lamp { fill:var(--recess); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .signal.stop .sig-lamp.stop { fill:var(--accent); stroke:var(--accent-hi); filter:url(#soft); }
+  .signal.wait .sig-lamp.wait { fill:var(--accent-hi); stroke:var(--accent-hi); filter:url(#soft); }
+  .signal.go .sig-lamp.go { fill:var(--live); stroke:var(--live); filter:url(#soft); }
+  .sig-screen { fill:var(--glass); stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .sig-count { fill:var(--ink); font-family:var(--mono); font-weight:500; }
+  .signal.stop .sig-count { fill:var(--accent); }
+  .signal.wait .sig-count { fill:var(--accent-hi); }
+  .signal.go .sig-count { fill:var(--live); }
+  .face.glass-wall { fill:var(--glass); }
+  .slab-line { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .canopy-line { fill:none; stroke:var(--ink); stroke-width:2.2; vector-effect:non-scaling-stroke; }
+  .fin { fill:none; stroke:var(--ink-hi); stroke-width:1.5; vector-effect:non-scaling-stroke; stroke-linecap:round; opacity:.75; }
+  .pool { fill:var(--recess); stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .pool-line { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; stroke-dasharray:3 3; }
+  .paving { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .beacon.on .bulb { animation:iso-blink 1.4s steps(1) infinite; }
+  .lawn { fill:var(--body); }
+  .path-paved { fill:none; stroke:var(--deck); }
+  .path-fill { fill:var(--deck); }
+  .path-edge { fill:none; stroke:var(--line); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .tuft { fill:none; stroke:var(--detail); stroke-width:1; vector-effect:non-scaling-stroke; }
+  .traffic-cell.off, .traffic-fly.off { display:none; }
+
+  @media (prefers-reduced-motion:reduce) {
+    .press, .glass, .halo, .press .face, .wire, .fl .win, .sign-board, .lamp .bulb, .bb-face, .bb-text { transition:none; }
+    .blink, .pulse.go, .fl.on .barber-stripes, .beacon.on .bulb { animation:none; }
+  }
+</style>
+</head>
+<body>
+<svg class="fx" aria-hidden="true">
+  <defs>
+    <filter id="glow" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="6000" height="6000"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="soft" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="6000" height="6000"><feGaussianBlur stdDeviation="2.2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    <filter id="bloom" filterUnits="userSpaceOnUse" x="-2000" y="-2000" width="6000" height="6000"><feGaussianBlur stdDeviation="9"/></filter>
+  </defs>
+</svg>
+<div class="wrap">
+  <div class="top">
+    <span class="hi"><span class="dot"></span>My City · iso-glow</span>
+    <div class="arrows">
+      <select id="figSelect" aria-label="Chọn công trình"></select>
+      <button id="prev" aria-label="Previous figure">← Prev</button>
+      <button id="next" aria-label="Next figure">Next →</button>
+      <button class="dh-theme" type="button" title="Light / dark">◐</button>
+    </div>
+  </div>
+  <div class="layout">
+    <nav id="nav" aria-label="Figures"></nav>
+    <aside class="credit" aria-label="Controls & Palette">
+      <div class="swatches" id="swatches" role="radiogroup" aria-label="Glow colour"></div>
+      <span class="by">My City · <span class="nm">Hà Nội (11–21)</span> + iso-glow <span class="nm">Cities (01–10)</span></span>
+    </aside>
+    <figure>
+      <div class="cap"><span class="hi" id="fignum">Fig 1</span><span id="figname"></span></div>
+      <div id="stageHolder"></div>
+      <div class="cap"><span id="hint"></span><span class="hi" id="readout"></span></div>
+    </figure>
+  </div>
+</div>
+<script src="js/config.js"></script>
+<script src="js/my-city.js"></script>
+<!-- Original iso-glow figures (01–10) -->
+<script src="figs/01-tower.js"></script>
+<script src="figs/02-apartments.js"></script>
+<script src="figs/03-lighthouse.js"></script>
+<script src="figs/04-harbor.js"></script>
+<script src="figs/05-metro.js"></script>
+<script src="figs/06-grid.js"></script>
+<script src="figs/07-intersection.js"></script>
+<script src="figs/08-airport.js"></script>
+<script src="figs/09-observatory.js"></script>
+<script src="figs/10-diner.js"></script>
+<!-- My City · Hà Nội figures (11–21) -->
+<script src="figs/11-metro-thai-ha.js"></script>
+<script src="figs/12-thai-binh.js"></script>
+<script src="figs/13-novotel.js"></script>
+<script src="figs/14-garden-circle.js"></script>
+<script src="figs/15-garden-grove.js"></script>
+<script src="figs/16-flyover.js"></script>
+<script src="figs/17-nha-mau.js"></script>
+<script src="figs/18-catalog.js"></script>
+<script src="figs/19-street.js"></script>
+<script src="figs/20-nga-tu.js"></script>
+<script src="figs/21-hello.js"></script>
+<script src="js/core.js"></script>
+<style>
+  :root[data-theme="light"] .halo, :root[data-theme="light"] #lamp-pool, :root[data-theme="light"] #lamp-bookpool, :root[data-theme="light"] #lamp-cone { display:none !important; }
+  :root[data-theme="light"] .top .dot { box-shadow:none; }
+  :root[data-theme="light"] .swatches button[aria-checked="true"] i { box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--sw); }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) .halo, :root:not([data-theme="dark"]) #lamp-pool, :root:not([data-theme="dark"]) #lamp-bookpool, :root:not([data-theme="dark"]) #lamp-cone { display:none !important; }
+    :root:not([data-theme="dark"]) .top .dot { box-shadow:none; }
+    :root:not([data-theme="dark"]) .swatches button[aria-checked="true"] i { box-shadow:0 0 0 2px var(--panel), 0 0 0 3px var(--sw); }
+  }
+</style>
+<script src="js/light-theme.js"></script>
+<script src="js/theme-toggle.js"></script>
+</body>
+</html>

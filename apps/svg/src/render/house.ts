@@ -26,7 +26,7 @@ export function renderHouse(K: Kernel, spec: HouseSpec): Item[] {
   const items: Item[] = [];
   const c: Ctx = {
     K, D, s, r, fy, items, base: spec.basement,
-    v: () => { const x = r.next(); return x < 0.2 ? ' dim' : x < 0.38 ? ' hi' : ''; },
+    v: () => { const x = r.next(); return x < 0.14 ? ' off' : x < 0.34 ? ' dim' : x < 0.52 ? ' hi' : ''; },
     topZ: H + s.floors * FH,
     uid: safeId(s.id),
     floorId: n => `${s.id}/${n}`,

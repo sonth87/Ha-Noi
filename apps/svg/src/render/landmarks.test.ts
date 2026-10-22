@@ -24,7 +24,7 @@ describe('landmark showcase', () => {
   }
 
   it('gives the towers clickable floors, unique ids', () => {
-    for (const id of ['thai-binh', 'novotel']) {
+    for (const id of ['thai-binh', 'novotel', 'metro-station']) {
       const { floors, items } = renderLandmark(K, LANDMARKS.find(l => l.id === id)!, 0);
       expect(new Set(floors).size).toBe(floors.length);
       const svg = items.map(i => i.svg).join('');

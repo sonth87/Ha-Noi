@@ -13,11 +13,11 @@ export function streetKind(t: OsmTags): StreetKind | undefined {
   switch (h) {
     case 'primary': case 'trunk': return 'primary';
     case 'secondary': return 'secondary';
-    case 'tertiary': return 'tertiary';
+    case 'tertiary': return named('tertiary');
     case 'primary_link': case 'secondary_link': case 'tertiary_link': case 'trunk_link': return 'link';
     case 'residential': case 'unclassified': case 'living_street': return named('residential');
     case 'service': case 'track': return named('service');
-    case 'footway': case 'path': case 'pedestrian': case 'cycleway': return 'footway';
+    case 'footway': case 'path': case 'pedestrian': case 'cycleway': return named('footway');
     case 'steps': return 'steps';
     default: return undefined;
   }
@@ -26,9 +26,10 @@ export function streetKind(t: OsmTags): StreetKind | undefined {
 /** a hint for the kind of building; undefined = judge by the footprint */
 export function buildingHint(t: OsmTags): BuildingKind | undefined {
   if (t.tourism === 'hotel') return 'hotel';
-  switch (t.building) {
+  const b = t.building === 'construction' ? (t.construction ?? 'commercial') : t.building;
+  switch (b) {
     case 'house': case 'detached': case 'semidetached_house': case 'terrace': return 'house';
-    case 'apartments': case 'dormitory': return 'apartment';
+    case 'apartments': case 'dormitory': case 'residential': return 'apartment';
     case 'office': case 'government': return 'office';
     case 'commercial': case 'retail': case 'supermarket': return 'commercial';
     case 'hotel': return 'hotel';

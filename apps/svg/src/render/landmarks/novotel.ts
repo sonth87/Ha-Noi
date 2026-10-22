@@ -42,8 +42,8 @@ export function renderNovotel(K: Kernel, L: LocalFrame, w: number, d: number, id
   const strip = (first: number): Bands => ({ id, first, floorH: NV.towerH, glass: [0.3, 0.7] });
   const push = (first: number, n: number) => { for (let i = 0; i < n; i++) floors.push(`${id}/${first + i}`); };
 
-  // ---- plot: paved forecourt ----
-  add('plot', 0, 0, -6, w, d, 6, D.box(0, 0, -6, w, d, 6) + `<path class="paving" d="${D.path([[0, d - 40, 0], [w, d - 40, 0]])}"/>`);
+  // ---- plot: paved forecourt with chamfered corner toward the junction ----
+  add('plot', 0, 0, -6, w, d, 6, D.box(0, 0, -6, w, d, 6) + `<path class="paving" d="${D.path([[100, d - 40, 0], [w, d - 40, 0]])}"/>`);
 
   // ---- podium, with the pool and loungers on the wing roof ----
   {
@@ -73,9 +73,9 @@ export function renderNovotel(K: Kernel, L: LocalFrame, w: number, d: number, id
   }
   add('plant', 150, 520, zT, 180, 120, 24, D.box(150, 520, zT, 180, 120, 24));
 
-  // ---- trees in the forecourt on Tây Sơn ----
+  // ---- trees in the forecourt on Tây Sơn, clear of the chamfered corner ----
   const r = rng(27), tb = d - 22;
-  for (const a of [40, 120, 200, 280, 360, w - 30]) {
+  for (const a of [165, 230, 295, 360, w - 30]) {
     const t = parkTree(D, a, tb, 'medium', () => r.next());
     add(`tree-${a}`, a - t.ra, tb - t.rb, 0, 2 * t.ra, 2 * t.rb, t.h, t.svg);
   }

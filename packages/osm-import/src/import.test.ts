@@ -110,6 +110,26 @@ describe('the crossroads from OpenStreetMap', () => {
     expect(report.orphanParts).toEqual([]);
   });
 
+  it('includes the full Đống Đa district and landmarks at the end of Thái Hà (VPBank Tower, Petrovietnam, National Cinema)', () => {
+    expect(city.buildings.length).toBeGreaterThan(3900);
+    const vpbank = city.buildings.find(b => b.source === 'osm:way/677190114')!;
+    expect(vpbank).toBeDefined();
+    expect(vpbank.name).toBe('VPBank Tower (89 Láng Hạ)');
+    expect(buildingLevels(vpbank)).toBe(29);
+    expect(vpbank.parts[0]!.facade).toBe('glass');
+
+    const pvn = city.buildings.find(b => b.source === 'osm:way/1217754319')!;
+    expect(pvn).toBeDefined();
+    expect(buildingLevels(pvn)).toBe(19);
+
+    const cinema = city.buildings.find(b => b.source === 'osm:way/1115247053')!;
+    expect(cinema?.name).toContain('Trung tâm Chiếu phim Quốc gia');
+
+    const songHong = city.buildings.find(b => b.source === 'osm:way/1082814006')!;
+    expect(buildingLevels(songHong)).toBe(21);
+    expect(songHong.parts.length).toBeGreaterThanOrEqual(4); // 3 towers + 4-storey podium
+  });
+
   it('gives the same city every time', () => {
     expect(loadCity('nga-tu-thai-ha').city).toEqual(city);
   });

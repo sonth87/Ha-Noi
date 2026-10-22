@@ -24,7 +24,7 @@ const pure = (files, extra, up = UP) => ({
 });
 
 export default defineConfig(
-  { ignores: ['**/dist', '**/node_modules', '.claude', 'apps/svg'] },
+  { ignores: ['**/dist', '**/node_modules', '.claude', 'apps/svg', 'iso-glow'] },
   {
     files: ['**/*.{ts,tsx,js,mjs}'],
     extends: [js.configs.recommended, tseslint.configs.recommended],

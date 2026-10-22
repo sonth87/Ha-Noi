@@ -834,7 +834,7 @@ export class CityView {
     t.shown = level;
   }
 
-  /** each frame: show every nearby tile at the wanted level when it is built, and build one more when not mid-gesture */
+  /** each frame: show every nearby tile at the wanted level when it is built, and build more when not mid-gesture */
   private detailStep() {
     const m = this.mounted;
     if (!m) return;
@@ -842,14 +842,21 @@ export class CityView {
     for (const t of this.tiles) {
       if (!this.nearTile(t)) continue;
       if (t.layers.has(want)) this.show(t, this.ensure(t, want));
-      else waiting.push(t);
+      else {
+        // never leave a visible street bare while panning/flying: put up L0 massing right away
+        if (t.shown < 0) this.show(t, this.ensure(t, 0));
+        waiting.push(t);
+      }
     }
     const busy = this.interacting || performance.now() < this.interactCooldown;
     if (waiting.length && !busy) {
-      const near = waiting.reduce((a, t) => (dist2(t.tile.center, c) < dist2(a.tile.center, c) ? t : a));
-      this.show(near, this.ensure(near, want));
+      waiting.sort((a, b) => dist2(a.tile.center, c) - dist2(b.tile.center, c));
+      const budget = want <= 1 ? 3 : 2;
+      for (let i = 0; i < Math.min(budget, waiting.length); i++) {
+        this.show(waiting[i]!, this.ensure(waiting[i]!, want));
+      }
     }
-    const pending = busy ? waiting.length : Math.max(0, waiting.length - 1);
+    const pending = busy ? waiting.length : Math.max(0, waiting.length - (want <= 1 ? 3 : 2));
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
   }
 
@@ -1085,17 +1092,24 @@ export class CityView {
   }
 
   // ---------- moving about (ADR-043) ----------
-  /** places to fly to: key intersections/corridors in the expanded area and every metro station */
+  /** places to fly to: key intersections/corridors in the expanded Đống Đa area and every metro station */
   get places(): { id: string; name: string; at: [number, number] }[] {
     return [
-      { id: 'home', name: 'Ngã tư Thái Hà', at: [0, 0] },
+      { id: 'home', name: 'Ngã tư Thái Hà – Tây Sơn', at: [0, 0] },
+      { id: 'vpbank-lang-ha', name: 'Cuối Thái Hà – VPBank Láng Hạ', at: [235, -1185] },
+      { id: 'thai-thinh', name: 'Phố Thái Thịnh – Yên Lãng', at: [-260, -560] },
       { id: 'nga-tu-so', name: 'Ngã Tư Sở', at: [-785, -36] },
-      { id: 'chua-boc', name: 'Chùa Bộc', at: [50, 760] },
-      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng', at: [585, 0] },
+      { id: 'chua-boc', name: 'Chùa Bộc – Học viện Ngân hàng', at: [50, 560] },
+      { id: 'pham-ngoc-thach', name: 'Phạm Ngọc Thạch – Kim Liên', at: [420, 880] },
+      { id: 'ho-dac-di', name: 'Hồ Đắc Di – Nam Đồng', at: [520, 480] },
+      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng – Gò Đống Đa', at: [420, -20] },
       { id: 'o-cho-dua', name: 'Ô Chợ Dừa', at: [1142, 50] },
-      { id: 'xa-dan', name: 'Xã Đàn', at: [986, 500] },
+      { id: 'xa-dan', name: 'Phố Xã Đàn', at: [986, 500] },
+      { id: 'kham-thien', name: 'Phố Khâm Thiên', at: [1420, 210] },
+      { id: 'ton-duc-thang', name: 'Tôn Đức Thắng – Quốc Tử Giám', at: [1320, -350] },
       { id: 'hoang-cau', name: 'Hồ Hoàng Cầu', at: [750, -520] },
-      { id: 'lang-ha', name: 'Láng Hạ', at: [260, -1230] },
+      { id: 'hao-nam', name: 'Phố Hào Nam – Cát Linh', at: [980, -820] },
+      { id: 'thanh-cong', name: 'Hồ Thành Công – Huỳnh Thúc Kháng', at: [210, -1420] },
       ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), at: [s.at[0], s.at[1]] as [number, number] })),
     ];
   }

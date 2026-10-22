@@ -56,8 +56,8 @@ export function buildStreets(B: Batch, city: City) {
       for (const run of pieces(r.path, cut)) B.solid(strip(run, side * a, side * (a + w)), 0, WALK_Z, () => 'walk', 'walk');
     }
     const offs: number[] = [];
-    if (!r.oneway && r.lanes >= 2) offs.push(0);
-    if (r.oneway) for (let k = 1; k < r.lanes; k++) offs.push(-r.width / 2 + (k * r.width) / r.lanes);
+    const n = r.oneway ? r.lanes : 2 * Math.max(1, Math.floor(r.lanes / 2));
+    for (let k = 1; k < n; k++) offs.push(-r.width / 2 + (k * r.width) / n);
     for (const o of offs) for (const run of pieces(r.path, c.marks)) dashes(B, offsetLine(run, o));
   }
   const metroStations = city.stations.filter(st => st.kind === 'metro');

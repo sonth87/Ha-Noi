@@ -10,11 +10,17 @@ import type { Kernel } from '@iso/kernel';
 import type { LocalFrame, LocalSide } from '@core/view';
 import { junctionGrid, type Crossroads } from '@core/crossroads';
 import { signalsAt } from '@core/traffic';
+import { TREE } from '@core/units';
+import { rng } from '@core/rng';
 import type { Item } from '@core/types';
-import { LocalDraw } from '@render/local';
+import { LocalDraw, type LV } from '@render/local';
+import { ccw, prism, type Pt } from '@render/landmarks/shapes';
+import { treeArt } from '@render/parts/trees';
 import { f, g } from '@render/svg';
 
 const WALK = 30;           // corner sidewalk size (both sections have 3 m sidewalks)
+const CHAMFER = 140;       // 14 m corner bevel along each street from the junction facade line
+const ISLAND = 56;         // triangular traffic island reach into each arm
 const POST_H = 46, HEAD = [6, 6, 17] as const;
 
 export function renderJunction(K: Kernel, cr: Crossroads, Lx: LocalFrame): Item[] {
@@ -46,14 +52,83 @@ export function renderJunction(K: Kernel, cr: Crossroads, Lx: LocalFrame): Item[
     add('slab', 0, 0, -6, W, H, 6, D.box(A0, B0, -6, W, H, 6) + g(D.plane([A0, B0, 0], [1, 0, 0], [0, 1, 0]), marks));
   }
 
-  // ---- corner sidewalks with their curbs painted in stripes, and a traffic light on each ----
-  const corners: [number, number, string][] = [[0, 0, 'nw'], [W - WALK, 0, 'ne'], [0, H - WALK, 'sw'], [W - WALK, H - WALK, 'se']];
-  for (const [u, w, c] of corners) {
-    const svg = D.box(A0 + u, B0 + w, 0, WALK, WALK, 2) + curbPaint(D, A0 + u, B0 + w, c);
-    add(`corner-${c}`, u, w, 0, WALK, WALK, 2, svg);
-    // the post stands at the tile's corner nearest the middle of the junction
-    const pu = u + (u === 0 ? WALK - 7 : 4), pw = w + (w === 0 ? WALK - 7 : 4);
+  // ---- four chamfered corners: diagonal right-turn slip lanes, outer chamfered sidewalks, and
+  //      raised triangular traffic islands with curb stripes, traffic signals, and shade trees ----
+  const corners: [number, number, -1 | 1, -1 | 1, string, number][] = [
+    [0, 0, -1, -1, 'nw', 41],
+    [W, 0, 1, -1, 'ne', 42],
+    [0, H, -1, 1, 'sw', 43],
+    [W, H, 1, 1, 'se', 44],
+  ];
+  for (const [u0, w0, su, sw, c, seed] of corners) {
+    const pt = (du: number, dw: number): Pt => [A0 + u0 + su * du, B0 + w0 + sw * dw];
+    const lv = (du: number, dw: number, z: number): LV => [A0 + u0 + su * du, B0 + w0 + sw * dw, z];
+
+    // 1. slip lane road + zebra crossings + outer diagonal sidewalk (z = 0..0 so it sorts above -6..0 slabs and below z > 0 items)
+    {
+      const roadPoly = [lv(-WALK, -WALK, 0), lv(CHAMFER, -WALK, 0), lv(CHAMFER, 0, 0), lv(0, CHAMFER, 0), lv(-WALK, CHAMFER, 0)];
+      let slipSvg = `<path class="road" d="${D.path(roadPoly)}Z"/>`;
+      // dashed center line and edge lines along the diagonal slip lane
+      const laneD = D.path([lv(-14, 86, 0.05), lv(86, -14, 0.05)]) +
+        D.path([lv(-20, 58, 0.05), lv(58, -20, 0.05)]) +
+        D.path([lv(-26, 134, 0.05), lv(134, -26, 0.05)]);
+      slipSvg += `<path class="lane" d="${laneD}"/>`;
+      // zebra crossings across both ends of the slip lane (connecting outer sidewalk to triangular island)
+      let zebD = '';
+      for (const d of [-38, 38]) {
+        for (let s = 42; s <= 98; s += 8) {
+          const du0 = (s + d) / 2, dw0 = (s - d) / 2;
+          const bar = [lv(du0 - 6, dw0 + 6, 0.05), lv(du0 + 6, dw0 - 6, 0.05), lv(du0 + 8, dw0 - 4, 0.05), lv(du0 - 4, dw0 + 8, 0.05)];
+          zebD += `${D.path(bar)}Z`;
+        }
+      }
+      slipSvg += `<path class="zebra" d="${zebD}"/>`;
+      // outer diagonal sidewalk connecting the Y sidewalk at dw = CHAMFER to the X sidewalk at du = CHAMFER
+      const outerWalk: Pt[] = [pt(-WALK, CHAMFER), pt(0, CHAMFER), pt(CHAMFER, 0), pt(CHAMFER, -WALK)];
+      slipSvg += prism(D, ccw(outerWalk), 0, 2);
+      let walkDetail = D.path([lv(-WALK / 2, CHAMFER, 2), lv(CHAMFER, -WALK / 2, 2)]);
+      const steps = 16;
+      for (let k = 1; k < steps; k++) {
+        const t = k / steps;
+        walkDetail += D.path([lv(-WALK + (CHAMFER + WALK) * t, CHAMFER - (CHAMFER + WALK) * t, 2), lv(CHAMFER * t, CHAMFER * (1 - t), 2)]);
+      }
+      slipSvg += `<path class="detail" d="${walkDetail}"/>`;
+      slipSvg += `<path class="curb-paint" d="${curbStripes(D, pt(-WALK, CHAMFER), pt(CHAMFER, -WALK))}"/>`;
+
+      const uMin = Math.min(u0 - su * WALK, u0 + su * CHAMFER), wMin = Math.min(w0 - sw * WALK, w0 + sw * CHAMFER);
+      add(`slip-${c}`, uMin, wMin, 0, WALK + CHAMFER, WALK + CHAMFER, 0, slipSvg);
+    }
+
+    // 2. raised triangular traffic island (đảo giao thông tam giác)
+    {
+      const islandRing: Pt[] = [pt(-WALK, -20), pt(-20, -WALK), pt(ISLAND - 6, -WALK), pt(ISLAND, -24), pt(-24, ISLAND), pt(-WALK, ISLAND - 6)];
+      let islandSvg = prism(D, ccw(islandRing), 0, 2);
+      // sidewalk paving slits across the island top
+      let slitsD = '';
+      for (let s = -36; s <= 24; s += 10) {
+        const a0 = Math.max(-WALK, s - (ISLAND - 6)), b0 = s - a0;
+        const b1 = Math.max(-WALK, s - (ISLAND - 6)), a1 = s - b1;
+        if (a0 + b0 <= 32 && a1 >= a0) slitsD += D.path([lv(a0, b0, 2), lv(a1, b1, 2)]);
+      }
+      islandSvg += `<path class="detail" d="${slitsD}"/>`;
+      // painted curb stripes on all three road-facing sides of the triangular island
+      const curbD = curbStripes(D, pt(-20, -WALK), pt(ISLAND - 6, -WALK)) +
+        curbStripes(D, pt(-WALK, -20), pt(-WALK, ISLAND - 6)) +
+        curbStripes(D, pt(ISLAND, -24), pt(-24, ISLAND));
+      islandSvg += `<path class="curb-paint" d="${curbD}"/>`;
+
+      const uMin = Math.min(u0 - su * WALK, u0 + su * ISLAND), wMin = Math.min(w0 - sw * WALK, w0 + sw * ISLAND);
+      add(`corner-${c}`, uMin, wMin, 0, WALK + ISLAND, WALK + ISLAND, 2, islandSvg);
+    }
+
+    // 3. traffic signal post near the main-junction corner of the triangular island
+    const pu = u0 + su * -16 - HEAD[0] / 2, pw = w0 + sw * -16 - HEAD[1] / 2;
     add(`signal-${c}`, pu - 1, pw - 1, 2, HEAD[0] + 2, HEAD[1] + 2, POST_H + HEAD[2], signalPost(D, A0 + pu, B0 + pw));
+
+    // 4. shade tree in the middle of the triangular island
+    const r = rng(seed), tk = TREE.small;
+    const tu = u0 + su * 6, tw = w0 + sw * 6;
+    add(`tree-${c}`, tu - tk.ra, tw - tk.rb, 2, 2 * tk.ra, 2 * tk.rb, tk.zc + tk.rz, treeArt(D, A0 + tu, B0 + tw, 2, 'small', () => r.next()));
   }
 
   // ---- traffic cells (vehicles are moved in and out by the controller) ----
@@ -65,19 +140,18 @@ export function renderJunction(K: Kernel, cr: Crossroads, Lx: LocalFrame): Item[
   return items;
 }
 
-/** red-and-white curb stripes along the two road edges of a corner tile (drawn in two greys) */
-function curbPaint(D: LocalDraw, a: number, b: number, c: string): string {
-  const out: string[] = [];
-  const east = c === 'ne' || c === 'se', south = c === 'sw' || c === 'se';
-  // the tile's edges facing the roads: toward the junction's middle in u and in w
-  const eu = east ? a : a + WALK, ew = south ? b : b + WALK;
-  const stripes = (p: (t: number) => [number, number]) => {
-    let d = '';
-    for (let t = 0; t < WALK - 0.1; t += 5) { const [x0, y0] = p(t), [x1, y1] = p(Math.min(WALK, t + 2.5)); d += D.path([[x0, y0, 2], [x1, y1, 2]]); }
-    return d;
-  };
-  out.push(stripes(t => [eu, b + t]), stripes(t => [a + t, ew]));
-  return `<path class="curb-paint" d="${out.join('')}"/>`;
+/** red-and-white curb stripes along an edge from p0 to p1 at height z = 2 */
+function curbStripes(D: LocalDraw, p0: Pt, p1: Pt): string {
+  const dx = p1[0] - p0[0], dy = p1[1] - p0[1], len = Math.hypot(dx, dy);
+  let d = '';
+  for (let t = 0; t < len - 0.5; t += 6) {
+    const t0 = t / len, t1 = Math.min(len, t + 3) / len;
+    d += D.path([
+      [p0[0] + dx * t0, p0[1] + dy * t0, 2],
+      [p0[0] + dx * t1, p0[1] + dy * t1, 2],
+    ]);
+  }
+  return d;
 }
 
 /** a pole with a four-faced light head and countdowns */

@@ -5,6 +5,7 @@
   "scripts": {
     "dev:svg": "pnpm --filter @my-city/svg dev",
     "build:svg": "pnpm --filter @my-city/svg build",
+    "build:iso-glow": "pnpm --filter @my-city/svg build:iso-glow",
     "preview:svg": "pnpm --filter @my-city/svg preview",
     "test:svg": "pnpm --filter @my-city/svg test",
     "lint:svg": "pnpm --filter @my-city/svg lint",

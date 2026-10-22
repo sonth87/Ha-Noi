@@ -33,7 +33,6 @@ export function renderStreet(K: Kernel, lay: StreetLayout, L: LocalFrame, id = '
   const len = lay.length, [r0, r1] = S.road, gap = lay.gap;
   // stretches of the street outside the junction
   const spans: [number, number][] = gap ? [[0, gap[0]], [gap[1], len]] : [[0, len]];
-  const inGap = (x: number) => !!gap && x > gap[0] && x < gap[1];
 
   // ---- slab: the road band in SLAB_PIECE pieces (with markings and the lamps' light pools) and
   //      the lot strips under each range of houses. 15 m is a whole number of lane dashes (8 + 7)
@@ -60,16 +59,19 @@ export function renderStreet(K: Kernel, lay: StreetLayout, L: LocalFrame, id = '
   //      both before and after things along the street and close a ring no draw order can satisfy;
   //      cutting exactly at the house boundaries keeps every piece's relations local to its house.
   //      Where there are no houses (in front of a corner plot) it is cut every LANE_PIECE. ----
+  const walkChamfer = 140;
+  const walkSpans: [number, number][] = gap ? [[0, gap[0] - walkChamfer], [gap[1] + walkChamfer, len]] : [[0, len]];
+  const inWalkGap = (x: number) => !!gap && x > gap[0] - walkChamfer && x < gap[1] + walkChamfer;
   for (const [row, b0] of [['far', S.farFacade], ['near', r1]] as const) {
-    const w = S.sidewalk, cuts = new Set<number>(spans.flat());
+    const w = S.sidewalk, cuts = new Set<number>(walkSpans.flat());
     for (const h of lay.houses) if (h.row === row) { const sp = resolveSpec(h.input).spec; cuts.add(sp.x); cuts.add(sp.x + sp.w); }
     const ranges = lay.ranges.filter(q => q.row === row);
     for (const q of ranges) { cuts.add(q.x0); cuts.add(q.x1); }
-    for (const [s0, s1] of spans) for (let x = s0; x < s1; x += 50) if (!ranges.some(q => x > q.x0 && x < q.x1)) cuts.add(x);
-    const xs = [...cuts].sort((p, q) => p - q);
+    for (const [s0, s1] of walkSpans) for (let x = s0; x < s1; x += 50) if (!ranges.some(q => x > q.x0 && x < q.x1)) cuts.add(x);
+    const xs = [...cuts].filter(x => !inWalkGap(x)).sort((p, q) => p - q);
     for (let i = 0; i < xs.length - 1; i++) {
       const x = xs[i]!, pw = xs[i + 1]! - x;
-      if (pw <= 0.01 || inGap(x + pw / 2)) continue;
+      if (pw <= 0.01 || inWalkGap(x + pw / 2)) continue;
       const svg = D.box(x, b0, 0, pw, w, 2) +
         g(D.plane([x, b0, 2], [1, 0, 0], [0, 1, 0]), `${slits(10 - (x % 10), pw - 0.01, 10, 0, w)}<line class="detail" x1="0" y1="${w / 2}" x2="${pw}" y2="${w / 2}"/>`);
       add(`walk-${row}-${i}`, x, b0, 0, pw, w, 2, svg);
