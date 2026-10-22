@@ -9,13 +9,12 @@ const rep = (h: number, n: number) => Array.from({ length: n }, () => h);
 
 export const NGA_TU_THAI_HA: AreaConfig = {
   area: 'nga-tu-thai-ha',
-  name: 'Quận Đống Đa: Thái Hà – Tây Sơn – Chùa Bộc – Láng Hạ – Hoàng Cầu – Ô Chợ Dừa – Xã Đàn – Khâm Thiên – Ngã Tư Sở',
+  name: 'Hà Nội: Quận Đống Đa & Quận Ba Đình (Thái Hà – Láng Hạ – Cát Linh – Giảng Võ – Kim Mã – Liễu Giai – Lăng Bác – Hoàng Thành)',
   frame: { origin: [21.0092471, 105.8243958], bearing: 62.5 },
-  // Full Đống Đa district extract covering Thái Hà, Tây Sơn, Chùa Bộc, Láng Hạ, Thái Thịnh, Yên Lãng,
-  // Hoàng Cầu, Hào Nam, Cát Linh, Giảng Võ, Huỳnh Thúc Kháng, Thành Công, Nguyễn Lương Bằng, Ô Chợ Dừa,
-  // Tôn Đức Thắng, Khâm Thiên, Xã Đàn, Nam Đồng, Hồ Đắc Di, Phạm Ngọc Thạch, Phương Mai, Kim Liên, Tôn Thất Tùng, Ngã Tư Sở
+  // Full Đống Đa + Ba Đình districts extract
   region: [
-    { x0: -1060, y0: -1880, x1: 1680, y1: 1120 },
+    { x0: -1060, y0: -1880, x1: 1880, y1: 1120 },
+    { x0: 650, y0: -2820, x1: 3960, y1: 380 },
   ],
   overrides: {
     buildings: {
@@ -153,6 +152,37 @@ export const NGA_TU_THAI_HA: AreaConfig = {
       'osm:way/1184245771': {
         name: 'T&T Capella (2 Phạm Ngọc Thạch)', kind: 'apartment',
         floors: [...rep(4.2, 5), ...rep(3.2, 19)],
+      },
+      // ---------- Quận Ba Đình Landmarks ----------
+      // Lotte Center Hanoi (54 Liễu Giai, Ba Đình): 65 storeys iconic glass skyscraper (272 m)
+      'osm:way/727570329': {
+        name: 'Lotte Center Hanoi (54 Liễu Giai)', kind: 'commercial', facade: 'glass',
+        floors: [...rep(4.5, 6), ...rep(3.8, 59)],
+      },
+      // Vinhomes Metropolis (29 Liễu Giai, Ba Đình): tổ hợp tháp văn phòng Capital Place & căn hộ M1-M2-M3 (41–45 tầng)
+      'osm:way/840982441': {
+        name: 'Vinhomes Metropolis (29 Liễu Giai)', kind: 'apartment', facade: 'glass',
+        floors: [...rep(4.5, 4), ...rep(3.3, 41)],
+      },
+      // Khách sạn Hà Nội Daewoo (360 Kim Mã, Ba Đình): 18 storeys hotel & Daeha Business Center
+      'osm:way/727578326': {
+        name: 'Khách sạn Hà Nội Daewoo (360 Kim Mã)', kind: 'hotel', facade: 'glass',
+        floors: [...rep(4.2, 3), ...rep(3.4, 15)],
+      },
+      // Nhà Quốc hội Việt Nam (1 Độc Lập, Quảng trường Ba Đình)
+      'osm:way/695966191': {
+        name: 'Nhà Quốc hội Việt Nam (Quảng trường Ba Đình)', kind: 'office', facade: 'glass',
+        floors: rep(6.5, 5),
+      },
+      // Lăng Chủ tịch Hồ Chí Minh (2 Hùng Vương, Quảng trường Ba Đình)
+      'osm:way/37625751': {
+        name: 'Lăng Chủ tịch Hồ Chí Minh', kind: 'other',
+        floors: rep(5.4, 4),
+      },
+      // Cột cờ Hà Nội (28A Điện Biên Phủ, Ba Đình)
+      'osm:way/184959290': {
+        name: 'Cột cờ Hà Nội (Kỳ đài)', kind: 'other',
+        floors: [...rep(4.2, 3), ...rep(3.5, 6)],
       },
     },
   },

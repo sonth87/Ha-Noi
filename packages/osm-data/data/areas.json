@@ -1,6 +1,6 @@
 {
   "nga-tu-thai-ha": {
-    "name": "Đống Đa: Thái Hà – Tây Sơn – Chùa Bộc – Láng Hạ – Hoàng Cầu – Ô Chợ Dừa – Xã Đàn – Ngã Tư Sở",
+    "name": "Đống Đa & Ba Đình: Thái Hà – Tây Sơn – Chùa Bộc – Láng Hạ – Hoàng Cầu – Ô Chợ Dừa – Xã Đàn – Cát Linh – Giảng Võ – Kim Mã – Liễu Giai – Ba Đình",
     "bboxes": [
       [
         105.81858,
@@ -31,10 +31,22 @@
         21.01076,
         105.82154,
         21.02193
+      ],
+      [
+        105.805,
+        21.02,
+        105.826,
+        21.0445
+      ],
+      [
+        105.825,
+        21.02,
+        105.8475,
+        21.0445
       ]
     ],
     "file": "nga-tu-thai-ha.osm.json",
-    "fetched": "2026-10-21",
-    "note": "Thái Hà – Tây Sơn – Nguyễn Lương Bằng – Ô Chợ Dừa – Xã Đàn – Chùa Bộc – Ngã Tư Sở – Hoàng Cầu (Hồ Hoàng Cầu) – Láng Hạ"
+    "fetched": "2026-10-22",
+    "note": "Toàn bộ Quận Đống Đa & Quận Ba Đình + toàn tuyến Metro 2A (Cát Linh – Hà Đông) & Metro 3"
   }
 }

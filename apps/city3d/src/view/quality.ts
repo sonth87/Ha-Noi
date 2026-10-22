@@ -37,9 +37,9 @@ export interface QualityOptions {
 export interface Quality extends QualityOptions { level: QualityLevel | 'custom' }
 
 export const LEVELS: Record<QualityLevel, QualityOptions> = {
-  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 450, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
-  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 800, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
-  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 1500, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
+  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 650, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1.25, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
+  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 1400, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
+  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 2400, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
   ultra: { traffic: 0.6, wires: true, trees: 'full', viewDistance: 0, autoQuality: false, houseDetail: 3, autoDetail: false, pixelRatio: 3, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
 };
 
@@ -52,24 +52,24 @@ export const quality = (level: QualityLevel): Quality => ({ level, ...LEVELS[lev
     (balconies, roofs, signs) about 4.5; below that a building is its block and windows (ADR-044). */
 export function detailFor(pxPerMetre: number, q: Pick<QualityOptions, 'houseDetail' | 'autoDetail'>): 0 | 1 | 2 | 3 {
   if (!q.autoDetail) return q.houseDetail;
-  const want = pxPerMetre >= 9 ? 3 : pxPerMetre >= 4.5 ? 2 : pxPerMetre >= 2 ? 1 : 0;
+  const want = pxPerMetre >= 9 ? 3 : pxPerMetre >= 4.5 ? 2 : pxPerMetre >= 1.8 ? 1 : 0;
   return Math.min(q.houseDetail, want) as 0 | 1 | 2 | 3;
 }
 
 /** How far out the view is, 0 (close: everything drawn) to 1 (far): from 8 px a metre down to 2.5.
-    With "lower detail when zoomed out" on, lines fade with it and small things go step by step (ADR-044, ADR-049). */
+    With "lower detail when zoomed out" on, lines stay crisp and small things go step by step (ADR-044, ADR-049). */
 export const FAR = {
   near: 8,
   far: 2.5,
-  vehicleLines: 6,
-  simpleTrees: 5,
-  bikes: 2.5,
-  furniture: 2.2,
-  details: 2.2,
-  vehicles: 1.8,
-  trees: 1.4,
-  creases: 1.1,
-  silhouette: 0.85,
+  vehicleLines: 5.5,
+  simpleTrees: 4.5,
+  bikes: 2.3,
+  furniture: 2.0,
+  details: 1.35,
+  vehicles: 1.5,
+  trees: 1.1,
+  creases: 0.25,
+  silhouette: 0.15,
 } as const;
 
 export function farness(pxPerMetre: number, q: Pick<QualityOptions, 'autoDetail'>): number {
@@ -93,8 +93,8 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (4: expanded Đống Đa viewDistance) */
-const VERSION = 4;
+/** bumped when the defaults change in a way a saved setting should not outlive (5: sharp zoomed-out lines + Ba Đình viewDistance) */
+const VERSION = 5;
 
 export function isMobileDevice(): boolean {
   try {

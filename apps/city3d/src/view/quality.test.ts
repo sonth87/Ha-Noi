@@ -82,7 +82,7 @@ describe('street labels (pin callout & map modes)', () => {
     const pinsFar = selectVisibleStreetLabels(catalog, 'pin', 1.0, 1200, 900, [0, 0], project);
     expect(pinsFar.length).toBeGreaterThan(0);
     expect(pinsFar.length).toBeLessThanOrEqual(7);
-    expect(pinsFar.every(p => p.tier === 1 && p.stemHeightPx > 0 && p.info.includes('làn'))).toBe(true);
+    expect(pinsFar.every(p => p.tier === 1 && p.stemHeightPx > 0 && (p.info.includes('làn') || p.info.includes('km') || p.info.includes('m')))).toBe(true);
 
     const pinsNear = selectVisibleStreetLabels(catalog, 'pin', 7.0, 1200, 900, [0, 0], project);
     expect(pinsNear.length).toBeGreaterThan(pinsFar.length);

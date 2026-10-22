@@ -594,33 +594,130 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
 export interface CarModel { parts: Map<'body' | 'top' | 'glass' | 'door' | 'win' | 'head', THREE.BufferGeometry>; shell: THREE.BufferGeometry; lines: Float32Array }
 
 /** One car, nose toward +x, centred, its floor 0.25 m above the rail top: a long box with rounded
-    corners, a band of windows and two doors on each side; the end car (`cab`) has a windscreen and
-    two head lamps on its +x end. */
+    corners, bogie wheel trucks, inter-car gangway bellows, rooftop HVAC pods & transverse louver
+    slits (matching 05-metro.js), upper/lower belt trim lines, double-leaf sliding doors with vision
+    windows, and on the end car (`cab`) a framed windscreen, destination header, coupler skirt and
+    twin head lamps on its +x end. */
 export function carModel(cab: boolean): CarModel {
-  const B = new Batch(), L = METRO.carLen - 0.4, hw = 1.4, z0 = 0.25, z1 = 3.85, r = 0.35;
+  const B = new Batch(), L = METRO.carLen - 0.4, hw = 1.42, z0 = 0.28, z1 = 3.86, r = 0.36;
+  const rect = (x0: number, x1: number, y0: number, y1: number): Vec2[] => [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
   const ringPts: Vec2[] = [];
   for (const [cx, cy, a] of [[L / 2 - r, hw - r, 0], [-L / 2 + r, hw - r, Math.PI / 2], [-L / 2 + r, -hw + r, Math.PI], [L / 2 - r, -hw + r, 1.5 * Math.PI]] as const)
     for (let k = 0; k <= 2; k++) { const t = a + (k / 2) * (Math.PI / 2); ringPts.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]); }
   B.solid(ringPts, z0, z1, () => 'wall', 'roof');
+
+  // 1. Underframe bogie trucks & equipment boxes (z = 0.04 .. z0)
+  for (const bx of [-L * 0.32, L * 0.32]) {
+    B.solid(rect(bx - 1.35, bx + 1.35, -hw + 0.26, hw - 0.26), 0.05, z0, () => 'roof', 'roof');
+    for (const ax of [bx - 0.85, bx + 0.85]) {
+      for (const s of [-1, 1]) {
+        const yw = s * (hw - 0.22);
+        B.loop([V(ax - 0.34, yw, 0.04), V(ax + 0.34, yw, 0.04), V(ax + 0.34, yw, z0 - 0.02), V(ax - 0.34, yw, z0 - 0.02)], 'detail');
+      }
+    }
+  }
+  B.solid(rect(-L * 0.14, L * 0.14, -hw + 0.38, hw - 0.38), 0.1, z0, () => 'roof', 'roof');
+
+  // 2. Inter-car accordion gangway bellows (05-metro.js: box(x - GAP, y + 4, z + 3, GAP, CD - 8, CH - 6))
+  const gHalf = METRO.gap / 2 + 0.22, gy = hw - 0.36, gz0 = z0 + 0.22, gz1 = z1 - 0.34;
+  B.solid(rect(-L / 2 - gHalf, -L / 2 + 0.05, -gy, gy), gz0, gz1, () => 'roof', 'roof');
+  for (const xm of [-L / 2 - gHalf * 0.66, -L / 2 - gHalf * 0.33]) {
+    B.loop([V(xm, -gy, gz0), V(xm, gy, gz0), V(xm, gy, gz1), V(xm, -gy, gz1)], 'detail');
+  }
+  if (!cab) {
+    B.solid(rect(L / 2 - 0.05, L / 2 + gHalf, -gy, gy), gz0, gz1, () => 'roof', 'roof');
+    for (const xm of [L / 2 + gHalf * 0.33, L / 2 + gHalf * 0.66]) {
+      B.loop([V(xm, -gy, gz0), V(xm, gy, gz0), V(xm, gy, gz1), V(xm, -gy, gz1)], 'detail');
+    }
+  }
+
+  // 3. Rooftop HVAC pods & transverse roof louver slits (05-metro.js: slits(6, CARW - 6, 3, 5, CD - 5))
+  for (const hx of [-L * 0.24, L * 0.24]) {
+    B.solid(rect(hx - 1.9, hx + 1.9, -hw * 0.56, hw * 0.56), z1, z1 + 0.22, () => 'roof', 'roof');
+    for (let sx = hx - 1.5; sx <= hx + 1.5; sx += 0.5) {
+      B.line(V(sx, -hw * 0.48, z1 + 0.23), V(sx, hw * 0.48, z1 + 0.23), 'detail');
+    }
+  }
+  for (let sx = -L / 2 + 1.2; sx <= L / 2 - 1.2; sx += 0.75) {
+    if (Math.abs(Math.abs(sx) - L * 0.24) < 2.05) continue;
+    B.line(V(sx, -hw + 0.42, z1 + 0.01), V(sx, hw - 0.42, z1 + 0.01), 'detail');
+  }
+
+  // 4. Side walls: belt lines, double-leaf sliding doors with door vision glass, and passenger windows
   const win: number[] = [], door: number[] = [], head: number[] = [], glass: number[] = [];
   const quad = (out: number[], p: THREE.Vector3[], n: THREE.Vector3) => B.quad('wall', p, n, out);
   for (const s of [-1, 1]) {
-    const y = s * (hw + 0.01), n = new THREE.Vector3(0, 0, s);
-    // doors at a quarter and three quarters, windows between and beyond them
-    const doors = [-L / 4, L / 4], dw = 1.3;
-    for (const d of doors) { quad(door, [V(d - dw / 2, y, z0 + 0.1), V(d + dw / 2, y, z0 + 0.1), V(d + dw / 2, y, z1 - 0.6), V(d - dw / 2, y, z1 - 0.6)], n); B.line(V(d, y, z0 + 0.1), V(d, y, z1 - 0.6)); }
-    const spans: [number, number][] = [[-L / 2 + 1.2, -L / 4 - dw / 2 - 0.4], [-L / 4 + dw / 2 + 0.4, L / 4 - dw / 2 - 0.4], [L / 4 + dw / 2 + 0.4, L / 2 - (cab ? 2.4 : 1.2)]];
-    for (const [a, b] of spans) {
-      const n2 = Math.max(1, Math.round((b - a) / 1.7)), w2 = (b - a) / n2;
-      for (let i = 0; i < n2; i++) { const x0 = a + i * w2 + 0.08, x1 = x0 + w2 - 0.16; quad(win, [V(x0, y, z0 + 1.3), V(x1, y, z0 + 1.3), V(x1, y, z1 - 0.9), V(x0, y, z1 - 0.9)], n); B.loop([V(x0, y, z0 + 1.3), V(x1, y, z0 + 1.3), V(x1, y, z1 - 0.9), V(x0, y, z1 - 0.9)], 'detail'); }
+    const y = s * (hw + 0.01), y2 = s * (hw + 0.016), n = new THREE.Vector3(0, 0, s);
+    // Upper and lower longitudinal belt trim lines (05-metro.js lines 126) + mid livery stripe
+    B.line(V(-L / 2 + 0.35, y, z1 - 0.34), V(L / 2 - 0.35, y, z1 - 0.34), 'detail');
+    B.line(V(-L / 2 + 0.35, y, z0 + 0.32), V(L / 2 - 0.35, y, z0 + 0.32), 'detail');
+    B.line(V(-L / 2 + 0.35, y, z0 + 1.16), V(L / 2 - (cab ? 1.4 : 0.35), y, z0 + 1.16), 'crease');
+
+    // Double-leaf sliding doors at ±L/4 (leafL & leafR + vision glass panes)
+    const doors = [-L / 4, L / 4], dw = 1.38;
+    for (const d of doors) {
+      const dx0 = d - dw / 2, dx1 = d + dw / 2, dz0 = z0 + 0.12, dz1 = z1 - 0.52;
+      quad(door, [V(dx0, y, dz0), V(dx1, y, dz0), V(dx1, y, dz1), V(dx0, y, dz1)], n);
+      B.loop([V(dx0, y2, dz0), V(dx1, y2, dz0), V(dx1, y2, dz1), V(dx0, y2, dz1)], 'crease');
+      // Center seam between left and right sliding door leaves
+      B.line(V(d, y2, dz0), V(d, y2, dz1), 'crease');
+      // Door header indicator bar
+      B.line(V(dx0 + 0.08, y2, dz1 + 0.09), V(dx1 - 0.08, y2, dz1 + 0.09), 'detail');
+      // Vision glass window in each door leaf (leafL & leafR)
+      for (const [lx0, lx1] of [[dx0 + 0.14, d - 0.09], [d + 0.09, dx1 - 0.14]] as const) {
+        quad(win, [V(lx0, y2, z0 + 1.34), V(lx1, y2, z0 + 1.34), V(lx1, y2, z1 - 0.86), V(lx0, y2, z1 - 0.86)], n);
+        B.loop([V(lx0, y2, z0 + 1.34), V(lx1, y2, z0 + 1.34), V(lx1, y2, z1 - 0.86), V(lx0, y2, z1 - 0.86)], 'detail');
+      }
     }
-    B.line(V(-L / 2 + 0.4, y, z1 - 0.45), V(L / 2 - 0.4, y, z1 - 0.45));
+
+    // Passenger windows between and beyond the doorways
+    const spans: [number, number][] = [
+      [-L / 2 + 1.05, -L / 4 - dw / 2 - 0.35],
+      [-L / 4 + dw / 2 + 0.35, L / 4 - dw / 2 - 0.35],
+      [L / 4 + dw / 2 + 0.35, L / 2 - (cab ? 2.25 : 1.05)],
+    ];
+    for (const [a, b] of spans) {
+      const n2 = Math.max(1, Math.round((b - a) / 1.55)), w2 = (b - a) / n2;
+      for (let i = 0; i < n2; i++) {
+        const x0 = a + i * w2 + 0.09, x1 = x0 + w2 - 0.18, wz0 = z0 + 1.28, wz1 = z1 - 0.82;
+        quad(win, [V(x0, y, wz0), V(x1, y, wz0), V(x1, y, wz1), V(x0, y, wz1)], n);
+        B.loop([V(x0, y2, wz0), V(x1, y2, wz0), V(x1, y2, wz1), V(x0, y2, wz1)], 'detail');
+        // Upper transom bar inside each passenger window
+        B.line(V(x0, y2, wz1 - 0.24), V(x1, y2, wz1 - 0.24), 'detail');
+      }
+    }
+
+    // Side cab driver window near +x end on cab cars
+    if (cab) {
+      const cx0 = L / 2 - 1.95, cx1 = L / 2 - 0.72, cz0 = z0 + 1.38, cz1 = z1 - 0.82;
+      quad(win, [V(cx0, y, cz0), V(cx1, y, cz0), V(cx1, y, cz1), V(cx0, y, cz1)], n);
+      B.loop([V(cx0, y2, cz0), V(cx1, y2, cz0), V(cx1, y2, cz1), V(cx0, y2, cz1)], 'detail');
+    }
   }
+
+  // 5. Cab front nose (+x end): coupler skirt, recessed windscreen frame, lit destination header & twin headlamps
   if (cab) {
-    const x = L / 2 + 0.01, n = new THREE.Vector3(1, 0, 0);
-    quad(glass, [V(x, -hw + 0.3, z0 + 1.6), V(x, hw - 0.3, z0 + 1.6), V(x, hw - 0.3, z1 - 0.4), V(x, -hw + 0.3, z1 - 0.4)], n);
-    for (const y of [-hw + 0.45, hw - 0.45]) quad(head, [V(x, y - 0.18, z0 + 0.6), V(x, y + 0.18, z0 + 0.6), V(x, y + 0.18, z0 + 0.9), V(x, y - 0.18, z0 + 0.9)], n);
+    const x = L / 2 + 0.01, x2 = L / 2 + 0.018, n = new THREE.Vector3(1, 0, 0);
+    // Lower front anti-climber / coupler skirt
+    B.solid(rect(L / 2 - 0.18, L / 2 + 0.16, -hw + 0.28, hw - 0.28), 0.1, z0 + 0.24, () => 'roof', 'roof');
+    // Outer windscreen surround bezel
+    B.loop([V(x2, -hw + 0.22, z0 + 1.42), V(x2, hw - 0.22, z0 + 1.42), V(x2, hw - 0.22, z1 - 0.34), V(x2, -hw + 0.22, z1 - 0.34)], 'crease');
+    // Main driver windscreen glass
+    quad(glass, [V(x, -hw + 0.28, z0 + 1.48), V(x, hw - 0.28, z0 + 1.48), V(x, hw - 0.28, z1 - 0.68), V(x, -hw + 0.28, z1 - 0.68)], n);
+    // Glowing LED destination / line-number header band at top of windscreen
+    quad(win, [V(x2, -hw + 0.42, z1 - 0.64), V(x2, hw - 0.42, z1 - 0.64), V(x2, hw - 0.42, z1 - 0.40), V(x2, -hw + 0.42, z1 - 0.40)], n);
+    B.loop([V(x2, -hw + 0.28, z0 + 1.48), V(x2, hw - 0.28, z0 + 1.48), V(x2, hw - 0.28, z1 - 0.68), V(x2, -hw + 0.28, z1 - 0.68)], 'detail');
+    // Twin windscreen wipers
+    B.line(V(x2, -0.45, z0 + 1.5), V(x2, -0.12, z0 + 2.05), 'detail');
+    B.line(V(x2, 0.45, z0 + 1.5), V(x2, 0.12, z0 + 2.05), 'detail');
+    // Twin headlight clusters + center route badge
+    for (const y of [-hw + 0.46, hw - 0.46]) {
+      quad(head, [V(x, y - 0.22, z0 + 0.56), V(x, y + 0.22, z0 + 0.56), V(x, y + 0.22, z0 + 0.88), V(x, y - 0.22, z0 + 0.88)], n);
+      B.loop([V(x2, y - 0.25, z0 + 0.53), V(x2, y + 0.25, z0 + 0.53), V(x2, y + 0.25, z0 + 0.91), V(x2, y - 0.25, z0 + 0.91)], 'detail');
+    }
+    B.loop([V(x2, -0.28, z0 + 0.6), V(x2, 0.28, z0 + 0.6), V(x2, 0.28, z0 + 0.86), V(x2, -0.28, z0 + 0.86)], 'detail');
   }
+
   const geo = (pos: number[]) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); return g; };
   const parts = new Map<'body' | 'top' | 'glass' | 'door' | 'win' | 'head', THREE.BufferGeometry>([
     ['body', geo(B.tris.get('wall') ?? [])], ['top', geo(B.tris.get('roof') ?? [])], ['glass', geo(glass)], ['door', geo(door)], ['win', geo(win)], ['head', geo(head)],

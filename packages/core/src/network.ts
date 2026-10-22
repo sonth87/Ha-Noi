@@ -302,6 +302,25 @@ function smooth(r: Road, fixed: (p: Vec2) => boolean): Road {
       n.push(s[s.length - 1]!);
       s = n;
     }
+    // If any interior corner on a non-alley/service road is still sharper than 0.85 rad, cut that corner
+    for (let extra = 0; extra < 2 && s.length > 2; extra++) {
+      let sharp = false;
+      const n: Vec2[] = [s[0]!];
+      for (let i = 1; i < s.length - 1; i++) {
+        const a = s[i - 1]!, b = s[i]!, c = s[i + 1]!;
+        const t = Math.abs(Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0]));
+        if (Math.min(t, 2 * Math.PI - t) >= 0.85) {
+          sharp = true;
+          n.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
+          n.push([b[0] * 0.75 + c[0] * 0.25, b[1] * 0.75 + c[1] * 0.25]);
+        } else {
+          n.push(b);
+        }
+      }
+      n.push(s[s.length - 1]!);
+      s = n;
+      if (!sharp) break;
+    }
     out.push(...s.slice(1));
   };
   for (let i = 1; i < r.path.length; i++) {

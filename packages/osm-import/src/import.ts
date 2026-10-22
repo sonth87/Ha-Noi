@@ -323,14 +323,102 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
 
   // ---------- 6b. rails and stations ----------
   const rails: Rail[] = [];
+  const rawMetroWays: { w: OsmWay; t: OsmTags; pts: Vec2[]; len: number; elevated: boolean }[] = [];
   for (const w of ways.values()) {
     const t = tags(w), kind = railKind(t);
     if (!kind) continue;
     const layer = Number.parseInt(t.layer ?? '0', 10) || 0, elevated = (!!t.bridge && t.bridge !== 'no') || layer > 0;
-    const pieces = clipPathTo(path(w), inside);
+    const pts = path(w);
+    if (pts.length < 2) continue;
+    if (kind === 'metro' && elevated) {
+      rawMetroWays.push({ w, t, pts, len: polylineLength(pts), elevated });
+      continue;
+    }
+    const pieces = clipPathTo(pts, inside);
     pieces.forEach((piece, k) => rails.push({
       id: pieces.length > 1 ? `rl${w.id}-${k}` : `rl${w.id}`, name: t.name, kind, path: piece, elevated, height: railHeight(kind, elevated), source: src('way', w.id),
     }));
+  }
+  if (rawMetroWays.some(m => m.len > 400)) {
+    const dirAt = (nids: readonly number[], atEnd: boolean): Vec2 => {
+      const a = xy.get(atEnd ? nids[nids.length - 2]! : nids[0]!)!;
+      const b = xy.get(atEnd ? nids[nids.length - 1]! : nids[1]!)!;
+      const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1;
+      return [dx / L, dy / L];
+    };
+    const pool = [...rawMetroWays].sort((a, b) => b.len - a.len);
+    const used = new Set<number>();
+    const stitched: { id: string; name?: string; path: Vec2[]; source: string }[] = [];
+    for (const seed of pool) {
+      if (used.has(seed.w.id) || seed.len < 400) continue;
+      used.add(seed.w.id);
+      let cur = [...seed.w.nodes];
+      for (let grew = true; grew;) {
+        grew = false;
+        const endNode = cur[cur.length - 1]!, endDir = dirAt(cur, true);
+        let best: typeof seed | null = null, bestDot = 0.82, rev = false;
+        for (const cand of pool) {
+          if (used.has(cand.w.id) || (cand.t.name ?? '') !== (seed.t.name ?? '')) continue;
+          if (cand.w.nodes[0] === endNode) {
+            const d = dirAt(cand.w.nodes, false), dot = endDir[0] * d[0] + endDir[1] * d[1];
+            if (dot > bestDot) { bestDot = dot; best = cand; rev = false; }
+          } else if (cand.w.nodes[cand.w.nodes.length - 1] === endNode) {
+            const d = dirAt(cand.w.nodes, true), dot = -endDir[0] * d[0] - endDir[1] * d[1];
+            if (dot > bestDot) { bestDot = dot; best = cand; rev = true; }
+          }
+        }
+        if (best) {
+          used.add(best.w.id);
+          const nextNodes = rev ? [...best.w.nodes].reverse() : best.w.nodes;
+          cur = [...cur, ...nextNodes.slice(1)];
+          grew = true;
+          continue;
+        }
+        const startNode = cur[0]!, startDir = dirAt(cur, false);
+        best = null; bestDot = 0.82; rev = false;
+        for (const cand of pool) {
+          if (used.has(cand.w.id) || (cand.t.name ?? '') !== (seed.t.name ?? '')) continue;
+          if (cand.w.nodes[cand.w.nodes.length - 1] === startNode) {
+            const d = dirAt(cand.w.nodes, true), dot = startDir[0] * d[0] + startDir[1] * d[1];
+            if (dot > bestDot) { bestDot = dot; best = cand; rev = false; }
+          } else if (cand.w.nodes[0] === startNode) {
+            const d = dirAt(cand.w.nodes, false), dot = -startDir[0] * d[0] - startDir[1] * d[1];
+            if (dot > bestDot) { bestDot = dot; best = cand; rev = true; }
+          }
+        }
+        if (best) {
+          used.add(best.w.id);
+          const prevNodes = rev ? [...best.w.nodes].reverse() : best.w.nodes;
+          cur = [...prevNodes.slice(0, -1), ...cur];
+          grew = true;
+        }
+      }
+      const fullPath = cur.map(id => xy.get(id)).filter((p): p is Vec2 => !!p);
+      stitched.push({ id: `rl${seed.w.id}`, name: seed.t.name, path: fullPath, source: src('way', seed.w.id) });
+    }
+    // Ensure paired parallel tracks on the same metro line run in opposite directions (outbound vs inbound)
+    const seenLineDir = new Map<string, Vec2>();
+    for (const st of stitched) {
+      const key = st.name ?? st.id;
+      const p0 = st.path[0]!, p1 = st.path[st.path.length - 1]!;
+      const vx = p1[0] - p0[0], vy = p1[1] - p0[1];
+      const prev = seenLineDir.get(key);
+      if (prev && prev[0] * vx + prev[1] * vy > 0) {
+        st.path.reverse();
+      } else if (!prev) {
+        seenLineDir.set(key, [vx, vy]);
+      }
+      rails.push({
+        id: st.id, name: st.name, kind: 'metro', path: st.path, elevated: true, height: railHeight('metro', true), source: st.source,
+      });
+    }
+  } else {
+    for (const m of rawMetroWays) {
+      const pieces = clipPathTo(m.pts, inside);
+      pieces.forEach((piece, k) => rails.push({
+        id: pieces.length > 1 ? `rl${m.w.id}-${k}` : `rl${m.w.id}`, name: m.t.name, kind: 'metro', path: piece, elevated: m.elevated, height: railHeight('metro', m.elevated), source: src('way', m.w.id),
+      }));
+    }
   }
   const platformRings = [...ways.values()].filter(w => tags(w).railway === 'platform' && w.nodes[0] === w.nodes[w.nodes.length - 1]).map(w => normalizeRing(path(w)));
   const stations: Station[] = [];
@@ -339,6 +427,7 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     if (t.railway !== 'station' && t.public_transport !== 'station') continue;
     const at = xy.get(n.id)!, kind = t.station === 'subway' || t.station === 'light_rail' ? 'metro' : t.station === 'tram' ? 'tram' : 'rail';
     if (!inside(at) && !rails.some(r => r.kind === kind && r.path.some(p => dist(p, at) < 80))) continue;
+    if (t.name && stations.some(s => s.kind === kind && s.name === t.name && dist(s.at, at) < 120)) continue;
     stations.push({ id: `st${n.id}`, name: t.name, kind, at, platforms: platformRings.filter(r => dist(centroid(r), at) < 120), source: src('node', n.id) });
   }
 

@@ -23,7 +23,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import {
-  METRO, metroTracks, trainAt, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes,
+  METRO, metroTracks, trainAt, trainCount, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes,
   type City, type Lane, type Signals, type Track, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { beaconsOf, buildBase, buildTile, cityFloors, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
@@ -38,7 +38,7 @@ import { FAR, detailFor, farness, loadQuality, lowerLevel, saveQuality, type Qua
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
 import {
   STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
-  type StreetEntry, type StreetLabelMode,
+  type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
 } from './streetLabels';
 import {
   PLACE_INFO_MODES, buildPlaceCatalog, selectVisiblePlaceLabels,
@@ -106,7 +106,7 @@ const SHELL_VERT = `uniform vec2 res;
 interface TileState { tile: Tile; layers: Map<Detail, { layer: Layer; group: THREE.Group | null }>; shown: Detail | -1 }
 interface CellState { bucket: FurnitureBucket; cell: FurnitureCell | null; groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null; wires: LineSegments2 | null; pulses: LineSegments2 | null; pools: THREE.Mesh | null }
 interface Fleet { model: VehicleModel; meshes: THREE.InstancedMesh[]; list: Vehicle[] }
-interface Train { track: Track; cars: THREE.Group[]; doors: THREE.MeshBasicMaterial; stopping: boolean }
+interface Train { track: Track; offset: number; cars: THREE.Group[]; doors: THREE.MeshBasicMaterial; stopping: boolean }
 
 export class CityView {
   readonly base: Layer;
@@ -118,6 +118,8 @@ export class CityView {
   readonly showcases: ShowcaseItem[];
   readonly streetCatalog: StreetEntry[];
   readonly placeCatalog: PlaceCatalog;
+  private readonly streetById = new Map<string, StreetEntry>();
+  private readonly panBounds: { x0: number; y0: number; x1: number; y1: number };
   private readonly showcaseCache = new Map<string, BuiltShowcase>();
   private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial } | null = null;
   private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
@@ -131,11 +133,16 @@ export class CityView {
   private timers: ReturnType<typeof setTimeout>[] = [];
   private labelLayer: HTMLDivElement | null = null;
   private labelNodes = new Map<string, HTMLButtonElement>();
-  private labelWorld = new Map<string, [number, number]>();
+  private labelItems = new Map<string, ProjectedStreetLabel>();
   private labelSig = '';
+  private lastLabelSelect = 0;
   private placeLayer: HTMLDivElement | null = null;
   private placeNodes = new Map<string, HTMLButtonElement>();
+  private placeItems = new Map<string, { entry: PlaceEntry; x: number; y: number }>();
   private placeSig = '';
+  private lastPlaceSelect = 0;
+  private lastDistStep = 0;
+  private hoveredPinKey: string | null = null;
   private hoverBanner: HTMLDivElement | null = null;
   private popupCard: HTMLDivElement | null = null;
   private activePopup: { entry: PlaceEntry; floor?: string } | null = null;
@@ -198,7 +205,17 @@ export class CityView {
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
     this.streetCatalog = buildStreetCatalog(city);
+    for (const s of this.streetCatalog) this.streetById.set(s.id, s);
     this.placeCatalog = buildPlaceCatalog(city, new Set(this.showcases.map(s => s.id)));
+    const b = city.bounds;
+    let x0 = b.x0, y0 = b.y0, x1 = b.x1, y1 = b.y1;
+    for (const st of city.stations) {
+      if (st.at[0] < x0) x0 = st.at[0];
+      if (st.at[1] < y0) y0 = st.at[1];
+      if (st.at[0] > x1) x1 = st.at[0];
+      if (st.at[1] > y1) y1 = st.at[1];
+    }
+    this.panBounds = { x0, y0, x1, y1 };
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       this.mats.surface.set(s, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
     }
@@ -262,7 +279,7 @@ export class CityView {
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.2;
-    controls.minZoom = 0.16; controls.maxZoom = 40;
+    controls.minZoom = 0.14; controls.maxZoom = 40;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
     // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
@@ -271,7 +288,7 @@ export class CityView {
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: this.snap.mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN };
     controls.rotateSpeed = 0.6;
-    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; this.hideHoverBanner(); };
+    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; this.hideHoverBanner(); this.clearHoveredPin(); };
     const onControlChange = () => { if (this.interacting) this.interactCooldown = performance.now() + 140; };
     const onControlEnd = () => { this.interacting = false; this.interactCooldown = performance.now() + 140; };
     controls.addEventListener('start', onControlStart);
@@ -291,7 +308,10 @@ export class CityView {
       this.fleetMeshes(fleet, mapGroup);
       fleets.set(kind, fleet);
     }
-    this.trains = this.tracks.map(track => this.trainMeshes(track, mapGroup));
+    this.trains = this.tracks.flatMap(track => {
+      const count = trainCount(track);
+      return Array.from({ length: count }, (_, k) => this.trainMeshes(track, (k * track.period) / count, mapGroup));
+    });
     const vehicleLines = new LineSegments2(this.linesFor(fleets), this.mats.crease);
     vehicleLines.frustumCulled = false;
     vehicleLines.userData.tier = 'creases';
@@ -300,7 +320,7 @@ export class CityView {
     const composer = new EffectComposer(renderer);
     const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.35, 0.5);
 
-    // double click / double tap: fly to that spot on the ground
+    // double click / double tap: open popup info if double-clicked on a callout pin, otherwise fly to spot on ground
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
     const flyToClient = (clientX: number, clientY: number) => {
@@ -309,7 +329,19 @@ export class CityView {
       ray.setFromCamera(ndc, camera);
       if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
     };
-    const onDbl = (e: MouseEvent) => flyToClient(e.clientX, e.clientY);
+    const onDbl = (e: MouseEvent) => {
+      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
+      if (pinHit) {
+        if (pinHit.kind === 'place') {
+          this.openPopup(pinHit.entry);
+          this.flyTo(pinHit.entry.ground, false);
+        } else {
+          this.openStreetPopup(pinHit.street, pinHit.item.world);
+        }
+        return;
+      }
+      flyToClient(e.clientX, e.clientY);
+    };
 
     // Helper to raycast against buildings, stations, parks, lakes, and monuments
     const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
@@ -381,13 +413,34 @@ export class CityView {
     let lastHoverTime = 0;
     const onMove = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse' || this.interacting || (e.buttons & 7) !== 0) return;
-      if (this.snap.showcase || this.snap.placeInfo === 'off') {
+      if (this.snap.showcase) {
         this.hideHoverBanner();
+        this.clearHoveredPin();
         return;
       }
       const now = performance.now();
       if (now - lastHoverTime < 45) return;
       lastHoverTime = now;
+
+      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
+      if (pinHit) {
+        this.setHoveredPin(pinHit.key);
+        renderer.domElement.style.cursor = 'pointer';
+        if (pinHit.kind === 'place' && this.snap.placeInfo !== 'off') {
+          const r = host.getBoundingClientRect();
+          this.showHoverBanner(pinHit.entry, e.clientX - r.left, e.clientY - r.top);
+        } else {
+          this.hideHoverBanner();
+        }
+        return;
+      }
+      this.clearHoveredPin();
+
+      if (this.snap.placeInfo === 'off') {
+        this.hideHoverBanner();
+        renderer.domElement.style.cursor = '';
+        return;
+      }
       const picked = pickAtClient(e.clientX, e.clientY);
       const entry = picked ? this.placeCatalog.byId.get(picked.owner) : undefined;
       if (!entry) {
@@ -401,20 +454,35 @@ export class CityView {
     };
     const onLeave = () => {
       this.hideHoverBanner();
+      this.clearHoveredPin();
       renderer.domElement.style.cursor = '';
     };
 
     const onUp = (e: PointerEvent) => {
       const maxMove = e.pointerType === 'touch' ? 12 : 5;
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
+      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
       if (e.pointerType === 'touch') {
         const now = performance.now();
-        if (lastTap && now - lastTap.t < 300 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 28) {
+        if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
           lastTap = null;
-          flyToClient(e.clientX, e.clientY);
+          if (pinHit) {
+            if (pinHit.kind === 'place') this.openPopup(pinHit.entry);
+            else this.openStreetPopup(pinHit.street, pinHit.item.world);
+          } else {
+            flyToClient(e.clientX, e.clientY);
+          }
           return;
         }
         lastTap = { t: now, x: e.clientX, y: e.clientY };
+      }
+      if (pinHit) {
+        if (pinHit.kind === 'place') {
+          this.openPopup(pinHit.entry);
+        } else {
+          this.flyTo(pinHit.item.world, false);
+        }
+        return;
       }
       const picked = pickAtClient(e.clientX, e.clientY);
       if (!picked) {
@@ -467,7 +535,10 @@ export class CityView {
         if (this.activeShowcase) for (const b of this.activeShowcase.beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
       } else {
         this.detailStep();
-        this.distanceStep();
+        if (!this.interacting || now - this.lastDistStep > 120) {
+          this.lastDistStep = now;
+          this.distanceStep();
+        }
         this.trafficStep(dt);
         for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
         this.mats.pulse.dashOffset -= dt * 9;
@@ -494,7 +565,7 @@ export class CityView {
     host.appendChild(labelLayer);
     this.labelLayer = labelLayer;
     this.labelNodes.clear();
-    this.labelWorld.clear();
+    this.labelItems.clear();
     this.labelSig = '';
 
     const placeLayer = document.createElement('div');
@@ -502,6 +573,7 @@ export class CityView {
     host.appendChild(placeLayer);
     this.placeLayer = placeLayer;
     this.placeNodes.clear();
+    this.placeItems.clear();
     this.placeSig = '';
 
     const hoverBanner = document.createElement('div');
@@ -565,11 +637,12 @@ export class CityView {
     this.labelLayer?.remove();
     this.labelLayer = null;
     this.labelNodes.clear();
-    this.labelWorld.clear();
+    this.labelItems.clear();
     this.labelSig = '';
     this.placeLayer?.remove();
     this.placeLayer = null;
     this.placeNodes.clear();
+    this.placeItems.clear();
     this.placeSig = '';
     this.hoverBanner?.remove();
     this.hoverBanner = null;
@@ -743,7 +816,7 @@ export class CityView {
         layer.style.display = 'none';
         layer.replaceChildren();
         this.labelNodes.clear();
-        this.labelWorld.clear();
+        this.labelItems.clear();
         this.labelSig = 'off';
       }
       return;
@@ -760,10 +833,39 @@ export class CityView {
       layer.dataset.mode = mode;
       layer.replaceChildren();
       this.labelNodes.clear();
-      this.labelWorld.clear();
+      this.labelItems.clear();
+      this.lastLabelSelect = 0;
     }
 
     const tmp = new THREE.Vector3();
+    const project = (world: [number, number, number]) => {
+      tmp.set(world[0], world[2], world[1]).project(m.camera);
+      return {
+        x: (tmp.x * 0.5 + 0.5) * w,
+        y: (-tmp.y * 0.5 + 0.5) * h,
+        visible: tmp.z >= -1 && tmp.z <= 1,
+      };
+    };
+
+    const now = performance.now();
+    // Fast path while actively dragging/panning: just re-project existing DOM nodes without collision/DOM churn
+    if (this.interacting && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
+      for (const [key, item] of this.labelItems) {
+        const node = this.labelNodes.get(key);
+        if (!node) continue;
+        const scr = project([item.world[0], item.world[1], 0.4]);
+        item.x = scr.x;
+        item.y = scr.y;
+        if (mode === 'pin') {
+          node.style.transform = `translate3d(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px, 0)`;
+        } else {
+          node.style.transform = `translate3d(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px, 0) translate(-50%, -50%) rotate(${item.angleDeg}deg)`;
+        }
+      }
+      return;
+    }
+    this.lastLabelSelect = now;
+
     const visible = selectVisibleStreetLabels(
       this.streetCatalog,
       mode,
@@ -771,48 +873,37 @@ export class CityView {
       w,
       h,
       [c.x, c.z],
-      world => {
-        tmp.set(world[0], world[2], world[1]).project(m.camera);
-        return {
-          x: (tmp.x * 0.5 + 0.5) * w,
-          y: (-tmp.y * 0.5 + 0.5) * h,
-          visible: tmp.z >= -1 && tmp.z <= 1,
-        };
-      },
+      project,
     );
 
     const keepIds = new Set<string>();
     for (const item of visible) {
       const key = `${mode}:${item.id}`;
       keepIds.add(key);
-      this.labelWorld.set(key, item.world);
+      this.labelItems.set(key, item);
       let btn = this.labelNodes.get(key);
       if (!btn) {
         btn = document.createElement('button');
         btn.type = 'button';
         btn.dataset.tier = String(item.tier);
-        btn.addEventListener('pointerdown', e => e.stopPropagation());
-        btn.addEventListener('pointerup', e => e.stopPropagation());
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          const pt = this.labelWorld.get(key);
-          if (pt) this.flyTo(pt, false);
-        });
 
         if (mode === 'pin') {
           btn.className = 'street-pin';
           btn.style.setProperty('--stem', `${item.stemHeightPx}px`);
-          btn.setAttribute('aria-label', `${item.name} — ${item.info}`);
+          btn.setAttribute('aria-label', item.info ? `${item.name} — ${item.info}` : item.name);
 
           const card = document.createElement('span');
           card.className = 'pin-card';
           const title = document.createElement('b');
           title.className = 'pin-title';
           title.textContent = item.shortName;
-          const meta = document.createElement('span');
-          meta.className = 'pin-meta';
-          meta.textContent = item.info;
-          card.append(title, meta);
+          card.appendChild(title);
+          if (item.info) {
+            const meta = document.createElement('span');
+            meta.className = 'pin-meta';
+            meta.textContent = item.info;
+            card.appendChild(meta);
+          }
 
           const stem = document.createElement('i');
           stem.className = 'pin-stem';
@@ -831,14 +922,17 @@ export class CityView {
           btn.append(card, stem, base);
         } else {
           btn.className = 'street-map-label';
-          btn.title = `${item.name} · ${item.info}`;
+          btn.title = item.info ? `${item.name} · ${item.info}` : item.name;
           const txt = document.createElement('span');
           txt.className = 'map-label-text';
           txt.textContent = item.name;
-          const meta = document.createElement('em');
-          meta.className = 'map-label-meta';
-          meta.textContent = item.info;
-          btn.append(txt, meta);
+          btn.appendChild(txt);
+          if (item.info) {
+            const meta = document.createElement('em');
+            meta.className = 'map-label-meta';
+            meta.textContent = item.info;
+            btn.appendChild(meta);
+          }
         }
 
         layer.appendChild(btn);
@@ -856,7 +950,8 @@ export class CityView {
       if (!keepIds.has(key)) {
         node.remove();
         this.labelNodes.delete(key);
-        this.labelWorld.delete(key);
+        this.labelItems.delete(key);
+        if (this.hoveredPinKey === key) this.hoveredPinKey = null;
       }
     }
   }
@@ -878,7 +973,7 @@ export class CityView {
     };
 
     // Update anchored popup card position if open
-    if (popupEl && this.activePopup && !this.snap.showcase && mode !== 'off') {
+    if (popupEl && this.activePopup && !this.snap.showcase) {
       const entry = this.activePopup.entry;
       const scr = project([entry.world[0], entry.world[1], entry.world[2] + 2.5]);
       if (w <= 640) {
@@ -897,6 +992,7 @@ export class CityView {
         layer.style.display = 'none';
         layer.replaceChildren();
         this.placeNodes.clear();
+        this.placeItems.clear();
         this.placeSig = 'off';
       }
       return;
@@ -912,7 +1008,24 @@ export class CityView {
       layer.dataset.mode = mode;
       layer.replaceChildren();
       this.placeNodes.clear();
+      this.placeItems.clear();
+      this.lastPlaceSelect = 0;
     }
+
+    const now = performance.now();
+    // Fast path while actively dragging/panning: just re-project existing DOM nodes
+    if (this.interacting && !force && this.placeItems.size > 0 && now - this.lastPlaceSelect < 140) {
+      for (const [key, item] of this.placeItems) {
+        const node = this.placeNodes.get(key);
+        if (!node) continue;
+        const scr = project(item.entry.world);
+        item.x = scr.x;
+        item.y = scr.y;
+        node.style.transform = `translate3d(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
+      }
+      return;
+    }
+    this.lastPlaceSelect = now;
 
     const visible = selectVisiblePlaceLabels(
       this.placeCatalog,
@@ -928,6 +1041,7 @@ export class CityView {
     for (const item of visible) {
       const key = `${mode}:${item.entry.id}`;
       keepIds.add(key);
+      this.placeItems.set(key, { entry: item.entry, x: item.x, y: item.y });
       let btn = this.placeNodes.get(key);
       if (!btn) {
         const entry = item.entry;
@@ -935,18 +1049,6 @@ export class CityView {
         btn.type = 'button';
         btn.dataset.category = entry.category;
         btn.dataset.tier = String(entry.tier);
-        btn.addEventListener('pointerdown', e => e.stopPropagation());
-        btn.addEventListener('pointerup', e => e.stopPropagation());
-        btn.addEventListener('mouseenter', () => {
-          const r = m.host.getBoundingClientRect();
-          const b = btn!.getBoundingClientRect();
-          this.showHoverBanner(entry, b.left - r.left + b.width / 2, b.top - r.top);
-        });
-        btn.addEventListener('mouseleave', () => this.hideHoverBanner());
-        btn.addEventListener('click', e => {
-          e.stopPropagation();
-          this.openPopup(entry);
-        });
 
         if (mode === 'label') {
           btn.className = 'place-label-card';
@@ -990,8 +1092,105 @@ export class CityView {
       if (!keepIds.has(key)) {
         node.remove();
         this.placeNodes.delete(key);
+        this.placeItems.delete(key);
       }
     }
+  }
+
+  /** Hit-test visible place or street pins at client coordinates without blocking map drag (`pointer-events: none`) */
+  private hitLabelAtClient(clientX: number, clientY: number):
+    | { kind: 'place'; key: string; entry: PlaceEntry; x: number; y: number }
+    | { kind: 'street'; key: string; street: StreetEntry; item: ProjectedStreetLabel; x: number; y: number }
+    | null {
+    const m = this.mounted;
+    if (!m || this.snap.showcase) return null;
+    const rect = m.host.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+
+    // 1. Place labels / pills first (higher z-index)
+    if (this.snap.placeInfo !== 'off') {
+      const isCard = this.snap.placeInfo === 'label';
+      for (const [key, item] of this.placeItems) {
+        const halfW = isCard ? 78 : 54;
+        const h = isCard ? 46 : 26;
+        if (x >= item.x - halfW && x <= item.x + halfW && y >= item.y - h && y <= item.y + 4) {
+          return { kind: 'place', key, entry: item.entry, x: item.x, y: item.y - h };
+        }
+      }
+    }
+
+    // 2. Street callout pins / map labels
+    if (this.snap.streetLabels !== 'off') {
+      const isPin = this.snap.streetLabels === 'pin';
+      for (const [key, item] of this.labelItems) {
+        if (isPin) {
+          const totalH = item.stemHeightPx + 32;
+          const halfW = Math.max(36, Math.min(72, item.shortName.length * 4 + 16));
+          const hitCard = x >= item.x - halfW && x <= item.x + halfW && y >= item.y - totalH - 6 && y <= item.y - item.stemHeightPx + 8;
+          const hitBase = Math.hypot(x - item.x, y - item.y) <= 14;
+          if (hitCard || hitBase) {
+            const street = this.streetById.get(item.id);
+            if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - totalH };
+          }
+        } else {
+          const halfW = Math.max(36, Math.min(75, item.name.length * 3.8 + 14));
+          if (x >= item.x - halfW && x <= item.x + halfW && y >= item.y - 14 && y <= item.y + 14) {
+            const street = this.streetById.get(item.id);
+            if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - 14 };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  private setHoveredPin(key: string | null) {
+    if (this.hoveredPinKey === key) return;
+    if (this.hoveredPinKey) {
+      this.labelNodes.get(this.hoveredPinKey)?.classList.remove('is-hover');
+    }
+    this.hoveredPinKey = key;
+    if (key) {
+      this.labelNodes.get(key)?.classList.add('is-hover');
+    }
+  }
+
+  private clearHoveredPin() {
+    this.setHoveredPin(null);
+  }
+
+  /** Synthesize a rich PlaceEntry popup for a street when double-clicked on a callout pin */
+  private openStreetPopup(street: StreetEntry, world: [number, number]) {
+    const tierDesc =
+      street.tier === 1
+        ? 'Trục giao thông huyết mạch đô thị kết nối liên quận Đống Đa – Ba Đình.'
+        : street.tier === 2
+          ? 'Tuyến phố chính tập trung thương mại, dịch vụ, cơ quan và khu dân cư sầm uất.'
+          : 'Tuyến phố / ngõ nội khu kết nối các tổ dân phố và khu tập thể.';
+    const lenM = Math.round(street.totalLength);
+    const entry: PlaceEntry = {
+      id: `street:${street.id}`,
+      name: street.name,
+      category: 'building',
+      categoryLabel: street.tier === 1 ? 'Trục đường lớn' : street.tier === 2 ? 'Tuyến phố chính' : 'Tuyến phố nội khu',
+      badge: 'ĐG',
+      address: `${street.name}, Hà Nội`,
+      description: tierDesc,
+      metrics: [
+        { label: 'Chiều dài tuyến', value: lenM >= 1000 ? `${(lenM / 1000).toFixed(2)} km` : `${lenM} m` },
+        ...(street.lanes ? [{ label: 'Quy mô làn', value: `${street.lanes} làn xe` }] : []),
+        { label: 'Bề rộng lòng đường', value: `${street.width} m` },
+        { label: 'Cấp đường', value: street.tier === 1 ? 'Cấp 1 (Trục chính)' : street.tier === 2 ? 'Cấp 2 (Phố chính)' : 'Cấp 3 (Nội khu)' },
+      ],
+      world: [world[0], world[1], 4],
+      ground: world,
+      tier: street.tier,
+      minPxPerMetre: street.minPxPerMetre,
+      source: 'osm',
+    };
+    this.openPopup(entry);
   }
 
   private showHoverBanner(entry: PlaceEntry, x: number, y: number, floor?: string) {
@@ -1094,7 +1293,7 @@ export class CityView {
     closeBtn.type = 'button';
     closeBtn.className = 'popup-close';
     closeBtn.title = 'Đóng (Esc)';
-    closeBtn.textContent = '✕';
+    closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     closeBtn.addEventListener('click', () => this.closePopup());
     header.append(badgeWrap, closeBtn);
 
@@ -1104,7 +1303,8 @@ export class CityView {
 
     const addr = document.createElement('div');
     addr.className = 'popup-addr';
-    addr.textContent = `📍 ${entry.address}`;
+    addr.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span></span>`;
+    addr.querySelector('span')!.textContent = entry.address;
 
     const desc = document.createElement('p');
     desc.className = 'popup-desc';
@@ -1129,7 +1329,7 @@ export class CityView {
     const flyBtn = document.createElement('button');
     flyBtn.type = 'button';
     flyBtn.className = 'popup-btn primary';
-    flyBtn.textContent = '🎯 Bay tới';
+    flyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Bay tới</span>';
     flyBtn.addEventListener('click', () => {
       this.flyTo(entry.ground, false);
     });
@@ -1141,7 +1341,7 @@ export class CityView {
       floorBtn.className = 'popup-btn';
       const updateFloorText = () => {
         const isLit = this.lit.has(floor);
-        floorBtn.textContent = isLit ? '💡 Tắt đèn tầng' : '💡 Bật đèn tầng';
+        floorBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span>${isLit ? 'Tắt đèn tầng' : 'Bật đèn tầng'}</span>`;
       };
       updateFloorText();
       floorBtn.addEventListener('click', () => {
@@ -1156,7 +1356,7 @@ export class CityView {
       const allBtn = document.createElement('button');
       allBtn.type = 'button';
       allBtn.className = 'popup-btn';
-      allBtn.textContent = '✨ Đèn cả tòa';
+      allBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>Đèn cả tòa</span>';
       allBtn.addEventListener('click', () => {
         this.toggleBuildingLamps(bldId);
         if (floor) this.renderPopupContent();
@@ -1169,7 +1369,7 @@ export class CityView {
       const scBtn = document.createElement('button');
       scBtn.type = 'button';
       scBtn.className = 'popup-btn';
-      scBtn.textContent = '🧊 Xem đế 3D';
+      scBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Xem đế 3D</span>';
       scBtn.addEventListener('click', () => {
         this.setShowcase(scId);
       });
@@ -1276,7 +1476,6 @@ export class CityView {
       m.vehicleLines.geometry = this.linesFor(m.fleets);
       this.tiers(m.scene); this.nightThings();
     }
-    this.update({ vehicles: this.vehicles.length });
   }
 
   /** a fleet's instanced meshes: one per part, its shell; the head and tail lamps and the taxi sign
@@ -1306,7 +1505,7 @@ export class CityView {
 
   /** a train's four cars, each a group of its parts, its outline and its lines; the last car turned
       round so the train has a cab at both ends */
-  private trainMeshes(track: Track, parent: THREE.Object3D): Train {
+  private trainMeshes(track: Track, offset: number, parent: THREE.Object3D): Train {
     const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const cars = Array.from({ length: METRO.cars }, (_, i) => {
       const cab = i === 0 || i === METRO.cars - 1, model: CarModel = (this.carModels[cab ? 1 : 0] ??= carModel(cab)), g = new THREE.Group();
@@ -1319,7 +1518,7 @@ export class CityView {
       parent.add(g);
       return g;
     });
-    return { track, cars, doors, stopping: false };
+    return { track, offset, cars, doors, stopping: false };
   }
 
   /** each frame: the trains by their timetable; the platform edge lights while a train stands there */
@@ -1328,7 +1527,7 @@ export class CityView {
     const lit = new Set<string>();
     for (const tr of this.trains) {
       if (hide) { for (const g of tr.cars) g.visible = false; continue; }
-      const { head, phase } = trainAt(tr.track, this.sim.t), L = tr.track.length;
+      const { head, phase } = trainAt(tr.track, this.sim.t + tr.offset), L = tr.track.length;
       tr.cars.forEach((g, i) => {
         const s = head === null ? NaN : head - METRO.carLen / 2 - i * (METRO.carLen + METRO.gap);
         if (!(s > -METRO.carLen / 2 && s < L + METRO.carLen / 2)) { g.visible = false; return; }
@@ -1339,7 +1538,14 @@ export class CityView {
       });
       const stopping = phase === 'stop' || phase === 'brake';
       if (stopping !== tr.stopping) { tr.stopping = stopping; this.trainColors(); }
-      if (stopping) for (const s of tr.track.stops) { const st = this.city.stations.find(x => x.id === s.station); if (st) lit.add(stationLamp(st, 'edge')); }
+      if (stopping && head !== null) {
+        for (const s of tr.track.stops) {
+          if (Math.abs(s.s - head) < 40) {
+            const st = this.city.stations.find(x => x.id === s.station);
+            if (st) lit.add(stationLamp(st, 'edge'));
+          }
+        }
+      }
     }
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'edge'), lit.has(stationLamp(st, 'edge')), false);
   }
@@ -1458,7 +1664,8 @@ export class CityView {
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
-    const maxBuild = initial ? Infinity : 6;
+    // Never build heavy furniture cells mid-drag on mobile/desktop; stream them in during idle frames
+    const maxBuild = initial ? Infinity : this.interacting ? 0 : 2;
     for (const s of this.cells) {
       const on = near(s.bucket.center, CELL_R);
       if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
@@ -1591,7 +1798,7 @@ export class CityView {
         if (t === 'details' && px < FAR.details) on = false;
         else if (t === 'creases' && px < FAR.creases) on = false;
         else if (t === 'silhouette' && px < FAR.silhouette) on = false;
-        else if (t === 'windows' && px < FAR.furniture) on = false;
+        else if (t === 'windows' && px < 1.1) on = false;
       }
       o.visible = on;
     });
@@ -1744,8 +1951,7 @@ export class CityView {
   /** pixels per metre on screen now */
   private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
 
-  /** lines fade, vehicles lose their lines then their outline then hide completely, bikes go, trees simplify then hide —
-      as the view zooms out; applied when the farness moves by a step or crosses a cutoff */
+  /** lines fade gently while keeping creases and silhouettes crisp when zoomed out */
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
@@ -1758,9 +1964,10 @@ export class CityView {
     this.farF = f;
     const css = getComputedStyle(document.documentElement);
     this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
-    this.mats.crease.opacity = 1 - 0.8 * fCrease;
-    this.mats.detail.opacity = 1 - 0.85 * f;
-    this.mats.wire.opacity = 1 - 0.6 * f;
+    // Keep building creases and details crisp when zoomed out so the map never looks washed-out or blurry
+    this.mats.crease.opacity = 1 - 0.32 * fCrease;
+    this.mats.detail.opacity = 1 - 0.45 * f;
+    this.mats.wire.opacity = 1 - 0.5 * f;
     this.tiers(m.scene);
     m.vehicleLines.visible = this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
     const hideAllVehicles = auto && px < FAR.vehicles;
@@ -1786,26 +1993,34 @@ export class CityView {
   }
 
   // ---------- moving about (ADR-043) ----------
-  /** places to fly to: key intersections/corridors in the expanded Đống Đa area and every metro station */
-  get places(): { id: string; name: string; at: [number, number] }[] {
+  /** places to fly to: key intersections/corridors across Đống Đa, Ba Đình, and every metro station */
+  get places(): { id: string; name: string; group: string; at: [number, number] }[] {
     return [
-      { id: 'home', name: 'Ngã tư Thái Hà – Tây Sơn', at: [0, 0] },
-      { id: 'vpbank-lang-ha', name: 'VPBank Tower (89 Láng Hạ – Cuối Thái Hà)', at: [255, -1165] },
-      { id: 'rap-chieu-phim-quoc-gia', name: 'Rạp Chiếu phim Quốc gia (87 Láng Hạ)', at: [285, -1045] },
-      { id: 'thai-thinh', name: 'Phố Thái Thịnh – Yên Lãng', at: [-260, -560] },
-      { id: 'nga-tu-so', name: 'Ngã Tư Sở', at: [-785, -36] },
-      { id: 'chua-boc', name: 'Chùa Bộc – Học viện Ngân hàng', at: [50, 560] },
-      { id: 'pham-ngoc-thach', name: 'Phạm Ngọc Thạch – Kim Liên', at: [420, 880] },
-      { id: 'ho-dac-di', name: 'Hồ Đắc Di – Nam Đồng', at: [520, 480] },
-      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng – Gò Đống Đa', at: [420, -20] },
-      { id: 'o-cho-dua', name: 'Ô Chợ Dừa', at: [1142, 50] },
-      { id: 'xa-dan', name: 'Phố Xã Đàn', at: [986, 500] },
-      { id: 'kham-thien', name: 'Phố Khâm Thiên', at: [1420, 210] },
-      { id: 'ton-duc-thang', name: 'Tôn Đức Thắng – Quốc Tử Giám', at: [1320, -350] },
-      { id: 'hoang-cau', name: 'Hồ Hoàng Cầu', at: [750, -520] },
-      { id: 'hao-nam', name: 'Phố Hào Nam – Cát Linh', at: [980, -820] },
-      { id: 'thanh-cong', name: 'Hồ Thành Công – Huỳnh Thúc Kháng', at: [210, -1420] },
-      ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), at: [s.at[0], s.at[1]] as [number, number] })),
+      { id: 'home', name: 'Ngã tư Thái Hà – Tây Sơn', group: 'Quận Đống Đa', at: [0, 0] },
+      { id: 'vpbank-lang-ha', name: 'VPBank Tower (89 Láng Hạ – Cuối Thái Hà)', group: 'Quận Đống Đa', at: [255, -1165] },
+      { id: 'rap-chieu-phim-quoc-gia', name: 'Rạp Chiếu phim Quốc gia (87 Láng Hạ)', group: 'Quận Đống Đa', at: [285, -1045] },
+      { id: 'thai-thinh', name: 'Phố Thái Thịnh – Yên Lãng', group: 'Quận Đống Đa', at: [-260, -560] },
+      { id: 'nga-tu-so', name: 'Ngã Tư Sở', group: 'Quận Đống Đa', at: [-785, -36] },
+      { id: 'chua-boc', name: 'Chùa Bộc – Học viện Ngân hàng', group: 'Quận Đống Đa', at: [50, 560] },
+      { id: 'pham-ngoc-thach', name: 'Phạm Ngọc Thạch – Kim Liên', group: 'Quận Đống Đa', at: [420, 880] },
+      { id: 'ho-dac-di', name: 'Hồ Đắc Di – Nam Đồng', group: 'Quận Đống Đa', at: [520, 480] },
+      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng – Gò Đống Đa', group: 'Quận Đống Đa', at: [420, -20] },
+      { id: 'o-cho-dua', name: 'Ô Chợ Dừa', group: 'Quận Đống Đa', at: [1142, 50] },
+      { id: 'xa-dan', name: 'Phố Xã Đàn', group: 'Quận Đống Đa', at: [986, 500] },
+      { id: 'kham-thien', name: 'Phố Khâm Thiên', group: 'Quận Đống Đa', at: [1420, 210] },
+      { id: 'ton-duc-thang', name: 'Tôn Đức Thắng – Văn Miếu Quốc Tử Giám', group: 'Quận Đống Đa', at: [1520, -720] },
+      { id: 'hoang-cau', name: 'Hồ Hoàng Cầu', group: 'Quận Đống Đa', at: [750, -520] },
+      { id: 'hao-nam', name: 'Phố Hào Nam – Cát Linh', group: 'Quận Đống Đa', at: [980, -820] },
+      { id: 'thanh-cong', name: 'Hồ Thành Công – Huỳnh Thúc Kháng', group: 'Quận Ba Đình', at: [210, -1420] },
+      { id: 'giang-vo', name: 'Hồ Giảng Võ – Triển lãm Giảng Võ', group: 'Quận Ba Đình', at: [520, -1820] },
+      { id: 'kim-ma', name: 'Trục Kim Mã – Núi Trúc', group: 'Quận Ba Đình', at: [720, -2100] },
+      { id: 'lotte-lieu-giai', name: 'Lotte Center – Liễu Giai – Đào Tấn', group: 'Quận Ba Đình', at: [-80, -2420] },
+      { id: 'ngoc-khanh', name: 'Hồ Thủ Lệ – Ngọc Khánh', group: 'Quận Ba Đình', at: [-420, -2180] },
+      { id: 'lang-bac', name: 'Quảng trường Ba Đình – Lăng Chủ tịch Hồ Chí Minh', group: 'Quận Ba Đình', at: [2150, -2380] },
+      { id: 'hoang-thanh', name: 'Hoàng thành Thăng Long – Điện Biên Phủ', group: 'Quận Ba Đình', at: [2380, -2120] },
+      { id: 'truc-bach', name: 'Hồ Trúc Bạch – Quán Thánh – Phan Đình Phùng', group: 'Quận Ba Đình', at: [2750, -2950] },
+      { id: 'doi-can', name: 'Phố Đội Cấn – Ngọc Hà', group: 'Quận Ba Đình', at: [1280, -2480] },
+      ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), group: 'Nhà ga Metro', at: [s.at[0], s.at[1]] as [number, number] })),
     ];
   }
 
@@ -1872,7 +2087,7 @@ export class CityView {
     m.controls.target.add(step); m.camera.position.add(step);
   }
 
-  /** the view's middle stays within the area (and 60 m round it), or within the showcase plate */
+  /** the view's middle stays within the expanded map bounds (including all metro stations), or within the showcase plate */
   private keepInside() {
     const m = this.mounted;
     if (!m) return;
@@ -1883,8 +2098,8 @@ export class CityView {
       if (x !== t.x || z !== t.z) { const d = new THREE.Vector3(x - t.x, 0, z - t.z); t.add(d); m.camera.position.add(d); }
       return;
     }
-    const b = this.city.bounds;
-    const x = Math.max(b.x0 - 60, Math.min(b.x1 + 60, t.x)), z = Math.max(b.y0 - 60, Math.min(b.y1 + 60, t.z));
+    const b = this.panBounds;
+    const x = Math.max(b.x0 - 120, Math.min(b.x1 + 120, t.x)), z = Math.max(b.y0 - 120, Math.min(b.y1 + 120, t.z));
     if (x !== t.x || z !== t.z) { const d = new THREE.Vector3(x - t.x, 0, z - t.z); t.add(d); m.camera.position.add(d); }
   }
 

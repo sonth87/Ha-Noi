@@ -41,15 +41,15 @@ export const CATEGORY_LABELS: Record<PlaceCategory, string> = {
 };
 
 export const CATEGORY_BADGES: Record<PlaceCategory, string> = {
-  landmark: '🏢 Công trình lớn',
-  heritage: '⛩ Di tích',
-  monument: '🏛 Tượng đài',
-  park: '🌳 Công viên',
-  water: '🌊 Hồ nước',
-  station: '🚇 Ga Metro',
-  education: '🎓 Giáo dục',
-  hospital: '🏥 Y tế',
-  building: '🏠 Tòa nhà',
+  landmark: 'Công trình lớn',
+  heritage: 'Di tích',
+  monument: 'Tượng đài',
+  park: 'Công viên',
+  water: 'Hồ nước',
+  station: 'Ga Metro',
+  education: 'Giáo dục',
+  hospital: 'Y tế',
+  building: 'Tòa nhà',
 };
 
 export interface PlaceMetric {
@@ -93,7 +93,7 @@ export interface ProjectedPlaceLabel {
 export interface PlaceCatalog {
   /** all labelable places sorted by importance (tiers 1..3) */
   labels: PlaceEntry[];
-  /** fast lookup by 3D owner id (includes all 3,900+ buildings, areas, monuments, and stations) */
+  /** fast lookup by 3D owner id (includes all buildings, areas, monuments, and stations) */
   byId: Map<string, PlaceEntry>;
 }
 
@@ -123,6 +123,12 @@ const HERITAGE_NOTES: Record<string, string> = {
   'Lăng mộ Hoàng Trọng Phu': 'Di tích lăng đá trong quần thể khu lăng Hoàng Cao Khải tại phường Trung Liệt, quận Đống Đa.',
   'Chùa Đồng Quang': 'Ngôi chùa cổ đối diện Gò Đống Đa trên phố Tây Sơn, lưu giữ nhiều hiện vật lịch sử quý giá.',
   'Chùa Xã Đàn': 'Kim Yên Tự – ngôi chùa cổ tại khu vực Xã Đàn 2, phường Nam Đồng, quận Đống Đa.',
+  'Văn Miếu - Quốc Tử Giám': 'Quần thể Di tích Quốc gia đặc biệt Văn Miếu – Quốc Tử Giám, trường đại học đầu tiên của Việt Nam được xây dựng từ năm 1070 thời vua Lý Thánh Tông.',
+  'Hoàng thành Thăng Long': 'Di sản Văn hóa Thế giới UNESCO – trung tâm quyền lực chính trị của Đại Việt suốt hơn 1000 năm lịch sử tại quận Ba Đình.',
+  'Lăng Chủ tịch Hồ Chí Minh': 'Công trình lịch sử – văn hóa đặc biệt tại Quảng trường Ba Đình, nơi an nghỉ của Chủ tịch Hồ Chí Minh.',
+  'Chùa Một Cột': 'Diên Hựu Tự – ngôi chùa có kiến trúc độc đáo hình hoa sen nở trên mặt nước, xây dựng năm 1049 thời vua Lý Thái Tông tại Ba Đình.',
+  'Đền Quán Thánh': 'Trấn Vũ Quán – một trong Thăng Long Tứ Trấn thờ Huyền Thiên Trấn Vũ bên hồ Tây và đường Thanh Niên, quận Ba Đình.',
+  'Cột cờ Hà Nội (Kỳ đài)': 'Kỳ đài Hà Nội xây dựng năm 1812 trên đường Điện Biên Phủ, biểu tượng lịch sử kiêu hãnh của Thủ đô trong quần thể Hoàng thành Thăng Long.',
 };
 
 const LANDMARK_NOTES: Record<string, string> = {
@@ -133,7 +139,19 @@ const LANDMARK_NOTES: Record<string, string> = {
   'osm:way/1217754319': 'Trụ sở Tập đoàn Dầu khí Việt Nam (Petrovietnam) cao 19 tầng tại số 18 Láng Hạ, đối diện điểm cuối phố Thái Hà.',
   'osm:way/180075246': 'Tổ hợp thương mại – văn phòng – căn hộ cao cấp MIPEC Tower tại số 229 Tây Sơn.',
   'osm:way/1082814006': 'Tổ hợp 2 tháp căn hộ 21 tầng và 1 tháp văn phòng 14 tầng trên khối đế thương mại 4 tầng tại số 165 Thái Hà.',
+  'osm:way/727570329': 'Tòa tháp biểu tượng Lotte Center Hanoi cao 65 tầng (272 m) tại ngã tư Liễu Giai – Đào Tấn (Ba Đình), lấy cảm hứng từ tà áo dài Việt Nam với đài quan sát Sky Walk trên đỉnh.',
+  'osm:way/840982441': 'Tổ hợp tháp văn phòng hạng A Capital Place và căn hộ cao cấp Vinhomes Metropolis (41–45 tầng) tại số 29 Liễu Giai, quận Ba Đình.',
+  'osm:way/727578326': 'Tổ hợp Khách sạn 5 sao Hà Nội Daewoo và trung tâm thương mại Daeha tại số 360 Kim Mã, đối diện Công viên Thủ Lệ, quận Ba Đình.',
+  'osm:way/695966191': 'Tòa nhà Quốc hội Việt Nam bên Quảng trường Ba Đình và Hoàng thành Thăng Long, kiến trúc hiện đại biểu trưng cho hình tượng Trời tròn Đất vuông.',
+  'osm:way/37625751': 'Lăng Chủ tịch Hồ Chí Minh uy nghiêm tại trung tâm Quảng trường Ba Đình lịch sử.',
+  'osm:way/184959290': 'Cột cờ Hà Nội (Kỳ đài) trên đường Điện Biên Phủ, quận Ba Đình.',
 };
+
+function districtOf(pt: [number, number]): string {
+  return pt[0] >= 1680 || (pt[0] >= 650 && pt[1] < -1150) ? 'Quận Ba Đình' : 'Quận Đống Đa';
+}
+
+const LINE_3_STATIONS = new Set(['Cầu Giấy', 'Chùa Hà', 'Đại học Quốc gia', 'Lê Đức Thọ', 'Cầu Diễn', 'Phú Diễn', 'Minh Khai', 'Nhổn']);
 
 function cleanBuildingName(b: Building): string {
   if (b.name?.trim()) return b.name.trim();
@@ -143,7 +161,7 @@ function cleanBuildingName(b: Building): string {
 
 function classifyBuilding(b: Building, lv: number, areaM2: number): PlaceCategory {
   const n = (b.name ?? '').toLowerCase();
-  if (b.subtype === 'heritage' || /^(chùa|đình|đền|miếu|nhà thờ|lăng)\b/i.test(b.name ?? '')) return 'heritage';
+  if (b.subtype === 'heritage' || /^(chùa|đình|đền|miếu|nhà thờ|lăng|kỳ đài|cột cờ)\b/i.test(b.name ?? '')) return 'heritage';
   if (b.subtype === 'hospital' || /bệnh viện|phòng khám|y tế/i.test(n)) return 'hospital';
   if (b.subtype === 'university' || b.subtype === 'school' || b.kind === 'school' || /đại học|học viện|trường\b/i.test(n)) return 'education';
   if (b.model || lv >= 10 || (lv >= 5 && areaM2 >= 650 && b.name)) return 'landmark';
@@ -158,7 +176,8 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
   for (const f of city.features) {
     if ((f.kind !== 'monument' && f.kind !== 'heritage') || !f.name) continue;
     const cat: PlaceCategory = f.kind === 'monument' ? 'monument' : 'heritage';
-    const address = f.address ?? 'Quận Đống Đa, Hà Nội';
+    const distName = districtOf([f.at[0], f.at[1]]);
+    const address = f.address ?? `${distName}, Hà Nội`;
     const zTop = f.kind === 'monument' ? 9.2 : 3.4;
     const entry: PlaceEntry = {
       id: f.id,
@@ -172,11 +191,11 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
       minPxPerMetre: 0,
       world: [f.at[0], f.at[1], zTop],
       ground: [f.at[0], f.at[1]],
-      description: HERITAGE_NOTES[f.name] ?? `${f.subtitle ?? CATEGORY_LABELS[cat]} tại ${address}, Quận Đống Đa, Hà Nội.`,
+      description: HERITAGE_NOTES[f.name] ?? `${f.subtitle ?? CATEGORY_LABELS[cat]} tại ${address}, ${distName}, Hà Nội.`,
       metrics: [
         { label: 'Phân loại', value: f.subtitle ?? CATEGORY_LABELS[cat] },
         { label: 'Địa chỉ', value: address },
-        { label: 'Khu vực', value: 'Quận Đống Đa, Hà Nội' },
+        { label: 'Khu vực', value: `${distName}, Hà Nội` },
         { label: 'Nguồn dữ liệu', value: f.source },
       ],
     };
@@ -193,16 +212,17 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
     if (!name) continue;
 
     const c = centroid(a.polygon);
+    const distName = districtOf([c[0], c[1]]);
     const areaM2 = Math.round(Math.abs(ringArea(a.polygon)));
     const perimM = Math.round(polylineLength([...a.polygon, a.polygon[0]!]));
-    const cat: PlaceCategory = /^(chùa|đình|đền|miếu|nhà thờ|lăng)\b/i.test(name) || (a.subtype === 'heritage' && !/công viên|vườn hoa/i.test(name))
+    const cat: PlaceCategory = /^(chùa|đình|đền|miếu|nhà thờ|lăng|hoàng thành|văn miếu)\b/i.test(name) || (a.subtype === 'heritage' && !/công viên|vườn hoa/i.test(name))
       ? 'heritage'
       : a.kind === 'water' || a.kind === 'pool'
         ? 'water'
         : 'park';
-    const address = a.address ? `${a.address}, Đống Đa` : 'Quận Đống Đa, Hà Nội';
+    const address = a.address ? `${a.address}, ${distName.replace('Quận ', '')}` : `${distName}, Hà Nội`;
     const areaText = areaM2 >= 10000 ? `${(areaM2 / 10000).toFixed(2).replace('.', ',')} ha` : `${areaM2.toLocaleString('vi')} m²`;
-    const isMajor = areaM2 >= 4500 || cat === 'heritage' || /Gò Đống Đa|Indira Gandhi|Hoàng Cầu|Đắc Di|Thành Công|Xã Đàn|Công đoàn|Thuỷ lợi/i.test(name);
+    const isMajor = areaM2 >= 4500 || cat === 'heritage' || /Gò Đống Đa|Indira Gandhi|Hoàng Cầu|Đắc Di|Thành Công|Xã Đàn|Công đoàn|Thuỷ lợi|Thủ Lệ|Giảng Võ|Ngọc Khánh|Trúc Bạch|Bách Thảo|Lê Nin|Ba Đình|Hoàng thành/i.test(name);
     const tier: 1 | 2 | 3 = isMajor ? 1 : areaM2 >= 1200 ? 2 : 3;
     const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? 1.35 : 2.6;
 
@@ -236,22 +256,29 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
     labels.push(entry);
   }
 
-  // 3. Elevated Metro Stations (Line 2A Cát Linh – Hà Đông)
+  // 3. Elevated Metro Stations (Line 2A Cát Linh – Hà Đông & Line 3 Nhổn – Ga Hà Nội)
   for (const st of city.stations) {
     const rawName = st.name?.trim() || 'Thái Hà';
     const name = rawName.startsWith('Ga ') ? rawName : `Ga ${rawName}`;
+    const isLine3 = LINE_3_STATIONS.has(rawName.replace(/^Ga\s+/i, ''));
+    const lineTag = isLine3 ? 'Metro 3' : 'Metro 2A';
+    const lineFull = isLine3 ? 'Tuyến số 3 Nhổn – Ga Hà Nội' : 'Tuyến số 2A Cát Linh – Hà Đông';
     const address = /Thái Hà/i.test(rawName)
       ? 'Phố Hoàng Cầu – Thái Hà, Đống Đa'
       : /La Thành/i.test(rawName)
         ? 'Phố Hoàng Cầu – Đê La Thành, Đống Đa'
         : /Cát Linh/i.test(rawName)
           ? 'Phố Cát Linh – Hào Nam, Đống Đa'
-          : 'Đường Láng, Đống Đa';
+          : /Cầu Giấy/i.test(rawName)
+            ? 'Nút giao Cầu Giấy – Kim Mã, Ba Đình'
+            : isLine3
+              ? 'Trục Cầu Giấy – Hồ Tùng Mậu – Nhổn, Hà Nội'
+              : 'Trục đường Láng – Nguyễn Trãi – Quang Trung, Hà Nội';
     const showcaseId = showcaseIds.has(`station:${st.id}`) ? `station:${st.id}` : undefined;
     const entry: PlaceEntry = {
       id: st.id,
       source: st.source,
-      name: `${name} (Metro 2A)`,
+      name: `${name} (${lineTag})`,
       address,
       category: 'station',
       categoryLabel: 'Ga đường sắt đô thị trên cao',
@@ -260,12 +287,12 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
       minPxPerMetre: 0,
       world: [st.at[0], st.at[1], 20.5],
       ground: [st.at[0], st.at[1]],
-      description: `Nhà ga trên cao thuộc Tuyến đường sắt đô thị số 2A Cát Linh – Hà Đông, kết cấu 3 tầng gồm tầng trung chuyển, 2 ke ga bên và cầu bộ hành vượt đường kết nối vỉa hè hai bên.`,
+      description: `Nhà ga trên cao thuộc ${lineFull}, kết cấu 3 tầng gồm tầng trung chuyển, 2 ke ga bên và cầu bộ hành vượt đường kết nối vỉa hè hai bên.`,
       metrics: [
-        { label: 'Tuyến', value: 'Metro 2A Cát Linh – Hà Đông' },
+        { label: 'Tuyến', value: lineFull },
         { label: 'Kết cấu', value: '3 tầng trên cầu cạn (cao ~19 m)' },
         { label: 'Vị trí', value: address },
-        { label: 'Đoàn tàu', value: '4 toa tiêu chuẩn' },
+        { label: 'Đoàn tàu', value: '4 toa chạy hai chiều liên tục' },
       ],
       ...(showcaseId ? { showcaseId } : {}),
     };
@@ -279,12 +306,13 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
 
   for (const b of sortedBuildings) {
     const c = centroid(b.footprint);
+    const distName = districtOf([c[0], c[1]]);
     const lv = buildingLevels(b);
     const h = Math.round(buildingHeight(b));
     const areaM2 = Math.round(Math.abs(ringArea(b.footprint)));
     const cat = classifyBuilding(b, lv, areaM2);
     const name = cleanBuildingName(b);
-    const address = b.address ? `${b.address}, Đống Đa` : 'Quận Đống Đa, Hà Nội';
+    const address = b.address ? `${b.address}, ${distName.replace('Quận ', '')}` : `${distName}, Hà Nội`;
     const glass = b.parts.some(p => p.facade === 'glass');
     const showcaseId = showcaseIds.has(`bldg:${b.id}`) ? `bldg:${b.id}` : undefined;
     const box = bbox(b.footprint), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);

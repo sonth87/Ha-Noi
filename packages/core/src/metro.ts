@@ -45,7 +45,9 @@ function track(r: Rail, city: City): Track {
   const L = polylineLength(r.path);
   const stops = city.stations.filter(st => st.kind === r.kind).flatMap(st => {
     const s = along(r.path, st.at);
-    return s.d < 30 && s.s - TRAIN_LEN / 2 > 0 && s.s + TRAIN_LEN / 2 < L ? [{ station: st.id, s: s.s + TRAIN_LEN / 2 }] : [];
+    if (s.d >= 35) return [];
+    const headS = Math.max(TRAIN_LEN / 2 + 1, Math.min(L + TRAIN_LEN / 2 - 1, s.s + TRAIN_LEN / 2));
+    return [{ station: st.id, s: headS }];
   }).sort((a, b) => a.s - b.s);
   const { speed: v, accel: a, dwell, between } = METRO, dA = (v * v) / (2 * a), tA = v / a;
   const plan: Leg[] = [];
@@ -60,6 +62,11 @@ function track(r: Rail, city: City): Track {
   run(L + TRAIN_LEN);
   plan.push({ t0: t, t1: t + between, s0: s, s1: s, kind: 'away' }); t += between;
   return { id: `track-${r.id}`, rail: r.id, name: r.name, path: r.path, length: L, height: r.height, stops, plan, period: t, phase: (hash(r.id) % 1000) / 1000 * t };
+}
+
+/** number of trains simultaneously operating on a track (spaced evenly by period / count) */
+export function trainCount(tr: Track): number {
+  return tr.length < 1200 ? 1 : Math.max(2, Math.min(6, Math.round(tr.length / 2100)));
 }
 
 /** where the head of the train on a track is at time t (null while it is away), and what it is doing */

@@ -90,6 +90,22 @@ const TIER_1_STREETS = new Set([
   'Phố Giảng Võ',
   'Phố Cát Linh',
   'Cầu vượt Tây Sơn',
+  // Quận Ba Đình main arteries
+  'Phố Kim Mã',
+  'Phố Liễu Giai',
+  'Đường Nguyễn Chí Thanh',
+  'Phố Đội Cấn',
+  'Đường Điện Biên Phủ',
+  'Đường Trần Phú',
+  'Phố Nguyễn Thái Học',
+  'Phố Hoàng Hoa Thám',
+  'Phố Phan Đình Phùng',
+  'Đường Thanh Niên',
+  'Đường Hoàng Diệu',
+  'Đường Độc Lập',
+  'Đường Hùng Vương',
+  'Phố Văn Cao',
+  'Đường Bưởi',
 ]);
 
 function stripPrefix(name: string): string {
@@ -157,10 +173,11 @@ export function buildStreetCatalog(city: City): StreetEntry[] {
     }
 
     const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? 1.55 : tier === 3 ? 3.2 : 6.0;
-    const stemHeightPx = tier === 1 ? 56 : tier === 2 ? 44 : 36;
+    const stemHeightPx = tier === 1 ? 42 : tier === 2 ? 34 : 28;
     const kindLabel = bridge ? 'Cầu vượt' : KIND_LABELS[kind];
     const shortName = bridge ? name : stripPrefix(name);
-    const info = `${kindLabel} · ${lanes} làn (${width} m) · dài ${formatLength(totalLength)}`;
+    // Concise info without verbose "Phố lớn / Trục chính" prefix
+    const info = `${formatLength(totalLength)} · ${lanes} làn (${width}m)`;
 
     const sortedByLen = [...segs].sort((a, b) => polylineLength(b.path) - polylineLength(a.path));
     const samples: StreetSample[] = [];

@@ -125,8 +125,10 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
   const dir = (i: number) => { const p = R[i]!, q = R[(i + 1) % n]!; return Math.atan2(q[1] - p[1], q[0] - p[0]); };
   const turn = (i: number) => { let t = Math.abs(dir(i) - dir((i - 1 + n) % n)); if (t > Math.PI) t = 2 * Math.PI - t; return t; };
   const front = b.house && part.id === b.id ? b.front : -1;
+  const isMainEntrancePart = !b.model && !b.house && (part.id === b.id || part === b.parts[0]);
   const balconies = level >= 2 && (b.kind === 'apartment' || b.kind === 'school');
   const shopfront = level >= 2 && (b.kind === 'commercial' || b.kind === 'kiosk');
+  const hasBeltLines = level >= 2 && !b.model && (b.kind === 'apartment' || b.kind === 'school' || b.kind === 'office' || b.kind === 'hotel');
   R.forEach((p, i) => {
     const q = R[(i + 1) % n]!, L = Math.hypot(q[0] - p[0], q[1] - p[1]);
     if (L < 0.5) return;
@@ -140,38 +142,134 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
       const ring: Vec2[] = [[t0, s0], [t1, s0], [t1, s1], [t0, s1]].map(([t, s]) => [p[0] + ux * t! + nx * s!, p[1] + uy * t! + ny * s!]);
       B.solid(ring, z0, z1, () => surf, surf === 'metal' ? 'metal' : 'roof');
     };
+    const isFrontEdge = isMainEntrancePart && i === b.front;
     // bands run on round a curve and stop short of a real corner
     const c0 = turn(i) > 0.5 ? 0.35 : 0, c1 = turn((i + 1) % n) > 0.5 ? 0.35 : 0;
     part.floors.forEach((h, k) => {
       const z = floorZ(part, k), lamp = floorId(b, k + 1);
       if (z + h <= blockedTo + 0.01) return;
+      if (hasBeltLines && k < part.floors.length - 1 && L >= 2.5) {
+        B.line(at(c0, off + 0.01, z + h), at(L - c1, off + 0.01, z + h), 'detail');
+        B.line(at(c0, off + 0.01, z + h - 0.14), at(L - c1, off + 0.01, z + h - 0.14), 'detail');
+      }
       // glass bands are panes, about 1.6 m (curtain) or 2 m (ribbon) wide with a 12 cm frame between,
       // so a lit floor reads as windows (iso-glow) and windows light one at a time
       if (style === 'curtain' || style === 'ribbon') {
+        if (k === 0 && level >= 2 && isFrontEdge && L >= 4) {
+          // Ground-floor glazed lobby storefront with double entrance door, transom bar & marquee canopy (01-tower.js)
+          const a0 = c0 + 0.25, a1 = L - c1 - 0.25, mid = L * 0.5, dw = Math.min(2.8, (a1 - a0) * 0.34);
+          const bays = Math.max(3, Math.round((a1 - a0) / 1.8)), bw = (a1 - a0) / bays;
+          for (let c = 0; c < bays; c++) {
+            const bt0 = a0 + c * bw + 0.05, bt1 = a0 + (c + 1) * bw - 0.05;
+            rect(lamp, bt0, bt1, z + 0.08, z + h * 0.86);
+            if (c > 0) B.line(at(a0 + c * bw, off + 0.015, z + 0.08), at(a0 + c * bw, off + 0.015, z + h * 0.86), 'detail');
+          }
+          // Transom bar across the lobby glass + double entrance door leaf seam & jambs
+          B.line(at(a0, off + 0.02, z + h * 0.62), at(a1, off + 0.02, z + h * 0.62), 'detail');
+          B.line(at(mid, off + 0.02, z + 0.08), at(mid, off + 0.02, z + h * 0.62), 'detail');
+          box(mid - dw * 0.5 - 0.1, mid - dw * 0.5, 0, 0.18, z, z + h * 0.66, 'metal');
+          box(mid + dw * 0.5, mid + dw * 0.5 + 0.1, 0, 0.18, z, z + h * 0.66, 'metal');
+          // Entrance threshold step & cantilevered office marquee canopy with lit fascia band
+          box(mid - dw * 0.72, mid + dw * 0.72, 0, 0.92, z, z + 0.14, 'wall');
+          box(mid - dw * 0.85, mid + dw * 0.85, 0, 1.15, z + h * 0.68, z + h * 0.84, 'metal');
+          B.window(lamp, [
+            at(mid - dw * 0.7, 1.16, z + h * 0.71),
+            at(mid + dw * 0.7, 1.16, z + h * 0.71),
+            at(mid + dw * 0.7, 1.16, z + h * 0.81),
+            at(mid - dw * 0.7, 1.16, z + h * 0.81),
+          ], nrm);
+          return;
+        }
         const a0 = c0, a1 = L - c1, n = Math.max(1, Math.round((a1 - a0) / (style === 'curtain' ? 1.6 : 2))), pw = (a1 - a0) / n;
         const [zb, zt] = style === 'curtain' ? [0.08, 0.92] : [0.24, 0.78];
         for (let c = 0; c < n; c++) rect(lamp, a0 + c * pw + (c > 0 ? 0.06 : 0), a0 + (c + 1) * pw - (c < n - 1 ? 0.06 : 0), z + h * zb, z + h * zt);
       }
       else if (k === 0 && i === front) rect(lamp, L * 0.1, L * 0.9, z + 0.15, z + h * 0.8);   // shop front
       else if (k === 0 && level >= 2 && i === shop && L >= 3) {
-        // the ground floor on a main street: glass shop fronts and a lit sign band above them
+        // the ground floor on a main street: glass shop fronts and a lit sign band above them + entrance door seam
+        const mid = L * 0.5, dw = Math.min(2.2, (L - c0 - c1 - 0.6) * 0.35);
         rect(lamp, c0 + 0.3, L - c1 - 0.3, z + 0.1, z + h * 0.72);
+        B.line(at(mid, off + 0.02, z + 0.1), at(mid, off + 0.02, z + h * 0.72), 'detail');
+        box(mid - dw * 0.55, mid + dw * 0.55, 0, 0.55, z, z + 0.12, 'wall');
         box(c0 + 0.2, L - c1 - 0.2, 0, 0.2, z + h * 0.76, z + h * 0.97, 'metal');
         B.window(lamp, [at(c0 + 0.3, 0.21, z + h * 0.79), at(L - c1 - 0.3, 0.21, z + h * 0.79), at(L - c1 - 0.3, 0.21, z + h * 0.94), at(c0 + 0.3, 0.21, z + h * 0.94)], nrm);
       }
-      else if (k === 0 && shopfront && L >= 2) rect(lamp, c0 + 0.2, L - c1 - 0.2, z + 0.1, z + h * 0.85);
+      else if (k === 0 && shopfront && L >= 2) {
+        const mid = L * 0.5;
+        rect(lamp, c0 + 0.2, L - c1 - 0.2, z + 0.1, z + h * 0.85);
+        B.line(at(mid, off + 0.02, z + 0.1), at(mid, off + 0.02, z + h * 0.85), 'detail');
+        if (isFrontEdge && L >= 3.2) {
+          const dw = Math.min(2.4, L * 0.34);
+          box(mid - dw * 0.6, mid + dw * 0.6, 0, 0.75, z, z + 0.14, 'wall');
+          box(mid - dw * 0.7, mid + dw * 0.7, 0, 0.9, z + h * 0.78, z + h * 0.92, 'metal');
+        }
+      }
+      else if (k === 0 && level >= 2 && isFrontEdge && L >= 3.2) {
+        // Ground-floor building entrance doorway, steps, canopy hood & glowing transom indicator (02-apartments.js)
+        const mid = L * 0.5, dw = Math.min(2.4, Math.max(1.4, L * 0.28)), dh = h * 0.74;
+        // Two-step entrance stoop
+        box(mid - dw * 0.68, mid + dw * 0.68, 0, 0.82, z, z + 0.12, 'wall');
+        box(mid - dw * 0.55, mid + dw * 0.55, 0, 0.46, z + 0.12, z + 0.24, 'wall');
+        // Double-leaf glazed entrance door + center leaf seam + door frame jambs
+        rect(lamp, mid - dw * 0.46, mid - 0.03, z + 0.24, z + dh);
+        rect(lamp, mid + 0.03, mid + dw * 0.46, z + 0.24, z + dh);
+        B.line(at(mid, off + 0.02, z + 0.24), at(mid, off + 0.02, z + dh), 'detail');
+        box(mid - dw * 0.52, mid - dw * 0.46, 0, 0.14, z + 0.24, z + dh + 0.04, 'metal');
+        box(mid + dw * 0.46, mid + dw * 0.52, 0, 0.14, z + 0.24, z + dh + 0.04, 'metal');
+        // Projecting entrance canopy hood + glowing transom indicator panel
+        box(mid - dw * 0.64, mid + dw * 0.64, 0, 0.76, z + dh + 0.04, z + dh + 0.36, 'metal');
+        B.window(lamp, [
+          at(mid - dw * 0.44, 0.77, z + dh + 0.08),
+          at(mid + dw * 0.44, 0.77, z + dh + 0.08),
+          at(mid + dw * 0.44, 0.77, z + dh + 0.31),
+          at(mid - dw * 0.44, 0.77, z + dh + 0.31),
+        ], nrm);
+        // Flanking ground-floor windows on either side of the central entrance
+        const sideSpan = mid - dw * 0.75 - (c0 + 0.35);
+        if (sideSpan >= 1.4) {
+          const cols = Math.max(1, Math.floor(sideSpan / 2.6)), cw = sideSpan / cols, ww = Math.min(1.4, cw * 0.55);
+          for (let c = 0; c < cols; c++) {
+            const mL = c0 + 0.35 + cw * (c + 0.5);
+            const mR = L - c1 - 0.35 - cw * (c + 0.5);
+            for (const m of [mL, mR]) {
+              rect(lamp, m - ww / 2, m + ww / 2, z + 0.3 * h, z + 0.8 * h);
+              B.line(at(m, off + 0.01, z + 0.3 * h), at(m, off + 0.01, z + 0.8 * h), 'detail');
+              box(m - ww / 2 - 0.08, m + ww / 2 + 0.08, 0, 0.12, z + 0.26 * h, z + 0.3 * h, 'wall');
+            }
+          }
+        }
+      }
       else {
         if (L < 1.8) return;
         const cols = Math.max(1, Math.floor((L - 0.6) / 2.6)), cw = (L - 0.6) / cols, ww = Math.min(1.5, cw * 0.55);
         for (let c = 0; c < cols; c++) {
           const m = 0.3 + cw * (c + 0.5);
           rect(lamp, m - ww / 2, m + ww / 2, z + 0.3 * h, z + 0.8 * h);
+          if (level >= 2) {
+            // Vertical center window mullion (02-apartments.js)
+            B.line(at(m, off + 0.01, z + 0.3 * h), at(m, off + 0.01, z + 0.8 * h), 'detail');
+          }
           const seed = hash(`${b.id}:${i}:${k}:${c}`);
-          // every other window of an apartment block or school opens onto a small balcony
+          // every other window of an apartment block or school opens onto a detailed 3-sided balcony (02-apartments.js)
           if (balconies && k > 0 && L >= 6 && (c + k) % 2 === 0) {
-            box(m - ww / 2 - 0.3, m + ww / 2 + 0.3, 0, 0.8, z, z + 0.12);
-            box(m - ww / 2 - 0.3, m + ww / 2 + 0.3, 0.75, 0.8, z + 0.12, z + 1.0, 'metal');
-          } else if (level === 3 && b.kind === 'apartment' && k > 0 && seed % 5 === 0) box(m + ww / 2 + 0.15, m + ww / 2 + 0.95, 0, 0.35, z + 0.2, z + 0.75, 'metal');
+            const b0 = m - ww / 2 - 0.32, b1 = m + ww / 2 + 0.32;
+            box(b0, b1, 0, 0.88, z, z + 0.15, 'wall');                       // balcony floor slab
+            box(b0, b0 + 0.11, 0, 0.76, z + 0.15, z + 0.98, 'wall');         // left cheek wall
+            box(b1 - 0.11, b1, 0, 0.76, z + 0.15, z + 0.98, 'wall');         // right cheek wall
+            box(b0, b1, 0.76, 0.88, z + 0.15, z + 0.95, 'wall');             // front parapet wall
+            box(b0 - 0.02, b1 + 0.02, 0.74, 0.9, z + 0.95, z + 1.03, 'metal'); // metallic top handrail cap
+            for (let ts = b0 + 0.22; ts <= b1 - 0.22 + 1e-4; ts += 0.24) {
+              B.line(at(ts, 0.89, z + 0.22), at(ts, 0.89, z + 0.91), 'detail');
+            }
+          } else {
+            if (level >= 2) {
+              // Projecting window sill below punched window (02-apartments.js)
+              box(m - ww / 2 - 0.08, m + ww / 2 + 0.08, 0, 0.12, z + 0.26 * h, z + 0.3 * h, 'wall');
+            }
+            if (level === 3 && b.kind === 'apartment' && k > 0 && seed % 5 === 0) {
+              box(m + ww / 2 + 0.15, m + ww / 2 + 0.95, 0, 0.35, z + 0.2, z + 0.75, 'metal');
+            }
+          }
         }
       }
     });

@@ -9,7 +9,13 @@ import { offsetLine, strip } from './streets';
 import { windowRank } from './lights';
 import { buildShowcase, showcasesOf } from './showcase';
 
-const { city } = loadCity('nga-tu-thai-ha');
+const { city: fullCity } = loadCity('nga-tu-thai-ha');
+// Representative core slice (Ngã tư Thái Hà 650m radius + all custom landmarks across Đống Đa & Ba Đình)
+// so building 4 detail levels in one worker stays well within V8's default heap limit.
+const city = {
+  ...fullCity,
+  buildings: fullCity.buildings.filter(b => b.model || Math.hypot(b.footprint[0]![0], b.footprint[0]![1]) <= 650),
+};
 const g = buildCityGeometry(city);
 
 describe('city geometry', () => {
@@ -96,9 +102,9 @@ describe('detail levels', () => {
   }, 60_000);
 
   it('puts every building in exactly one tile', () => {
-    const tiles = tilesOf(city), ids = tiles.flatMap(t => t.buildings.map(b => b.id));
-    expect(ids.sort()).toEqual(city.buildings.map(b => b.id).sort());
-    const t = tiles[0]!, L3 = buildTile(city, t, 3);
+    const tiles = tilesOf(fullCity), ids = tiles.flatMap(t => t.buildings.map(b => b.id));
+    expect(ids.sort()).toEqual(fullCity.buildings.map(b => b.id).sort());
+    const t = tiles[0]!, L3 = buildTile(fullCity, t, 3);
     expect(L3.stats.triangles).toBeGreaterThan(0);
   });
 });

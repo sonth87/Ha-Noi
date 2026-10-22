@@ -29,25 +29,72 @@ async function getJson(url, tries = 4) {
 const a = areas[id], seen = new Map();
 let head = null;
 try {
-  for (const bbox of a.bboxes) {
-    const url = `https://api.openstreetmap.org/api/0.6/map.json?bbox=${bbox.join(',')}`;
-    console.log(`GET ${url}`);
-    const data = await getJson(url);
-    head ??= data;
-    for (const e of data.elements) seen.set(`${e.type}/${e.id}`, e);
+  const existing = JSON.parse(readFileSync(dir + a.file, 'utf8'));
+  head = existing;
+  for (const el of existing.elements ?? []) seen.set(`${el.type}/${el.id}`, el);
+  console.log(`Loaded ${seen.size} existing elements from ${a.file}`);
+} catch { /* fresh fetch */ }
+
+const KEEP_TAGS = new Set([
+  'highway', 'area', 'name', 'oneway', 'junction', 'lanes', 'layer', 'bridge',
+  'tourism', 'building', 'construction', 'building:part', 'building:levels', 'building:material',
+  'height', 'roof:shape', 'man_made', 'area:highway', 'leisure', 'landuse', 'natural', 'water',
+  'place', 'amenity', 'public_transport', 'power', 'historic', 'heritage', 'artwork_type',
+  'start_date', 'railway', 'station', 'type', 'office',
+  'addr:housenumber', 'addr:street', 'addr:subdistrict',
+]);
+
+// Fetch the Ba Đình boxes + full Hanoi Metro lines (2A Cát Linh – Hà Đông & Line 3) via Overpass
+const baDinhBoxes = a.bboxes.slice(-2);
+const boxQueries = baDinhBoxes.map(([w, s_, e_, n]) =>
+  `node(${s_},${w},${n},${e_});way(${s_},${w},${n},${e_});relation["type"~"^(building|multipolygon)$"](${s_},${w},${n},${e_});`
+).join('');
+const metroQuery = `way["railway"~"^(subway|light_rail|monorail)$"](20.945,105.730,21.055,105.860);node["railway"="station"](20.945,105.730,21.055,105.860);way["railway"="platform"](20.945,105.730,21.055,105.860);`;
+const q = `[out:json][timeout:120];(${boxQueries}${metroQuery});(._;>;);out body;`;
+console.log('Fetching Ba Đình + full Metro lines from Overpass...');
+const data = await getJson(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`, 6);
+head ??= { version: '0.6', generator: data.generator, copyright: 'OpenStreetMap and contributors', attribution: 'http://www.openstreetmap.org/copyright', license: 'http://opendatacommons.org/licenses/odbl/1-0/' };
+for (const el of data.elements) seen.set(`${el.type}/${el.id}`, el);
+
+const inArea = (lat, lon) => lat >= 20.995 && lat <= 21.046 && lon >= 105.800 && lon <= 105.854;
+const nodes = new Map(), ways = new Map(), rels = [];
+for (const e of seen.values()) {
+  if (e.tags) {
+    const next = {};
+    let cnt = 0;
+    for (const [k, v] of Object.entries(e.tags)) if (KEEP_TAGS.has(k)) { next[k] = v; cnt++; }
+    if (cnt > 0) e.tags = next; else delete e.tags;
   }
-} catch (e) {
-  // the main API keeps failing: the same boxes from Overpass (same JSON shape; every node of every way)
-  console.log(`API failed (${e.cause?.code ?? e.message}); trying Overpass`);
-  seen.clear();
-  const boxes = a.bboxes.map(([w, s_, e_, n]) => `nwr(${s_},${w},${n},${e_});`).join('');
-  const q = `[out:json][timeout:120];(${boxes});(._;>;);out body;`;
-  const data = await getJson(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`, 6);
-  head = { version: '0.6', generator: data.generator, copyright: 'OpenStreetMap and contributors', attribution: 'http://www.openstreetmap.org/copyright', license: 'http://opendatacommons.org/licenses/odbl/1-0/' };
-  for (const el of data.elements) seen.set(`${el.type}/${el.id}`, el);
+  if (e.type === 'node') nodes.set(e.id, e);
+  else if (e.type === 'way') ways.set(e.id, e);
+  else if (e.type === 'relation') rels.push(e);
 }
+const keptRels = rels.filter(r => {
+  const t = r.tags || {};
+  if (t.type !== 'building' && t.type !== 'multipolygon') return false;
+  return (r.members || []).some(m => {
+    if (m.type !== 'way') return false;
+    const w = ways.get(m.ref);
+    return w && (w.nodes || []).some(nid => { const n = nodes.get(nid); return n && inArea(n.lat, n.lon); });
+  });
+});
+const relWayIds = new Set();
+for (const r of keptRels) for (const m of r.members || []) if (m.type === 'way') relWayIds.add(m.ref);
+const keptWays = [...ways.values()].filter(w => {
+  if (relWayIds.has(w.id)) return true;
+  if (!w.tags) return false;
+  if (w.tags.railway && ['subway', 'light_rail', 'monorail', 'platform'].includes(w.tags.railway)) return true;
+  return (w.nodes || []).some(nid => { const n = nodes.get(nid); return n && inArea(n.lat, n.lon); });
+});
+const usedNodeIds = new Set();
+for (const w of keptWays) for (const nid of w.nodes || []) usedNodeIds.add(nid);
+const keptNodes = [...nodes.values()].filter(n =>
+  usedNodeIds.has(n.id) ||
+  (n.tags && (inArea(n.lat, n.lon) || n.tags.railway === 'station' || n.tags.public_transport === 'station'))
+);
+
 const order = { node: 0, way: 1, relation: 2 };
-const elements = [...seen.values()].sort((p, q) => order[p.type] - order[q.type] || p.id - q.id);
+const elements = [...keptNodes, ...keptWays, ...keptRels].sort((p, q) => order[p.type] - order[q.type] || p.id - q.id);
 const body = JSON.stringify({ version: head.version, generator: head.generator, copyright: head.copyright, attribution: head.attribution, license: head.license, elements });
 writeFileSync(dir + a.file, body);
 a.fetched = new Date().toISOString().slice(0, 10);
