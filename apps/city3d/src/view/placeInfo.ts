@@ -188,13 +188,14 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
   for (const a of city.areas) {
     let name = a.name?.trim();
     if (name === 'Hố Đống Đa') name = 'Hồ Hoàng Cầu (Hồ Đống Đa)';
+    if (name === 'Gò Đống Đa') name = 'Công viên Văn hóa Đống Đa (Gò Đống Đa)';
     if (!name && a.source === 'osm:way/840074806') name = 'Hồ Đắc Di';
     if (!name) continue;
 
     const c = centroid(a.polygon);
     const areaM2 = Math.round(Math.abs(ringArea(a.polygon)));
     const perimM = Math.round(polylineLength([...a.polygon, a.polygon[0]!]));
-    const cat: PlaceCategory = a.subtype === 'heritage' || /^(chùa|đình|đền|miếu|nhà thờ)\b/i.test(name)
+    const cat: PlaceCategory = /^(chùa|đình|đền|miếu|nhà thờ|lăng)\b/i.test(name) || (a.subtype === 'heritage' && !/công viên|vườn hoa/i.test(name))
       ? 'heritage'
       : a.kind === 'water' || a.kind === 'pool'
         ? 'water'

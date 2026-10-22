@@ -96,14 +96,14 @@ describe('street labels (pin callout & map modes)', () => {
 describe('place info catalog & labels (off, popup, label modes)', () => {
   it('indexes buildings, parks, lakes, monuments, heritage sites, and stations with names, addresses, and metrics', () => {
     const { city } = loadCity('nga-tu-thai-ha');
-    const catalog = buildPlaceCatalog(city, new Set(['building:w1123438986', 'building:w1123438990']));
+    const catalog = buildPlaceCatalog(city, new Set(['building:w677190114', 'building:w677190123']));
 
-    const vpbank = catalog.byId.get('w1123438986');
+    const vpbank = catalog.byId.get('w677190114');
     expect(vpbank?.name).toContain('VPBank');
     expect(vpbank?.address).toContain('89');
     expect(vpbank?.metrics.length).toBeGreaterThanOrEqual(3);
 
-    const hasPark = catalog.labels.some(e => e.category === 'park' && e.name.includes('Quang Trung'));
+    const hasPark = catalog.labels.some(e => e.category === 'park' && (e.name.includes('Gò Đống Đa') || e.name.includes('Indira Gandhi')));
     const hasLake = catalog.labels.some(e => e.category === 'water' && e.name.includes('Hoàng Cầu'));
     const hasMonument = catalog.labels.some(e => e.category === 'monument' && e.name.includes('Tượng đài Quang Trung'));
     const hasHeritage = catalog.labels.some(e => e.category === 'heritage' && (e.name.includes('Đàn Xã Tắc') || e.name.includes('Chùa')));
