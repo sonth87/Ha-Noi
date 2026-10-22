@@ -70,6 +70,10 @@ export interface Building {
   house?: { input: HouseInput; spec: HouseSpec };
   /** a hand-made model the renderer may use for details ('viet-tower', 'novotel', …) */
   model?: string;
+  /** street address from OSM or inferred from the nearest street */
+  address?: string;
+  /** semantic subtype from OSM tags ('heritage', 'hospital', 'university', 'cinema', …) */
+  subtype?: string;
   source: SourceId;
 }
 
@@ -80,14 +84,21 @@ export interface Area {
   kind: AreaKind;
   name?: string;
   polygon: Vec2[];
+  /** bordering street or address */
+  address?: string;
+  /** semantic subtype from OSM tags ('heritage', 'park', 'lake', …) */
+  subtype?: string;
   source: SourceId;
 }
 
-export type FeatureKind = 'traffic-signals' | 'crossing' | 'bus-stop' | 'tree' | 'street-lamp' | 'power-pole';
+export type FeatureKind = 'traffic-signals' | 'crossing' | 'bus-stop' | 'tree' | 'street-lamp' | 'power-pole' | 'monument' | 'heritage';
 
 export interface Feature {
   id: string;
   kind: FeatureKind;
+  name?: string;
+  address?: string;
+  subtitle?: string;
   at: Vec2;
   source: SourceId;
 }

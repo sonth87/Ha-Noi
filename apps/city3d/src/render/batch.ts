@@ -43,11 +43,13 @@ export class Batch {
   quad(s: Surface, p: THREE.Vector3[], n: THREE.Vector3, out = this.list(s)) { this.tri(s, p[0]!, p[1]!, p[2]!, n, out); this.tri(s, p[0]!, p[2]!, p[3]!, n, out); }
 
   /** a flat polygon at height z, facing up */
-  flat(s: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail') {
+  flat(s: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail', owner?: string) {
     const R = normalizeRing(ring);
     if (R.length < 3) return;
     const up = new THREE.Vector3(0, 1, 0);
+    const start = this.list(s).length / 9;
     for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(R.map(p => new THREE.Vector2(p[0], p[1])), [])) this.tri(s, V(...R[a!]!, z), V(...R[b!]!, z), V(...R[c!]!, z), up);
+    if (owner) this.owners.push({ surface: s, start, end: this.list(s).length / 9, owner });
     if (outline) this.loop(R.map(p => V(p[0], p[1], z + 0.01)), outline);
   }
 

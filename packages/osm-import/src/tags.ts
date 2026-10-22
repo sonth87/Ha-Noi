@@ -48,7 +48,8 @@ export function areaKind(t: OsmTags): AreaKind | undefined {
   if (t.leisure === 'pitch') return 'pitch';
   if (t.leisure === 'swimming_pool') return 'pool';
   if (t.natural === 'water' || t.water) return 'water';
-  if (t.place === 'square' || (t.highway === 'pedestrian' && t.area === 'yes')) return 'plaza';
+  if (t.place === 'square' || t.amenity === 'cinema' || (t.highway === 'pedestrian' && t.area === 'yes')) return 'plaza';
+  if (!t.building && (t.amenity === 'place_of_worship' || t.landuse === 'religious') && t.name) return 'plaza';
   return undefined;
 }
 
@@ -59,6 +60,8 @@ export function featureKind(t: OsmTags): FeatureKind | undefined {
   if (t.natural === 'tree') return 'tree';
   if (t.highway === 'street_lamp') return 'street-lamp';
   if (t.power === 'pole') return 'power-pole';
+  if ((t.historic === 'monument' || t.historic === 'memorial' || t.artwork_type === 'statue') && t.name) return 'monument';
+  if ((t.historic === 'archaeological_site' || t.historic === 'ruins') && t.name) return 'heritage';
   return undefined;
 }
 

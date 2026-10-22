@@ -115,6 +115,7 @@ describe('the crossroads from OpenStreetMap', () => {
     const vpbank = city.buildings.find(b => b.source === 'osm:way/677190114')!;
     expect(vpbank).toBeDefined();
     expect(vpbank.name).toBe('VPBank Tower (89 Láng Hạ)');
+    expect(vpbank.model).toBe('vpbank-tower');
     expect(buildingLevels(vpbank)).toBe(29);
     expect(vpbank.parts[0]!.facade).toBe('glass');
 
@@ -124,6 +125,8 @@ describe('the crossroads from OpenStreetMap', () => {
 
     const cinema = city.buildings.find(b => b.source === 'osm:way/1115247053')!;
     expect(cinema?.name).toContain('Trung tâm Chiếu phim Quốc gia');
+    expect(cinema.model).toBe('national-cinema');
+    expect(cinema.parts).toHaveLength(6);
 
     const songHong = city.buildings.find(b => b.source === 'osm:way/1082814006')!;
     expect(buildingLevels(songHong)).toBe(21);

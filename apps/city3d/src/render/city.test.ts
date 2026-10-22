@@ -62,7 +62,7 @@ describe('city geometry', () => {
     let top = 0;
     for (let i = 0; i < road.count; i++) top = Math.max(top, road.getY(i));
     expect(top).toBeCloseTo(6, 1);
-    expect(g.beacons).toHaveLength(1);
+    expect(g.beacons.length).toBeGreaterThanOrEqual(3);
     expect(g.beacons[0]!.y).toBeGreaterThan(80);
   });
 
@@ -143,8 +143,15 @@ describe('standalone showcase dioramas', () => {
     expect(list.some(x => x.id.startsWith('station:'))).toBe(true);
     expect(list.some(x => x.id.startsWith('house:'))).toBe(true);
 
+    const vpbankItem = list.find(x => x.name.includes('VPBank Tower'))!;
+    const cinemaItem = list.find(x => x.name.includes('Trung tâm Chiếu phim Quốc gia'))!;
+    expect(vpbankItem).toBeDefined();
+    expect(cinemaItem).toBeDefined();
+
     const sampleIds = [
       list.find(x => x.id.startsWith('bldg:'))!.id,
+      vpbankItem.id,
+      cinemaItem.id,
       list.find(x => x.id.startsWith('station:'))!.id,
       'house:shop',
       'block:tap-the',

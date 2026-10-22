@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { loadCity } from '@my-city/osm-import';
 import { isHouseLamp, windowRank, windowShade } from '@render/lights';
 import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
 import { lightOn } from './lights';
+import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
+import { buildPlaceCatalog, selectVisiblePlaceLabels } from './placeInfo';
 
 describe('quality', () => {
   it('starts with 30 % traffic', () => {
@@ -66,3 +69,59 @@ describe('zoomed out', () => {
     expect(farness(1, quality('ultra'))).toBe(0);
   });
 });
+
+describe('street labels (pin callout & map modes)', () => {
+  it('filters by zoom level, keeps callout pins sparse, and aligns map labels along streets', () => {
+    const { city } = loadCity('nga-tu-thai-ha');
+    const catalog = buildStreetCatalog(city);
+    expect(catalog.some(e => e.name === 'Phố Thái Hà' && e.shortName === 'Thái Hà')).toBe(true);
+
+    const project = ([x, y]: [number, number, number]) => ({ x: 600 + x * 0.6, y: 450 + y * 0.6, visible: true });
+    expect(selectVisibleStreetLabels(catalog, 'off', 4, 1200, 900, [0, 0], project)).toEqual([]);
+
+    const pinsFar = selectVisibleStreetLabels(catalog, 'pin', 1.0, 1200, 900, [0, 0], project);
+    expect(pinsFar.length).toBeGreaterThan(0);
+    expect(pinsFar.length).toBeLessThanOrEqual(7);
+    expect(pinsFar.every(p => p.tier === 1 && p.stemHeightPx > 0 && p.info.includes('làn'))).toBe(true);
+
+    const pinsNear = selectVisibleStreetLabels(catalog, 'pin', 7.0, 1200, 900, [0, 0], project);
+    expect(pinsNear.length).toBeGreaterThan(pinsFar.length);
+
+    const mapLabels = selectVisibleStreetLabels(catalog, 'map', 4.0, 1200, 900, [0, 0], project);
+    expect(mapLabels.length).toBeGreaterThan(0);
+    expect(mapLabels.every(l => l.angleDeg >= -90 && l.angleDeg <= 90)).toBe(true);
+  });
+});
+
+describe('place info catalog & labels (off, popup, label modes)', () => {
+  it('indexes buildings, parks, lakes, monuments, heritage sites, and stations with names, addresses, and metrics', () => {
+    const { city } = loadCity('nga-tu-thai-ha');
+    const catalog = buildPlaceCatalog(city, new Set(['building:w1123438986', 'building:w1123438990']));
+
+    const vpbank = catalog.byId.get('w1123438986');
+    expect(vpbank?.name).toContain('VPBank');
+    expect(vpbank?.address).toContain('89');
+    expect(vpbank?.metrics.length).toBeGreaterThanOrEqual(3);
+
+    const hasPark = catalog.labels.some(e => e.category === 'park' && e.name.includes('Quang Trung'));
+    const hasLake = catalog.labels.some(e => e.category === 'water' && e.name.includes('Hoàng Cầu'));
+    const hasMonument = catalog.labels.some(e => e.category === 'monument' && e.name.includes('Tượng đài Quang Trung'));
+    const hasHeritage = catalog.labels.some(e => e.category === 'heritage' && (e.name.includes('Đàn Xã Tắc') || e.name.includes('Chùa')));
+    expect(hasPark).toBe(true);
+    expect(hasLake).toBe(true);
+    expect(hasMonument).toBe(true);
+    expect(hasHeritage).toBe(true);
+
+    const project = ([x, y]: [number, number, number]) => ({ x: 600 + x * 0.5, y: 450 + y * 0.5, visible: true });
+    expect(selectVisiblePlaceLabels(catalog, 'off', 4, 1200, 900, [0, 0], project)).toEqual([]);
+
+    const popupMarkers = selectVisiblePlaceLabels(catalog, 'popup', 3.5, 1200, 900, [0, 0], project);
+    expect(popupMarkers.length).toBeGreaterThan(0);
+
+    const topLabels = selectVisiblePlaceLabels(catalog, 'label', 4.5, 1200, 900, [0, 0], project);
+    expect(topLabels.length).toBeGreaterThan(0);
+    expect(topLabels.every(l => l.entry.name.length > 0 && l.entry.address.length > 0)).toBe(true);
+  });
+});
+
+

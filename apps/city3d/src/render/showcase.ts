@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { bbox, floorId, houseStoreys, resolveHouse, type Building, type City, type HouseInput, type Prop, type Vec2 } from '@my-city/core';
 import { Batch, V } from './batch';
-import { beaconsOf, buildBuildings, cityFloors } from './buildings';
+import { beaconsOf, buildBuildings, cityFloors, nationalCinemaRotundaCenter } from './buildings';
 import { layerOf, type Layer } from './city';
 import { lampPost, parkLamp, poolGeometry, tree } from './furniture';
 import { buildMetro } from './metro';
@@ -84,19 +84,33 @@ const ARCHETYPES: ArchetypeDef[] = [
   },
 ];
 
+function buildingBoundsPts(b: Building): Vec2[] {
+  const pts = [b.footprint, ...b.parts.map(p => p.footprint)].flat();
+  if (b.model === 'national-cinema') {
+    const rc = nationalCinemaRotundaCenter(b);
+    pts.push([rc[0] - 22, rc[1] - 20], [rc[0] + 22, rc[1] + 18]);
+  }
+  return pts;
+}
+
 /** Curated + automatically discovered landmark buildings from the OSM city model, plus stations and archetypes. */
 export function showcasesOf(city: City): ShowcaseItem[] {
   const out: ShowcaseItem[] = [];
 
-  // 1. Featured OSM landmarks (sorted with Việt Tower, Novotel, Ga Thái Hà first, then tall named buildings)
-  const priorityOrder = ['osm:way/136257265', 'osm:way/850419282'];
+  // 1. Featured OSM landmarks (sorted with Việt Tower, Novotel, VPBank Tower, Rạp Chiếu phim Quốc gia first)
+  const priorityOrder = [
+    'osm:way/136257265',
+    'osm:way/850419282',
+    'osm:way/677190114',
+    'osm:way/1115247053',
+  ];
   const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
   const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
 
   const landmarks = city.buildings.filter(b => {
     if (!b.name) return false;
-    const lv = maxLevels(b), box = bbox(b.footprint), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
-    return priorityOrder.includes(b.source) || lv >= 8 || (lv >= 4 && span >= 32 && /Tower|Plaza|Vincom|MIPEC|Novotel|Thái Bình|Sky|VPBank|Diamond|Peak|Fortuna|CONINCO|Eurowindow|Capella|Geleximco|Ngân hàng|Đại học|Học viện/i.test(b.name));
+    const lv = maxLevels(b), box = bbox(buildingBoundsPts(b)), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
+    return priorityOrder.includes(b.source) || lv >= 8 || (lv >= 4 && span >= 32 && /Tower|Plaza|Vincom|MIPEC|Novotel|Thái Bình|Sky|VPBank|Chiếu phim|Diamond|Peak|Fortuna|CONINCO|Eurowindow|Capella|Geleximco|Ngân hàng|Đại học|Học viện/i.test(b.name));
   });
 
   landmarks.sort((a, b) => {
@@ -111,7 +125,7 @@ export function showcasesOf(city: City): ShowcaseItem[] {
     if (seenNames.has(name)) continue;
     seenNames.add(name);
     const lv = maxLevels(b), h = Math.round(maxHeight(b));
-    const box = bbox(b.footprint), span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+    const box = bbox(buildingBoundsPts(b)), span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
     const radius = Math.max(24, Math.round(span * 0.72 + 14));
     const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
     out.push({
@@ -122,8 +136,8 @@ export function showcasesOf(city: City): ShowcaseItem[] {
       zoom: Number(zoom.toFixed(2)),
       radius,
     });
-    // insert Metro stations right after Novotel
-    if (b.source === 'osm:way/850419282') {
+    // insert Metro stations right after the featured Thái Hà – Láng Hạ landmarks
+    if (b.source === 'osm:way/1115247053') {
       for (const st of city.stations.filter(s => s.kind === 'metro')) {
         out.push({
           id: `station:${st.id}`,
@@ -281,8 +295,8 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
     const b = city.buildings.find(x => x.id === bId);
     if (!b) return null;
 
-    // bounding box over building footprint and all its parts
-    const allPts = [b.footprint, ...b.parts.map(p => p.footprint)].flat();
+    // bounding box over building footprint, all its parts, and any courtyard rotunda
+    const allPts = buildingBoundsPts(b);
     const box = bbox(allPts);
     const cx = (box.x0 + box.x1) / 2, cy = (box.y0 + box.y1) / 2;
     const bw = box.x1 - box.x0, bd = box.y1 - box.y0;

@@ -115,7 +115,7 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
   const P2 = (a: number, b: number): Vec2 => [c[0] + u[0] * a + v[0] * b, c[1] + u[1] * a + v[1] * b];
   const ring = (x0: number, x1: number, y0: number, y1: number): Vec2[] => [P2(x0, y0), P2(x1, y0), P2(x1, y1), P2(x0, y1)];
   const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, s: Surface = 'wall', top?: Surface) =>
-    B.solid(ring(x0, x1, y0, y1), z0, z1, () => s, top ?? (s === 'wall' ? 'roof' : s));
+    B.solid(ring(x0, x1, y0, y1), z0, z1, () => s, top ?? (s === 'wall' ? 'roof' : s), st.id);
   const lamp = stationLamp(st), edge = stationLamp(st, 'edge'), board = stationLamp(st, 'board');
   const nU = (s: number) => new THREE.Vector3(u[0] * s, 0, u[1] * s), nV = (s: number) => new THREE.Vector3(v[0] * s, 0, v[1] * s), up = new THREE.Vector3(0, 1, 0), down = new THREE.Vector3(0, -1, 0);
 

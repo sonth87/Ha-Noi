@@ -156,6 +156,50 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     }
     return set.size ? [...set] : fronts;
   };
+  const formatOsmAddress = (t: OsmTags, fallbackStreet?: string): string | undefined => {
+    const hn = t['addr:housenumber']?.trim();
+    const st = t['addr:street']?.trim() || fallbackStreet?.trim();
+    const sub = t['addr:subdistrict']?.trim();
+    const parts: string[] = [];
+    if (hn && st) parts.push(`${hn} ${st}`);
+    else if (st) parts.push(st);
+    else if (hn) parts.push(`Số ${hn}`);
+    if (sub) parts.push(sub.startsWith('Phường') ? sub : `P. ${sub}`);
+    return parts.length ? parts.join(', ') : undefined;
+  };
+  const inferSubtype = (t: OsmTags): string | undefined => {
+    if (t.historic || t.heritage || t.amenity === 'place_of_worship' || t.building === 'temple' || t.building === 'church' || t.landuse === 'religious') return 'heritage';
+    if (t.amenity === 'hospital' || t.building === 'hospital' || t.amenity === 'clinic') return 'hospital';
+    if (t.amenity === 'university' || t.amenity === 'college' || t.building === 'university') return 'university';
+    if (t.amenity === 'school' || t.amenity === 'kindergarten' || t.building === 'school') return 'school';
+    if (t.amenity === 'cinema' || t.amenity === 'theatre') return 'cinema';
+    if (t.building === 'government' || t.office === 'government' || t.amenity === 'townhall' || t.amenity === 'police') return 'government';
+    return undefined;
+  };
+
+  // Collect named institutional campuses (universities, hospitals, schools, temples) to enrich buildings inside them
+  type Campus = { name: string; ring: Vec2[]; box: Rect; address?: string; subtype?: string };
+  const campuses: Campus[] = [];
+  for (const w of ways.values()) {
+    const t = tags(w);
+    if (t.building || !t.name || w.nodes.length < 4 || w.nodes[0] !== w.nodes[w.nodes.length - 1]) continue;
+    const sub = inferSubtype(t);
+    if (!sub) continue;
+    const ring = normalizeRing(path(w));
+    if (ring.length >= 3) campuses.push({ name: t.name, ring, box: bbox(ring), address: formatOsmAddress(t), subtype: sub });
+  }
+  for (const r of relations) {
+    const t = tags(r);
+    if (t.building || !t.name) continue;
+    const sub = inferSubtype(t);
+    if (!sub) continue;
+    const { outer } = rings(r, ways, path);
+    for (const o of outer) {
+      const ring = normalizeRing(o);
+      if (ring.length >= 3) campuses.push({ name: t.name, ring, box: bbox(ring), address: formatOsmAddress(t), subtype: sub });
+    }
+  }
+
   const buildings: Building[] = keep.map(b => {
     const kind = guessKind(b.ring, buildingHint(b.t)), own = levelsOf(b.t);
     const levels = own ?? guessLevels(kind, b.source);
@@ -185,7 +229,20 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const house = raw.length ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
     // a generated house sets its own storey heights (a raised ground floor over a semi-basement…)
     if (house) parts[0] = { ...parts[0]!, floors: houseStoreys(house.spec) };
-    return { id: b.id, name: b.t.name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house, source: b.source };
+    const c = centroid(b.ring);
+    const campus = campuses.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
+    let name = b.t.name;
+    if (campus && (!name || /^[A-ZĐ]\d{1,2}$/i.test(name.trim()))) {
+      name = name ? `${campus.name} – Nhà ${name.trim()}` : campus.name;
+    }
+    const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
+    const subtype = inferSubtype(b.t) ?? campus?.subtype;
+    return {
+      id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
+      ...(address ? { address } : {}),
+      ...(subtype ? { subtype } : {}),
+      source: b.source,
+    };
   });
   for (const b of buildings) {
     const p = b.footprint[b.front]!, q = b.footprint[(b.front + 1) % b.footprint.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
@@ -202,7 +259,24 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const nr = normalizeRing(ring), c = centroid(nr), box = region.find(r => inRect(c, r)) ?? region.find(r => nr.some(q => inRect(q, r)));
     if (!box) return;
     const clipped = clipRing(nr, box);
-    if (clipped.length >= 3) areas.push({ id, kind, name: t.name, polygon: clipped, source });
+    if (clipped.length < 3) return;
+    const nearSt = nearStreets(clipped).filter(s => s.name);
+    let bestSt: string | undefined;
+    let bestD = Infinity;
+    for (const s of nearSt) {
+      for (const p of s.path) {
+        const d = dist(c, p);
+        if (d < bestD) { bestD = d; bestSt = s.name; }
+      }
+    }
+    const address = formatOsmAddress(t, bestD < 220 ? bestSt : undefined);
+    const subtype = inferSubtype(t) ?? (kind === 'park' ? 'park' : kind === 'water' ? 'lake' : undefined);
+    areas.push({
+      id, kind, name: t.name, polygon: clipped,
+      ...(address ? { address } : {}),
+      ...(subtype ? { subtype } : {}),
+      source,
+    });
   };
   for (const w of ways.values()) if (w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]) addArea(`a${w.id}`, src('way', w.id), path(w), tags(w));
   for (const r of relations) {
@@ -215,8 +289,28 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   // ---------- 5. features and junctions ----------
   const features: Feature[] = [];
   for (const n of nodes.values()) {
-    const kind = n.tags && featureKind(n.tags), at = xy.get(n.id)!;
-    if (kind && inside(at)) features.push({ id: `n${n.id}`, kind, at, source: src('node', n.id) });
+    const t = n.tags;
+    const kind = t && featureKind(t), at = xy.get(n.id)!;
+    if (!kind || !inside(at)) continue;
+    if (kind === 'monument' || kind === 'heritage') {
+      const nearSt = nearStreets([at]).filter(s => s.name);
+      let bestSt: string | undefined, bestD = Infinity;
+      for (const s of nearSt) for (const p of s.path) { const d = dist(at, p); if (d < bestD) { bestD = d; bestSt = s.name; } }
+      const address = formatOsmAddress(t, bestD < 220 ? bestSt : undefined);
+      const subtitle = t.artwork_type === 'statue'
+        ? 'Tượng đài lịch sử'
+        : t.historic === 'archaeological_site'
+          ? `Di chỉ khảo cổ${t.start_date ? ` (từ năm ${t.start_date})` : ''}`
+          : 'Di tích lịch sử – văn hóa';
+      features.push({
+        id: `n${n.id}`, kind, name: t.name,
+        ...(address ? { address } : {}),
+        subtitle,
+        at, source: src('node', n.id),
+      });
+    } else {
+      features.push({ id: `n${n.id}`, kind, at, source: src('node', n.id) });
+    }
   }
   const signals = features.filter(f => f.kind === 'traffic-signals');
   const junctions: Junction[] = [];

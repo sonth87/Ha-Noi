@@ -40,9 +40,9 @@ export const NGA_TU_THAI_HA: AreaConfig = {
           'osm:way/1198548268': { floors: rep(4.2, 5) },
         },
       },
-      // VPBank Tower 89 Láng Hạ (ngã tư cuối đường Thái Hà – Láng Hạ – Huỳnh Thúc Kháng): 29 storeys glass curtain wall
+      // VPBank Tower 89 Láng Hạ (ngã tư cuối đường Thái Hà – Láng Hạ – Huỳnh Thúc Kháng): 29 storeys glass curtain wall + podium & crown
       'osm:way/677190114': {
-        name: 'VPBank Tower (89 Láng Hạ)', kind: 'office', facade: 'glass',
+        name: 'VPBank Tower (89 Láng Hạ)', kind: 'office', model: 'vpbank-tower', facade: 'glass',
         floors: [...rep(4.2, 4), ...rep(3.1, 25)],
       },
       // Green Diamond 93 Láng Hạ (cạnh VPBank Tower): 28 storeys commercial + luxury apartment
@@ -50,10 +50,18 @@ export const NGA_TU_THAI_HA: AreaConfig = {
         name: 'Green Diamond (93 Láng Hạ)', kind: 'apartment',
         floors: [...rep(4.2, 5), ...rep(3.2, 23)],
       },
-      // Trung tâm Chiếu phim Quốc gia 87 Láng Hạ (góc Đông-Bắc ngã tư Thái Hà – Láng Hạ, đối diện VPBank Tower)
+      // Trung tâm Chiếu phim Quốc gia 87 Láng Hạ (góc Đông-Bắc ngã tư Thái Hà – Láng Hạ, đối diện VPBank Tower):
+      // gộp cả 6 khối nhà rạp (1115247049..1115247054) cùng sảnh vòm tròn góc ngã tư (model: 'national-cinema')
       'osm:way/1115247053': {
-        name: 'Trung tâm Chiếu phim Quốc gia (87 Láng Hạ)', kind: 'commercial',
-        floors: [...rep(4.5, 3), ...rep(4.0, 2)],
+        name: 'Trung tâm Chiếu phim Quốc gia (87 Láng Hạ)', kind: 'commercial', model: 'national-cinema',
+        parts: {
+          'osm:way/1115247053': { floors: [...rep(4.8, 3), ...rep(4.2, 2)] },
+          'osm:way/1115247052': { floors: [...rep(4.8, 3), ...rep(4.2, 2)], facade: 'glass' },
+          'osm:way/1115247054': { floors: [...rep(4.8, 3), ...rep(4.2, 2)] },
+          'osm:way/1115247051': { floors: rep(4.5, 4) },
+          'osm:way/1115247050': { floors: rep(4.5, 4) },
+          'osm:way/1115247049': { floors: rep(4.2, 3) },
+        },
       },
       // Petrovietnam Tower 18 Láng Hạ (đối diện cuối đường Thái Hà): 19-storey glass office tower + podium wings
       'osm:way/1217754319': {

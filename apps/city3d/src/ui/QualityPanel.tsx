@@ -2,18 +2,42 @@
    building detail, street life (traffic, poles and wires, trees), view distance, stepping down by
    itself, and the render options. */
 import { LEVEL_NAMES, LEVELS, quality, withOption, type Quality, type QualityLevel, type QualityOptions, type TreeLook } from '@view/quality';
+import { STREET_LABEL_MODES, STREET_LABEL_NAMES, type StreetLabelMode } from '@view/streetLabels';
+import { PLACE_INFO_MODES, PLACE_INFO_NAMES, type PlaceInfoMode } from '@view/placeInfo';
 import type { Snapshot } from '@view/CityView';
 
 const DETAIL = ['L0 · khối', 'L1 · cửa sổ', 'L2 · nhà', 'L3 · mọi chi tiết'];
 
 const TREES: [TreeLook, string][] = [['off', 'Không'], ['simple', 'Đơn giản'], ['full', 'Đầy đủ']];
-const DISTANCE: [number, string][] = [[150, '150 m'], [250, '250 m'], [400, '400 m'], [800, '800 m'], [1200, '1200 m'], [0, 'Hết']];
+const DISTANCE: [number, string][] = [[150, '150 m'], [250, '250 m'], [450, '450 m'], [800, '800 m'], [1500, '1500 m'], [0, 'Hết']];
 
 const TOGGLES: [keyof QualityOptions, string][] = [
   ['autoDetail', 'Tự giảm chi tiết khi thu nhỏ'], ['wires', 'Cột và dây điện'], ['autoQuality', 'Tự hạ mức khi chậm'], ['windows', 'Cửa sổ'], ['silhouette', 'Nét viền khối'], ['creases', 'Nét cạnh'], ['details', 'Nét chi tiết'], ['bloom', 'Glow (theme tối)'], ['msaa', 'Khử răng cưa'],
 ];
 
-export function QualityPanel({ quality: q, stats, detail, pending, lowered, onChange }: { quality: Quality; stats: Snapshot['stats']; detail: Snapshot['detail']; pending: number; lowered: string | null; onChange: (q: Quality) => void }) {
+export function QualityPanel({
+  quality: q,
+  streetLabels,
+  placeInfo,
+  stats,
+  detail,
+  pending,
+  lowered,
+  onChange,
+  onStreetLabels,
+  onPlaceInfo,
+}: {
+  quality: Quality;
+  streetLabels: StreetLabelMode;
+  placeInfo: PlaceInfoMode;
+  stats: Snapshot['stats'];
+  detail: Snapshot['detail'];
+  pending: number;
+  lowered: string | null;
+  onChange: (q: Quality) => void;
+  onStreetLabels: (mode: StreetLabelMode) => void;
+  onPlaceInfo: (mode: PlaceInfoMode) => void;
+}) {
   return (
     <section aria-label="Chất lượng hiển thị">
       <h2>Chất lượng · <span className="hi">{LEVEL_NAMES[q.level]}</span></h2>
@@ -22,6 +46,18 @@ export function QualityPanel({ quality: q, stats, detail, pending, lowered, onCh
           <button key={l} aria-pressed={q.level === l} onClick={() => onChange(quality(l))}>{LEVEL_NAMES[l]}</button>
         ))}
       </div>
+      <label className="opt">
+        Tên đường
+        <select value={streetLabels} onChange={e => onStreetLabels(e.target.value as StreetLabelMode)}>
+          {STREET_LABEL_MODES.map(m => <option key={m} value={m}>{STREET_LABEL_NAMES[m]}</option>)}
+        </select>
+      </label>
+      <label className="opt">
+        Thông tin địa điểm
+        <select value={placeInfo} onChange={e => onPlaceInfo(e.target.value as PlaceInfoMode)}>
+          {PLACE_INFO_MODES.map(m => <option key={m} value={m}>{PLACE_INFO_NAMES[m]}</option>)}
+        </select>
+      </label>
       <label className="opt">
         Chi tiết nhà
         <select value={q.houseDetail} onChange={e => onChange(withOption(q, { houseDetail: Number(e.target.value) as QualityOptions['houseDetail'] }))}>

@@ -8,7 +8,17 @@ const dir = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 
 export default defineConfig({
   plugins: [react()],
-  resolve: { alias: { '@render': dir('./src/render'), '@view': dir('./src/view'), '@ui': dir('./src/ui') } },
+  resolve: {
+    alias: {
+      '@render': dir('./src/render'),
+      '@view': dir('./src/view'),
+      '@ui': dir('./src/ui'),
+      '@my-city/core': dir('../../packages/core/src/index.ts'),
+      '@my-city/osm-import': dir('../../packages/osm-import/src/index.ts'),
+      '@my-city/osm-data': dir('../../packages/osm-data/src/index.ts'),
+    },
+  },
   server: { port: 5190 },
   test: { include: ['src/**/*.test.ts'], environment: 'node' },
 });
+

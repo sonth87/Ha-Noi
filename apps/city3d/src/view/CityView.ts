@@ -36,6 +36,14 @@ import type { Surface } from '@render/batch';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
 import { FAR, detailFor, farness, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
+import {
+  STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
+  type StreetEntry, type StreetLabelMode,
+} from './streetLabels';
+import {
+  PLACE_INFO_MODES, buildPlaceCatalog, selectVisiblePlaceLabels,
+  type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
+} from './placeInfo';
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
@@ -64,6 +72,10 @@ export interface Snapshot {
   stats: Layer['stats'];
   /** id of the standalone showcase diorama currently displayed, or null for the full city map */
   showcase: string | null;
+  /** street name display mode: 'pin' (callout pole), 'map' (along street like Google Maps/OSM), or 'off' */
+  streetLabels: StreetLabelMode;
+  /** place/building/park/monument/heritage info display mode: 'off', 'popup', or 'label' */
+  placeInfo: PlaceInfoMode;
 }
 
 const ISO_EL = Math.asin(1 / Math.sqrt(3));
@@ -104,6 +116,8 @@ export class CityView {
   readonly lanes: Lane[];
   readonly tracks: Track[];
   readonly showcases: ShowcaseItem[];
+  readonly streetCatalog: StreetEntry[];
+  readonly placeCatalog: PlaceCatalog;
   private readonly showcaseCache = new Map<string, BuiltShowcase>();
   private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial } | null = null;
   private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
@@ -115,6 +129,17 @@ export class CityView {
   private readonly listeners = new Set<() => void>();
   private lit = new Set<string>();
   private timers: ReturnType<typeof setTimeout>[] = [];
+  private labelLayer: HTMLDivElement | null = null;
+  private labelNodes = new Map<string, HTMLButtonElement>();
+  private labelWorld = new Map<string, [number, number]>();
+  private labelSig = '';
+  private placeLayer: HTMLDivElement | null = null;
+  private placeNodes = new Map<string, HTMLButtonElement>();
+  private placeSig = '';
+  private hoverBanner: HTMLDivElement | null = null;
+  private popupCard: HTMLDivElement | null = null;
+  private activePopup: { entry: PlaceEntry; floor?: string } | null = null;
+  private hoveredPlaceId: string | null = null;
   private mounted: {
     host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; showcaseGroup: THREE.Group;
     camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer; bloom: UnrealBloomPass;
@@ -173,6 +198,8 @@ export class CityView {
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
+    this.streetCatalog = buildStreetCatalog(city);
+    this.placeCatalog = buildPlaceCatalog(city, new Set(this.showcases.map(s => s.id)));
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       this.mats.surface.set(s, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
     }
@@ -180,13 +207,23 @@ export class CityView {
     // one switch, remembered
     let theme: Theme = 'light';
     try { if (localStorage.getItem('city3d-theme') === 'dark') theme = 'dark'; } catch { /* default */ }
+    let streetLabels: StreetLabelMode = 'pin';
+    try {
+      const savedLbl = localStorage.getItem('city3d-street-labels') as StreetLabelMode | null;
+      if (savedLbl && STREET_LABEL_MODES.includes(savedLbl)) streetLabels = savedLbl;
+    } catch { /* default */ }
+    let placeInfo: PlaceInfoMode = 'popup';
+    try {
+      const savedPlace = localStorage.getItem('city3d-place-info') as PlaceInfoMode | null;
+      if (savedPlace && PLACE_INFO_MODES.includes(savedPlace)) placeInfo = savedPlace;
+    } catch { /* default */ }
     const quality = loadQuality();
     this.vehicles = spawnTraffic(this.lanes, quality.traffic);
     const sig = signalsAt(0);
     this.snap = {
       mode: '2d', view: 0, heading: 0, theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
-      showcase: null,
+      showcase: null, streetLabels, placeInfo,
     };
   }
 
@@ -225,17 +262,17 @@ export class CityView {
     controls.enableDamping = true;
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
-    controls.zoomSpeed = 1.15;
+    controls.zoomSpeed = 1.2;
     controls.minZoom = 0.16; controls.maxZoom = 40;
-    controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.45;
+    controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
     // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: this.snap.mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN };
-    controls.rotateSpeed = 0.65;
-    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; };
+    controls.rotateSpeed = 0.6;
+    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; this.hideHoverBanner(); };
     const onControlChange = () => { if (this.interacting) this.interactCooldown = performance.now() + 140; };
     const onControlEnd = () => { this.interacting = false; this.interactCooldown = performance.now() + 140; };
     controls.addEventListener('start', onControlStart);
@@ -243,7 +280,8 @@ export class CityView {
     controls.addEventListener('end', onControlEnd);
     this.place(camera, controls, azOf(this.snap.view), ISO_EL);
 
-    mapGroup.add(this.group(this.base));
+    const baseGroup = this.group(this.base);
+    mapGroup.add(baseGroup);
     // a remount starts from fresh meshes; the built layers are kept
     for (const t of this.tiles) { for (const v of t.layers.values()) v.group = null; t.shown = -1; }
     for (const c of this.cells) {
@@ -282,17 +320,101 @@ export class CityView {
     };
     const onDbl = (e: MouseEvent) => flyToClient(e.clientX, e.clientY);
 
-    // input: a click/tap (not a drag) lights or darkens the floor under it; on touch, disable zoomToCursor so two-finger pinch doesn't drift toward a single finger
+    // Helper to raycast against buildings, stations, parks, lakes, and monuments
+    const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      const pickable: THREE.Object3D[] = [];
+      if (this.snap.showcase) {
+        showcaseGroup.traverse(o => { if (o.userData.surface) pickable.push(o); });
+      } else {
+        for (const t of this.tiles) {
+          const g = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null;
+          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+        }
+        for (const o of baseGroup.children) if (o.userData.surface) pickable.push(o);
+      }
+      const hits = ray.intersectObjects(pickable, false);
+      for (const hit of hits) {
+        if (hit.faceIndex == null) continue;
+        const layer = hit.object.userData.layer as Layer;
+        const owner = layer.ownerOf(hit.object.userData.surface as Surface, hit.faceIndex);
+        if (owner) {
+          const floor = layer.floorAt(owner, hit.point);
+          return { owner, ...(floor ? { floor } : {}), point: hit.point };
+        }
+      }
+      return null;
+    };
+
+    // Mobile two-finger gesture enhancements: allow two-finger twist rotation even when starting in 2D mode,
+    // and disable zoomToCursor on touch or low camera angles so pinch-zoom never slides the target away.
     let down: [number, number] | null = null;
     let lastTap: { t: number; x: number; y: number } | null = null;
-    const onTouchStart = () => { controls.zoomToCursor = false; };
-    const onWheel = () => { controls.zoomToCursor = true; };
+    let touchGesture: { ang0: number; dist0: number } | null = null;
+    const onTouchStart = (e: TouchEvent) => {
+      controls.zoomToCursor = false;
+      if (e.touches.length === 2) {
+        const dx = e.touches[1]!.clientX - e.touches[0]!.clientX;
+        const dy = e.touches[1]!.clientY - e.touches[0]!.clientY;
+        touchGesture = { ang0: Math.atan2(dy, dx), dist0: Math.hypot(dx, dy) };
+      } else {
+        touchGesture = null;
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && touchGesture && this.snap.mode === '2d') {
+        const dx = e.touches[1]!.clientX - e.touches[0]!.clientX;
+        const dy = e.touches[1]!.clientY - e.touches[0]!.clientY;
+        let dAng = Math.atan2(dy, dx) - touchGesture.ang0;
+        while (dAng > Math.PI) dAng -= 2 * Math.PI;
+        while (dAng < -Math.PI) dAng += 2 * Math.PI;
+        if (Math.abs(dAng) > 0.24) {
+          // User is twisting two fingers to rotate -> seamlessly unlock 3D orbit rotation
+          this.setMode('3d');
+          touchGesture = null;
+        }
+      }
+    };
+    const onTouchEnd = () => { touchGesture = null; };
+    const onWheel = () => {
+      // At very low camera angles, zoomToCursor rays graze the ground and slide target far away
+      controls.zoomToCursor = this.elevation() >= 0.34;
+    };
     const onDown = (e: PointerEvent) => {
-      controls.zoomToCursor = e.pointerType === 'mouse';
+      controls.zoomToCursor = e.pointerType === 'mouse' && this.elevation() >= 0.34;
       down = [e.clientX, e.clientY];
     };
+
+    let lastHoverTime = 0;
+    const onMove = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse' || this.interacting || (e.buttons & 7) !== 0) return;
+      if (this.snap.showcase || this.snap.placeInfo === 'off') {
+        this.hideHoverBanner();
+        return;
+      }
+      const now = performance.now();
+      if (now - lastHoverTime < 45) return;
+      lastHoverTime = now;
+      const picked = pickAtClient(e.clientX, e.clientY);
+      const entry = picked ? this.placeCatalog.byId.get(picked.owner) : undefined;
+      if (!entry) {
+        this.hideHoverBanner();
+        renderer.domElement.style.cursor = '';
+        return;
+      }
+      renderer.domElement.style.cursor = 'pointer';
+      const r = host.getBoundingClientRect();
+      this.showHoverBanner(entry, e.clientX - r.left, e.clientY - r.top, picked?.floor);
+    };
+    const onLeave = () => {
+      this.hideHoverBanner();
+      renderer.domElement.style.cursor = '';
+    };
+
     const onUp = (e: PointerEvent) => {
-      const maxMove = e.pointerType === 'touch' ? 10 : 4;
+      const maxMove = e.pointerType === 'touch' ? 12 : 5;
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
       if (e.pointerType === 'touch') {
         const now = performance.now();
@@ -303,28 +425,27 @@ export class CityView {
         }
         lastTap = { t: now, x: e.clientX, y: e.clientY };
       }
-      const r = renderer.domElement.getBoundingClientRect();
-      ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      const pickable: THREE.Object3D[] = [];
-      if (this.snap.showcase) {
-        showcaseGroup.traverse(o => { if (o.userData.surface) pickable.push(o); });
-      } else {
-        for (const t of this.tiles) {
-          const g = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null;
-          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+      const picked = pickAtClient(e.clientX, e.clientY);
+      if (!picked) {
+        if (this.activePopup) this.closePopup();
+        return;
+      }
+      if (!this.snap.showcase && this.snap.placeInfo !== 'off' && !e.shiftKey) {
+        const entry = this.placeCatalog.byId.get(picked.owner);
+        if (entry) {
+          this.openPopup(entry, picked.floor);
+          return;
         }
       }
-      const hit = ray.intersectObjects(pickable, false)[0];
-      if (!hit || hit.faceIndex == null) return;
-      const layer = hit.object.userData.layer as Layer;
-      const owner = layer.ownerOf(hit.object.userData.surface as Surface, hit.faceIndex);
-      const floor = owner && layer.floorAt(owner, hit.point);
-      if (floor) this.setLamp(floor, !this.lit.has(floor));
+      if (picked.floor) this.setLamp(picked.floor, !this.lit.has(picked.floor));
     };
     renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
+    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: true });
+    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
     renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
     renderer.domElement.addEventListener('pointerdown', onDown);
+    renderer.domElement.addEventListener('pointermove', onMove);
+    renderer.domElement.addEventListener('pointerleave', onLeave);
     renderer.domElement.addEventListener('pointerup', onUp);
     renderer.domElement.addEventListener('dblclick', onDbl);
 
@@ -346,6 +467,7 @@ export class CityView {
       last = now;
       this.animate(now);
       this.keysMove(dt);
+      this.syncLowCamera();
       controls.update();
       this.keepInside();
       this.zoomFade();
@@ -359,6 +481,8 @@ export class CityView {
         for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
         this.mats.pulse.dashOffset -= dt * 9;
       }
+      this.streetLabelsStep();
+      this.placeInfoStep();
       if (this.mounted) {
         if (this.mounted.bloom.enabled) this.mounted.composer.render();
         else this.mounted.renderer.render(scene, camera);
@@ -374,6 +498,36 @@ export class CityView {
       }
     };
 
+    const labelLayer = document.createElement('div');
+    labelLayer.className = 'street-labels';
+    host.appendChild(labelLayer);
+    this.labelLayer = labelLayer;
+    this.labelNodes.clear();
+    this.labelWorld.clear();
+    this.labelSig = '';
+
+    const placeLayer = document.createElement('div');
+    placeLayer.className = 'place-labels';
+    host.appendChild(placeLayer);
+    this.placeLayer = placeLayer;
+    this.placeNodes.clear();
+    this.placeSig = '';
+
+    const hoverBanner = document.createElement('div');
+    hoverBanner.className = 'place-hover-banner';
+    hoverBanner.style.display = 'none';
+    host.appendChild(hoverBanner);
+    this.hoverBanner = hoverBanner;
+
+    const popupCard = document.createElement('div');
+    popupCard.className = 'place-popup';
+    popupCard.style.display = 'none';
+    popupCard.addEventListener('pointerdown', e => e.stopPropagation());
+    popupCard.addEventListener('pointerup', e => e.stopPropagation());
+    popupCard.addEventListener('wheel', e => e.stopPropagation());
+    host.appendChild(popupCard);
+    this.popupCard = popupCard;
+
     this.mounted = {
       host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer, bloom, beacons, fleets, vehicleLines,
       stop: () => {
@@ -382,8 +536,12 @@ export class CityView {
         controls.removeEventListener('change', onControlChange);
         controls.removeEventListener('end', onControlEnd);
         renderer.domElement.removeEventListener('touchstart', onTouchStart);
+        renderer.domElement.removeEventListener('touchmove', onTouchMove);
+        renderer.domElement.removeEventListener('touchend', onTouchEnd);
         renderer.domElement.removeEventListener('wheel', onWheel);
         renderer.domElement.removeEventListener('pointerdown', onDown);
+        renderer.domElement.removeEventListener('pointermove', onMove);
+        renderer.domElement.removeEventListener('pointerleave', onLeave);
         renderer.domElement.removeEventListener('pointerup', onUp);
         renderer.domElement.removeEventListener('dblclick', onDbl);
         renderer.domElement.removeEventListener('webglcontextlost', onLost);
@@ -393,15 +551,17 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // nearby tiles at once at a low level, so the initial view is there from the first frame without stalling startup
+    // nearby tiles at L1 and the rest at L0 at once, so every building is there from the first frame
     const first = Math.min(1, this.wantedDetail()) as Detail;
-    for (const t of this.tiles) if (this.nearTile(t)) this.show(t, this.ensure(t, first));
+    for (const t of this.tiles) this.show(t, this.ensure(t, this.nearTile(t) ? first : 0));
     this.houseLights(false);
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
     this.nightThings();
     if (this.snap.showcase) this.mountShowcase(this.snap.showcase);
     else this.update({ stats: this.shownStats() });
+    this.streetLabelsStep(true);
+    this.placeInfoStep(true);
     raf = requestAnimationFrame(tick);
   }
 
@@ -410,6 +570,20 @@ export class CityView {
     if (!m) return;
     m.stop();
     this.timers.forEach(clearTimeout); this.timers = [];
+    this.labelLayer?.remove();
+    this.labelLayer = null;
+    this.labelNodes.clear();
+    this.labelWorld.clear();
+    this.labelSig = '';
+    this.placeLayer?.remove();
+    this.placeLayer = null;
+    this.placeNodes.clear();
+    this.placeSig = '';
+    this.hoverBanner?.remove();
+    this.hoverBanner = null;
+    this.popupCard?.remove();
+    this.popupCard = null;
+    this.activePopup = null;
     m.controls.dispose(); m.composer.dispose(); m.renderer.dispose();
     m.renderer.domElement.remove();
     this.mounted = null;
@@ -422,6 +596,8 @@ export class CityView {
   /** switch between the full city map (id = null) and a standalone diorama showcase on an iso-glow base plate */
   setShowcase(id: string | null) {
     if (id === this.snap.showcase) return;
+    this.hideHoverBanner();
+    this.closePopup();
     const m = this.mounted;
     if (!id) {
       this.activeShowcase = null;
@@ -438,12 +614,16 @@ export class CityView {
         }
       }
       this.update({ showcase: null, pending: 0, lit: this.countLit(), floors: this.floors.length, stats: this.shownStats() });
+      this.streetLabelsStep(true);
+      this.placeInfoStep(true);
       return;
     }
     if (m && !this.snap.showcase) {
       this.savedMapCam = { target: m.controls.target.clone(), zoom: m.camera.zoom };
     }
     this.mountShowcase(id);
+    this.streetLabelsStep(true);
+    this.placeInfoStep(true);
   }
 
   private mountShowcase(id: string) {
@@ -532,6 +712,482 @@ export class CityView {
     this.applyQuality(q);
   }
 
+  setStreetLabels(streetLabels: StreetLabelMode) {
+    if (streetLabels === this.snap.streetLabels) return;
+    this.update({ streetLabels });
+    try { localStorage.setItem('city3d-street-labels', streetLabels); } catch { /* not remembered */ }
+    this.streetLabelsStep(true);
+  }
+
+  cycleStreetLabels() {
+    const idx = STREET_LABEL_MODES.indexOf(this.snap.streetLabels);
+    const next = STREET_LABEL_MODES[(idx + 1) % STREET_LABEL_MODES.length]!;
+    this.setStreetLabels(next);
+  }
+
+  setPlaceInfo(placeInfo: PlaceInfoMode) {
+    if (placeInfo === this.snap.placeInfo) return;
+    this.update({ placeInfo });
+    try { localStorage.setItem('city3d-place-info', placeInfo); } catch { /* not remembered */ }
+    if (placeInfo === 'off') {
+      this.hideHoverBanner();
+      this.closePopup();
+    }
+    this.placeInfoStep(true);
+  }
+
+  cyclePlaceInfo() {
+    const idx = PLACE_INFO_MODES.indexOf(this.snap.placeInfo);
+    const next = PLACE_INFO_MODES[(idx + 1) % PLACE_INFO_MODES.length]!;
+    this.setPlaceInfo(next);
+  }
+
+  private streetLabelsStep(force = false) {
+    const m = this.mounted, layer = this.labelLayer;
+    if (!m || !layer) return;
+    const mode = this.snap.streetLabels;
+    if (this.snap.showcase || mode === 'off') {
+      if (layer.style.display !== 'none') {
+        layer.style.display = 'none';
+        layer.replaceChildren();
+        this.labelNodes.clear();
+        this.labelWorld.clear();
+        this.labelSig = 'off';
+      }
+      return;
+    }
+
+    const w = m.host.clientWidth, h = m.host.clientHeight;
+    const c = m.controls.target, cp = m.camera.position;
+    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
+    if (!force && sig === this.labelSig) return;
+    this.labelSig = sig;
+
+    if (layer.style.display === 'none') layer.style.display = '';
+    if (layer.dataset.mode !== mode) {
+      layer.dataset.mode = mode;
+      layer.replaceChildren();
+      this.labelNodes.clear();
+      this.labelWorld.clear();
+    }
+
+    const tmp = new THREE.Vector3();
+    const visible = selectVisibleStreetLabels(
+      this.streetCatalog,
+      mode,
+      this.pxPerMetre(),
+      w,
+      h,
+      [c.x, c.z],
+      world => {
+        tmp.set(world[0], world[2], world[1]).project(m.camera);
+        return {
+          x: (tmp.x * 0.5 + 0.5) * w,
+          y: (-tmp.y * 0.5 + 0.5) * h,
+          visible: tmp.z >= -1 && tmp.z <= 1,
+        };
+      },
+    );
+
+    const keepIds = new Set<string>();
+    for (const item of visible) {
+      const key = `${mode}:${item.id}`;
+      keepIds.add(key);
+      this.labelWorld.set(key, item.world);
+      let btn = this.labelNodes.get(key);
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.tier = String(item.tier);
+        btn.addEventListener('pointerdown', e => e.stopPropagation());
+        btn.addEventListener('pointerup', e => e.stopPropagation());
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          const pt = this.labelWorld.get(key);
+          if (pt) this.flyTo(pt, false);
+        });
+
+        if (mode === 'pin') {
+          btn.className = 'street-pin';
+          btn.style.setProperty('--stem', `${item.stemHeightPx}px`);
+          btn.setAttribute('aria-label', `${item.name} — ${item.info}`);
+
+          const card = document.createElement('span');
+          card.className = 'pin-card';
+          const title = document.createElement('b');
+          title.className = 'pin-title';
+          title.textContent = item.shortName;
+          const meta = document.createElement('span');
+          meta.className = 'pin-meta';
+          meta.textContent = item.info;
+          card.append(title, meta);
+
+          const stem = document.createElement('i');
+          stem.className = 'pin-stem';
+
+          const base = document.createElement('i');
+          base.className = 'pin-base';
+          for (const cls of ['w1', 'w2', 'w3']) {
+            const wave = document.createElement('u');
+            wave.className = `pin-wave ${cls}`;
+            base.appendChild(wave);
+          }
+          const dot = document.createElement('s');
+          dot.className = 'pin-dot';
+          base.appendChild(dot);
+
+          btn.append(card, stem, base);
+        } else {
+          btn.className = 'street-map-label';
+          btn.title = `${item.name} · ${item.info}`;
+          const txt = document.createElement('span');
+          txt.className = 'map-label-text';
+          txt.textContent = item.name;
+          const meta = document.createElement('em');
+          meta.className = 'map-label-meta';
+          meta.textContent = item.info;
+          btn.append(txt, meta);
+        }
+
+        layer.appendChild(btn);
+        this.labelNodes.set(key, btn);
+      }
+
+      if (mode === 'pin') {
+        btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0)`;
+      } else {
+        btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -50%) rotate(${item.angleDeg}deg)`;
+      }
+    }
+
+    for (const [key, node] of this.labelNodes) {
+      if (!keepIds.has(key)) {
+        node.remove();
+        this.labelNodes.delete(key);
+        this.labelWorld.delete(key);
+      }
+    }
+  }
+
+  private placeInfoStep(force = false) {
+    const m = this.mounted, layer = this.placeLayer, popupEl = this.popupCard;
+    if (!m || !layer) return;
+    const mode = this.snap.placeInfo;
+
+    const w = m.host.clientWidth, h = m.host.clientHeight;
+    const tmp = new THREE.Vector3();
+    const project = (world: [number, number, number]) => {
+      tmp.set(world[0], world[2], world[1]).project(m.camera);
+      return {
+        x: (tmp.x * 0.5 + 0.5) * w,
+        y: (-tmp.y * 0.5 + 0.5) * h,
+        visible: tmp.z >= -1 && tmp.z <= 1,
+      };
+    };
+
+    // Update anchored popup card position if open
+    if (popupEl && this.activePopup && !this.snap.showcase && mode !== 'off') {
+      const entry = this.activePopup.entry;
+      const scr = project([entry.world[0], entry.world[1], entry.world[2] + 2.5]);
+      if (w <= 640) {
+        popupEl.dataset.dock = 'mobile';
+        popupEl.style.transform = '';
+      } else {
+        popupEl.dataset.dock = 'anchor';
+        const px = Math.max(170, Math.min(w - 170, scr.x));
+        const py = Math.max(96, Math.min(h - 46, scr.y));
+        popupEl.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -100%)`;
+      }
+    }
+
+    if (this.snap.showcase || mode === 'off') {
+      if (layer.style.display !== 'none') {
+        layer.style.display = 'none';
+        layer.replaceChildren();
+        this.placeNodes.clear();
+        this.placeSig = 'off';
+      }
+      return;
+    }
+
+    const c = m.controls.target, cp = m.camera.position;
+    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${this.activePopup?.entry.id ?? ''}`;
+    if (!force && sig === this.placeSig) return;
+    this.placeSig = sig;
+
+    if (layer.style.display === 'none') layer.style.display = '';
+    if (layer.dataset.mode !== mode) {
+      layer.dataset.mode = mode;
+      layer.replaceChildren();
+      this.placeNodes.clear();
+    }
+
+    const visible = selectVisiblePlaceLabels(
+      this.placeCatalog,
+      mode,
+      this.pxPerMetre(),
+      w,
+      h,
+      [c.x, c.z],
+      project,
+    );
+
+    const keepIds = new Set<string>();
+    for (const item of visible) {
+      const key = `${mode}:${item.entry.id}`;
+      keepIds.add(key);
+      let btn = this.placeNodes.get(key);
+      if (!btn) {
+        const entry = item.entry;
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.dataset.category = entry.category;
+        btn.dataset.tier = String(entry.tier);
+        btn.addEventListener('pointerdown', e => e.stopPropagation());
+        btn.addEventListener('pointerup', e => e.stopPropagation());
+        btn.addEventListener('mouseenter', () => {
+          const r = m.host.getBoundingClientRect();
+          const b = btn!.getBoundingClientRect();
+          this.showHoverBanner(entry, b.left - r.left + b.width / 2, b.top - r.top);
+        });
+        btn.addEventListener('mouseleave', () => this.hideHoverBanner());
+        btn.addEventListener('click', e => {
+          e.stopPropagation();
+          this.openPopup(entry);
+        });
+
+        if (mode === 'label') {
+          btn.className = 'place-label-card';
+          const head = document.createElement('span');
+          head.className = 'place-label-head';
+          const badge = document.createElement('i');
+          badge.className = 'place-label-badge';
+          badge.textContent = entry.badge;
+          const title = document.createElement('b');
+          title.className = 'place-label-name';
+          title.textContent = entry.name;
+          head.append(badge, title);
+
+          const addr = document.createElement('span');
+          addr.className = 'place-label-addr';
+          addr.textContent = entry.address;
+
+          const pointer = document.createElement('s');
+          pointer.className = 'place-label-stem';
+
+          btn.append(head, addr, pointer);
+        } else {
+          btn.className = 'place-marker-pill';
+          const dot = document.createElement('i');
+          dot.className = 'place-marker-dot';
+          const txt = document.createElement('span');
+          txt.className = 'place-marker-text';
+          txt.textContent = entry.name;
+          btn.append(dot, txt);
+        }
+
+        layer.appendChild(btn);
+        this.placeNodes.set(key, btn);
+      }
+
+      btn.classList.toggle('active', this.activePopup?.entry.id === item.entry.id);
+      btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
+    }
+
+    for (const [key, node] of this.placeNodes) {
+      if (!keepIds.has(key)) {
+        node.remove();
+        this.placeNodes.delete(key);
+      }
+    }
+  }
+
+  private showHoverBanner(entry: PlaceEntry, x: number, y: number, floor?: string) {
+    const banner = this.hoverBanner, m = this.mounted;
+    if (!banner || !m) return;
+    if (this.activePopup?.entry.id === entry.id) {
+      this.hideHoverBanner();
+      return;
+    }
+    const floorNum = floor ? Number(floor.split('#')[1]) + 1 : null;
+    const floorTag = floorNum && Number.isFinite(floorNum) ? ` · Tầng ${floorNum}` : '';
+    const sig = `${entry.id}|${floorTag}`;
+    if (this.hoveredPlaceId !== sig) {
+      this.hoveredPlaceId = sig;
+      banner.dataset.category = entry.category;
+      banner.replaceChildren();
+      const top = document.createElement('div');
+      top.className = 'hover-banner-top';
+      const badge = document.createElement('span');
+      badge.className = 'hover-banner-badge';
+      badge.textContent = entry.categoryLabel;
+      const hint = document.createElement('span');
+      hint.className = 'hover-banner-hint';
+      hint.textContent = 'Click xem chi tiết';
+      top.append(badge, hint);
+
+      const title = document.createElement('strong');
+      title.className = 'hover-banner-title';
+      title.textContent = entry.name;
+
+      const sub = document.createElement('span');
+      sub.className = 'hover-banner-sub';
+      sub.textContent = `${entry.address}${floorTag}`;
+
+      banner.append(top, title, sub);
+    }
+    const w = m.host.clientWidth;
+    const bx = Math.max(120, Math.min(w - 120, x));
+    const by = Math.max(58, y - 14);
+    banner.style.display = '';
+    banner.style.transform = `translate3d(${bx.toFixed(1)}px, ${by.toFixed(1)}px, 0) translate(-50%, -100%)`;
+  }
+
+  private hideHoverBanner() {
+    if (!this.hoverBanner) return;
+    this.hoverBanner.style.display = 'none';
+    this.hoveredPlaceId = null;
+  }
+
+  private openPopup(entry: PlaceEntry, floor?: string) {
+    this.hideHoverBanner();
+    this.activePopup = { entry, ...(floor ? { floor } : {}) };
+    this.renderPopupContent();
+    this.placeInfoStep(true);
+  }
+
+  closePopup() {
+    this.activePopup = null;
+    if (this.popupCard) {
+      this.popupCard.style.display = 'none';
+      this.popupCard.replaceChildren();
+    }
+    this.placeInfoStep(true);
+  }
+
+  private toggleBuildingLamps(buildingId: string) {
+    const prefix = `${buildingId}#`;
+    const list = this.floors.filter(f => f.startsWith(prefix));
+    if (!list.length) return;
+    const turnOn = !list.some(f => this.lit.has(f));
+    for (const f of list) this.setLamp(f, turnOn, false);
+    this.update({ lit: this.countLit() });
+  }
+
+  private renderPopupContent() {
+    const popupEl = this.popupCard, active = this.activePopup;
+    if (!popupEl || !active) return;
+    const { entry, floor } = active;
+    popupEl.dataset.category = entry.category;
+    popupEl.replaceChildren();
+
+    const header = document.createElement('div');
+    header.className = 'popup-header';
+    const badgeWrap = document.createElement('div');
+    badgeWrap.className = 'popup-badges';
+    const badge = document.createElement('span');
+    badge.className = 'popup-badge';
+    badge.textContent = entry.categoryLabel;
+    badgeWrap.appendChild(badge);
+    if (floor) {
+      const fNum = Number(floor.split('#')[1]) + 1;
+      if (Number.isFinite(fNum)) {
+        const fBadge = document.createElement('span');
+        fBadge.className = 'popup-floor-badge';
+        fBadge.textContent = `Tầng ${fNum}`;
+        badgeWrap.appendChild(fBadge);
+      }
+    }
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.className = 'popup-close';
+    closeBtn.title = 'Đóng (Esc)';
+    closeBtn.textContent = '✕';
+    closeBtn.addEventListener('click', () => this.closePopup());
+    header.append(badgeWrap, closeBtn);
+
+    const title = document.createElement('h3');
+    title.className = 'popup-title';
+    title.textContent = entry.name;
+
+    const addr = document.createElement('div');
+    addr.className = 'popup-addr';
+    addr.textContent = `📍 ${entry.address}`;
+
+    const desc = document.createElement('p');
+    desc.className = 'popup-desc';
+    desc.textContent = entry.description;
+
+    const grid = document.createElement('div');
+    grid.className = 'popup-metrics';
+    for (const m of entry.metrics) {
+      const cell = document.createElement('div');
+      cell.className = 'popup-metric';
+      const lbl = document.createElement('span');
+      lbl.textContent = m.label;
+      const val = document.createElement('strong');
+      val.textContent = m.value;
+      cell.append(lbl, val);
+      grid.appendChild(cell);
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'popup-actions';
+
+    const flyBtn = document.createElement('button');
+    flyBtn.type = 'button';
+    flyBtn.className = 'popup-btn primary';
+    flyBtn.textContent = '🎯 Bay tới';
+    flyBtn.addEventListener('click', () => {
+      this.flyTo(entry.ground, false);
+    });
+    actions.appendChild(flyBtn);
+
+    if (floor) {
+      const floorBtn = document.createElement('button');
+      floorBtn.type = 'button';
+      floorBtn.className = 'popup-btn';
+      const updateFloorText = () => {
+        const isLit = this.lit.has(floor);
+        floorBtn.textContent = isLit ? '💡 Tắt đèn tầng' : '💡 Bật đèn tầng';
+      };
+      updateFloorText();
+      floorBtn.addEventListener('click', () => {
+        this.setLamp(floor, !this.lit.has(floor));
+        updateFloorText();
+      });
+      actions.appendChild(floorBtn);
+    }
+
+    if (entry.buildingId) {
+      const bldId = entry.buildingId;
+      const allBtn = document.createElement('button');
+      allBtn.type = 'button';
+      allBtn.className = 'popup-btn';
+      allBtn.textContent = '✨ Đèn cả tòa';
+      allBtn.addEventListener('click', () => {
+        this.toggleBuildingLamps(bldId);
+        if (floor) this.renderPopupContent();
+      });
+      actions.appendChild(allBtn);
+    }
+
+    if (entry.showcaseId) {
+      const scId = entry.showcaseId;
+      const scBtn = document.createElement('button');
+      scBtn.type = 'button';
+      scBtn.className = 'popup-btn';
+      scBtn.textContent = '🧊 Xem đế 3D';
+      scBtn.addEventListener('click', () => {
+        this.setShowcase(scId);
+      });
+      actions.appendChild(scBtn);
+    }
+
+    popupEl.append(header, title, addr, desc, grid, actions);
+    popupEl.style.display = '';
+  }
+
   /** night: the street lamps come on, pulses run along the wires; the houses and the vehicles
       light as their settings say (auto: at night) */
   setNight(night: boolean) {
@@ -594,6 +1250,7 @@ export class CityView {
   key(e: KeyboardEvent): boolean {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const k = e.key.toLowerCase();
+    if (k === 'escape' && this.activePopup) { this.closePopup(); return true; }
     if (CityView.MOVE[k]) { this.held.add(k); return true; }
     switch (k) {
       case 'r': this.tilt(1); return true;
@@ -605,6 +1262,8 @@ export class CityView {
       case 'q': this.rotate(-1); return true;
       case 'e': this.rotate(1); return true;
       case 'n': case 't': this.toggleDayNight(); return true;
+      case 'l': this.cycleStreetLabels(); return true;
+      case 'i': this.cyclePlaceInfo(); return true;
       case ' ': this.toggleAll(); return true;
       default: return false;
     }
@@ -758,7 +1417,9 @@ export class CityView {
   private tileRange() {
     const m = this.mounted, far = this.snap.quality.viewDistance;
     if (!m || far <= 0) return 0;
-    return Math.max(far, (FRUSTUM / m.camera.zoom) * 0.95);
+    const el = Math.max(0.08, this.elevation());
+    const elScale = Math.min(2.4, Math.sin(ISO_EL) / Math.max(0.22, Math.sin(el)));
+    return Math.max(far, (FRUSTUM / m.camera.zoom) * 0.95 * elScale);
   }
 
   private nearTile(t: TileState) {
@@ -774,8 +1435,9 @@ export class CityView {
     const far = this.snap.quality.viewDistance, tFar = this.tileRange(), c = m.controls.target;
     const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
     for (const t of this.tiles) {
+      if (!near(t.tile.center, t.tile.radius, tFar) && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
       const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-      if (v?.group) v.group.visible = near(t.tile.center, t.tile.radius, tFar);
+      if (v?.group) v.group.visible = true;
     }
     const q = this.snap.quality, px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
@@ -1096,7 +1758,8 @@ export class CityView {
   get places(): { id: string; name: string; at: [number, number] }[] {
     return [
       { id: 'home', name: 'Ngã tư Thái Hà – Tây Sơn', at: [0, 0] },
-      { id: 'vpbank-lang-ha', name: 'Cuối Thái Hà – VPBank Láng Hạ', at: [235, -1185] },
+      { id: 'vpbank-lang-ha', name: 'VPBank Tower (89 Láng Hạ – Cuối Thái Hà)', at: [255, -1165] },
+      { id: 'rap-chieu-phim-quoc-gia', name: 'Rạp Chiếu phim Quốc gia (87 Láng Hạ)', at: [285, -1045] },
       { id: 'thai-thinh', name: 'Phố Thái Thịnh – Yên Lãng', at: [-260, -560] },
       { id: 'nga-tu-so', name: 'Ngã Tư Sở', at: [-785, -36] },
       { id: 'chua-boc', name: 'Chùa Bộc – Học viện Ngân hàng', at: [50, 560] },
@@ -1121,7 +1784,7 @@ export class CityView {
     if (exitShowcase && this.snap.showcase) this.setShowcase(null);
     const m = this.mounted;
     if (!m) return;
-    this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], 0, p[1]), t0: performance.now() };
+    this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], m.controls.target.y, p[1]), t0: performance.now() };
   }
 
   /** zoom in (k > 1) or out, round the middle of the view */
@@ -1132,10 +1795,37 @@ export class CityView {
     m.camera.updateProjectionMatrix();
   }
 
-  /** tilt up (+1) or down (3D only) */
+  /** tilt up (+1) or down (-1); automatically unlocks 3D mode if currently in 2D */
   tilt(dir: 1 | -1) {
-    if (!this.mounted || this.snap.mode !== '3d') return;
-    this.startTurn(this.azimuth(), Math.max(0.15, Math.min(1.45, this.elevation() + dir * 0.18)));
+    if (!this.mounted) return;
+    if (this.snap.mode !== '3d') {
+      this.update({ mode: '3d' });
+      this.applyMode('3d', false);
+    }
+    this.startTurn(this.azimuth(), Math.max(0.12, Math.min(1.45, this.elevation() + dir * 0.16)));
+  }
+
+  /** stabilize pan speed, zoom-to-cursor, and target elevation when the camera is tilted low */
+  private syncLowCamera() {
+    const m = this.mounted;
+    if (!m) return;
+    const el = Math.max(0.08, this.elevation());
+    // Scale pan speed when camera is low so vertical screen drag doesn't fling the target 8x across the ground plane
+    m.controls.panSpeed = Math.max(0.24, Math.min(1, Math.sin(el) / Math.sin(ISO_EL)));
+    if (el < 0.34) m.controls.zoomToCursor = false;
+
+    // When tilted low in 3D and zoomed in, gently lift target.y so buildings stay framed instead of staring at the asphalt
+    let wantY = 0;
+    if (this.snap.mode === '3d' && !this.activeShowcase && el < 0.38) {
+      const lowF = Math.max(0, Math.min(1, (0.38 - el) / 0.24));
+      const zoomF = Math.max(0, Math.min(1, (m.camera.zoom - 0.9) / 2.2));
+      wantY = lowF * zoomF * 12;
+    }
+    const dy = (wantY - m.controls.target.y) * 0.18;
+    if (Math.abs(dy) > 0.01) {
+      m.controls.target.y += dy;
+      m.camera.position.y += dy;
+    }
   }
 
   /** held keys move the view over the ground, about half a screen a second, the way it faces */

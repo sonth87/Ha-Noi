@@ -48,13 +48,26 @@ export interface Overrides {
 
 export function applyOverrides(city: City, o: Overrides): { city: City; unused: string[] } {
   const used = new Set<string>();
+  const bySource = new Map<SourceId, Building>(city.buildings.map(b => [b.source, b]));
+  const absorbed = new Set<SourceId>();
+  for (const [bSrc, ov] of Object.entries(o.buildings ?? {})) {
+    if (ov.remove || !ov.parts) continue;
+    const owner = bySource.get(bSrc);
+    if (!owner) continue;
+    const ownPartSources = new Set(owner.parts.map(p => p.source));
+    for (const pSrc of Object.keys(ov.parts)) {
+      if (pSrc !== bSrc && !ownPartSources.has(pSrc) && bySource.has(pSrc)) absorbed.add(pSrc);
+    }
+  }
+
   const buildings: Building[] = [];
   for (const b of city.buildings) {
+    if (absorbed.has(b.source)) continue;
     const ov = o.buildings?.[b.source];
     if (!ov) { buildings.push(b); continue; }
     used.add(`buildings:${b.source}`);
     if (ov.remove) continue;
-    buildings.push(applyBuilding(b, ov, used));
+    buildings.push(applyBuilding(b, ov, used, bySource));
   }
   const streets: Street[] = [];
   for (const s of city.streets) {
@@ -73,11 +86,20 @@ export function applyOverrides(city: City, o: Overrides): { city: City; unused: 
   return { city: { ...city, buildings, streets }, unused };
 }
 
-function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>): Building {
+function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>, bySource: Map<SourceId, Building>): Building {
   const kind = ov.kind ?? b.kind;
   let parts = b.parts, levelsFrom = b.levelsFrom;
   if (ov.parts) {
-    parts = parts.flatMap(p => {
+    const existingSources = new Set(parts.map(p => p.source));
+    const extraParts: BuildingPart[] = [];
+    for (const pSrc of Object.keys(ov.parts)) {
+      if (!existingSources.has(pSrc)) {
+        const sib = bySource.get(pSrc);
+        if (sib) extraParts.push(...sib.parts);
+      }
+    }
+    const allParts = [...parts, ...extraParts];
+    parts = allParts.flatMap(p => {
       const po = ov.parts![p.source];
       if (!po) return [p];
       used.add(`part:${b.source}:${p.source}`);
@@ -89,7 +111,7 @@ function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>): Bu
   const floors = ov.floors ?? (ov.levels !== undefined ? storeyHeights(kind, ov.levels) : undefined);
   if (floors && parts.length === 1) { parts = [{ ...parts[0]!, floors }]; levelsFrom = 'override'; }
   if (ov.facade) parts = parts.map(p => ({ ...p, facade: ov.facade! }));
-  let house = b.house;
+  let house = parts.length > 1 || ov.model ? undefined : b.house;
   if (house && (ov.house || floors)) {
     const input: HouseInput = { ...house.input, ...(floors ? { floors: floors.length - 1 } : {}), ...ov.house };
     house = { input, spec: resolveHouse(input).spec };

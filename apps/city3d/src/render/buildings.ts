@@ -33,7 +33,12 @@ export function cityFloors(city: City): string[] {
 
 /** the aircraft lights on the models, in three.js coordinates */
 export function beaconsOf(city: City): THREE.Vector3[] {
-  return city.buildings.filter(b => b.model === 'viet-tower').map(b => mastOf(b).light);
+  const out: THREE.Vector3[] = [];
+  for (const b of city.buildings) {
+    if (b.model === 'viet-tower') out.push(mastOf(b).light);
+    else if (b.model === 'vpbank-tower') out.push(...vpbankSpireOf(b).lights);
+  }
+  return out;
 }
 
 /** height of whatever other building stands at p (0 = open); buildings bucketed in a 25 m grid so
@@ -108,7 +113,9 @@ export function buildBuildings(B: Batch, city: City, list: readonly Building[], 
       const style: Style = glass ? 'curtain' : b.model === 'viet-tower' || (level >= 2 && b.kind === 'office') ? 'ribbon' : 'punched';
       windows(B, b, part, style, level, neighbour, !b.model && !b.house && part.id === b.id ? shopEdge(b) : -1);
     }
-    if (level === 3 && !b.house && !b.model && b.kind !== 'kiosk') roofTanks(B, b);
+    if (b.model === 'vpbank-tower') drawVpbankTower(B, b, level);
+    else if (b.model === 'national-cinema') drawNationalCinema(B, b, level);
+    else if (level === 3 && !b.house && !b.model && b.kind !== 'kiosk') roofTanks(B, b);
   }
 }
 
@@ -158,7 +165,7 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
         const cols = Math.max(1, Math.floor((L - 0.6) / 2.6)), cw = (L - 0.6) / cols, ww = Math.min(1.5, cw * 0.55);
         for (let c = 0; c < cols; c++) {
           const m = 0.3 + cw * (c + 0.5);
-          rect(lamp, m - ww / 2, m + ww / 2, z + h * 0.3, z + h * 0.8);
+          rect(lamp, m - ww / 2, m + ww / 2, z + 0.3 * h, z + 0.8 * h);
           const seed = hash(`${b.id}:${i}:${k}:${c}`);
           // every other window of an apartment block or school opens onto a small balcony
           if (balconies && k > 0 && L >= 6 && (c + k) % 2 === 0) {
@@ -198,4 +205,203 @@ function drawMast(B: Batch, b: Building) {
   for (const l of legs) B.line(at(z0, l), at(z0 + H, l), 'crease');
   for (let z = z0; z < z0 + H - 0.5; z += 1.3) legs.forEach((l, i) => { B.line(at(z, l), at(z + 1.3, legs[(i + 1) % 4]!), 'crease'); B.line(at(z, l), at(z, legs[(i + 1) % 4]!), 'crease'); });
   B.line(V(base[0], base[1], z0 + H), V(base[0], base[1], z0 + H + 0.6), 'crease');
+}
+
+function scaleRing(ring: readonly Vec2[], c: Vec2, s: number): Vec2[] {
+  return ring.map(([x, y]) => [c[0] + (x - c[0]) * s, c[1] + (y - c[1]) * s]);
+}
+
+function regPoly(c: Vec2, r: number, n: number, rot = 0): Vec2[] {
+  return Array.from({ length: n }, (_, i): Vec2 => [
+    c[0] + r * Math.cos(rot + (i * 2 * Math.PI) / n),
+    c[1] + r * Math.sin(rot + (i * 2 * Math.PI) / n),
+  ]);
+}
+
+function vpbankSpireOf(b: Building) {
+  const part = b.parts[0]!, R = part.footprint, c = centroid(R), top = partTop(part);
+  const p0 = R[0]!, p1 = R[1]!, L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
+  const ux = (p1[0] - p0[0]) / L, uy = (p1[1] - p0[1]) / L;
+  const zBase = top + 7.2, H = 9.5;
+  const m1: Vec2 = [c[0] - ux * 6.5, c[1] - uy * 6.5];
+  const m2: Vec2 = [c[0] + ux * 6.5, c[1] + uy * 6.5];
+  return {
+    c, top, zBase, H, m1, m2,
+    lights: [V(m1[0], m1[1], zBase + H + 0.5), V(m2[0], m2[1], zBase + H + 0.5)],
+  };
+}
+
+/** VPBank Tower (89 Láng Hạ): 29-storey glass office tower at the Thái Hà – Láng Hạ – Huỳnh Thúc Kháng
+    corner with a 4-storey banking podium belt, cantilevered corner entrance canopy, sky-lobby architectural
+    cornices, two-tier illuminated rooftop crown penthouse, helipad and twin communications spires. */
+function drawVpbankTower(B: Batch, b: Building, level: Detail) {
+  const part = b.parts[0]!;
+  const R = part.footprint, c = centroid(R), top = partTop(part);
+  const topLamp = floorId(b, part.floors.length);
+  const lobbyLamp = floorId(b, 1);
+
+  // 1. Banking podium belt courses (floors 2 and 4) & sky-lobby cornices
+  B.solid(scaleRing(R, c, 1.035), 8.2, 8.75, () => 'metal', 'metal', b.id);
+  B.solid(scaleRing(R, c, 1.055), 16.3, 17.15, () => 'metal', 'roof', b.id);
+  B.solid(scaleRing(R, c, 1.025), 41.4, 42.0, () => 'metal', 'metal', b.id);
+  B.solid(scaleRing(R, c, 1.025), 66.2, 66.8, () => 'metal', 'metal', b.id);
+  B.solid(scaleRing(R, c, 1.045), top - 0.6, top + 0.25, () => 'metal', 'roof', b.id);
+
+  // 2. Two-tier stepped glass rooftop crown penthouse + illuminated signage bands
+  const crown1 = scaleRing(R, c, 0.8);
+  const crown2 = scaleRing(R, c, 0.58);
+  B.solid(crown1, top + 0.25, top + 4.2, () => 'glass', 'roof', b.id);
+  B.solid(scaleRing(R, c, 0.82), top + 4.0, top + 4.45, () => 'metal', 'metal', b.id);
+  B.solid(crown2, top + 4.45, top + 7.2, () => 'glass', 'roof', b.id);
+
+  if (level >= 1) {
+    // Illuminated crown window bands around crown1 and crown2
+    const addBand = (ring: readonly Vec2[], z0: number, z1: number, lamp: string) => {
+      ring.forEach((p, i) => {
+        const q = ring[(i + 1) % ring.length]!, L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+        if (L < 1) return;
+        const ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L, nx = uy, ny = -ux, off = 0.08;
+        const nrm = new THREE.Vector3(nx, 0, ny);
+        const at = (t: number, z: number) => V(p[0] + ux * t + nx * off, p[1] + uy * t + ny * off, z);
+        const cols = Math.max(2, Math.round(L / 2.2)), pw = (L - 0.8) / cols;
+        for (let k = 0; k < cols; k++) {
+          const t0 = 0.4 + k * pw + 0.08, t1 = 0.4 + (k + 1) * pw - 0.08;
+          B.window(lamp, [at(t0, z0), at(t1, z0), at(t1, z1), at(t0, z1)], nrm);
+        }
+      });
+    };
+    addBand(crown1, top + 0.7, top + 3.6, topLamp);
+    addBand(crown2, top + 4.8, top + 6.7, topLamp);
+
+    // Grand entrance canopy & colonnade on the front facade (facing Láng Hạ / Thái Hà)
+    const f = b.front % R.length, p = R[f]!, q = R[(f + 1) % R.length]!;
+    const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    if (L > 8) {
+      const ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L;
+      // Ensure outward normal points away from centroid c
+      const mx = (p[0] + q[0]) / 2, my = (p[1] + q[1]) / 2;
+      const sign = (mx - c[0]) * uy - (my - c[1]) * ux >= 0 ? 1 : -1;
+      const nx = uy * sign, ny = -ux * sign;
+      const nrm = new THREE.Vector3(nx, 0, ny);
+      const quad = (t0: number, t1: number, s0: number, s1: number): Vec2[] => [
+        [p[0] + ux * t0 + nx * s0, p[1] + uy * t0 + ny * s0],
+        [p[0] + ux * t1 + nx * s0, p[1] + uy * t1 + ny * s0],
+        [p[0] + ux * t1 + nx * s1, p[1] + uy * t1 + ny * s1],
+        [p[0] + ux * t0 + nx * s1, p[1] + uy * t0 + ny * s1],
+      ];
+      const t0 = L * 0.2, t1 = L * 0.8;
+      // Stepped entrance podium & cantilevered marquee canopy
+      B.solid(quad(t0 - 1.2, t1 + 1.2, 0, 5.2), 0, 0.36, () => 'wall', 'walk', b.id);
+      B.solid(quad(t0, t1, 0, 4.6), 4.5, 5.25, () => 'metal', 'metal', b.id);
+      const fa0 = V(p[0] + ux * (t0 + 0.4) + nx * 4.68, p[1] + uy * (t0 + 0.4) + ny * 4.68, 4.65);
+      const fa1 = V(p[0] + ux * (t1 - 0.4) + nx * 4.68, p[1] + uy * (t1 - 0.4) + ny * 4.68, 4.65);
+      const fa2 = V(p[0] + ux * (t1 - 0.4) + nx * 4.68, p[1] + uy * (t1 - 0.4) + ny * 4.68, 5.12);
+      const fa3 = V(p[0] + ux * (t0 + 0.4) + nx * 4.68, p[1] + uy * (t0 + 0.4) + ny * 4.68, 5.12);
+      B.window(lobbyLamp, [fa0, fa1, fa2, fa3], nrm);
+      for (let k = 0; k < 4; k++) {
+        const tc = t0 + 0.8 + (k * (t1 - t0 - 1.6)) / 3;
+        B.solid(quad(tc - 0.3, tc + 0.3, 3.8, 4.4), 0.36, 4.5, () => 'metal', 'metal', b.id);
+      }
+    }
+  }
+
+  // 3. Rooftop octagonal helipad & twin communications spires
+  const { zBase, H, m1, m2 } = vpbankSpireOf(b);
+  B.solid(regPoly(c, 5.6, 8, Math.PI / 8), zBase, zBase + 0.45, () => 'metal', 'walk', b.id);
+  B.loop(regPoly(c, 4.6, 8, Math.PI / 8).map(([x, y]) => V(x, y, zBase + 0.48)), 'detail');
+  for (const m of [m1, m2]) {
+    B.solid(regPoly(m, 0.55, 6), zBase, zBase + 2.2, () => 'metal', 'metal', b.id);
+    B.line(V(m[0], m[1], zBase + 2.2), V(m[0], m[1], zBase + H), 'crease');
+  }
+}
+
+/** Trung tâm Chiếu phim Quốc gia (87 Láng Hạ): Iconic multi-hall cinema complex at the Thái Hà – Láng Hạ
+    crossroads featuring a cylindrical 3-storey glass rotunda lobby at the front L-courtyard, perimeter
+    colonnade, grand semicircular entrance steps, cantilevered curved marquee canopy, and stepped dome. */
+export function nationalCinemaRotundaCenter(b: Building): Vec2 {
+  const c0 = centroid(b.footprint);
+  return [c0[0] - 4, c0[1] - 34];
+}
+
+function drawNationalCinema(B: Batch, b: Building, level: Detail) {
+  const rc = nationalCinemaRotundaCenter(b);
+  // Forecourt plaza & grand semicircular entrance steps facing Thái Hà – Láng Hạ (-y / -x)
+  const plaza: Vec2[] = [
+    [rc[0] - 22, rc[1] - 20],
+    [rc[0] + 22, rc[1] - 20],
+    [rc[0] + 22, rc[1] + 18],
+    [rc[0] - 22, rc[1] + 18],
+  ];
+  B.solid(plaza, 0, 0.32, () => 'wall', 'walk', b.id);
+  for (let s = 0; s < 3; s++) {
+    B.solid(regPoly(rc, 19.6 - s * 0.9, 16), 0.32 + s * 0.22, 0.32 + (s + 1) * 0.22, () => 'wall', 'walk', b.id);
+  }
+
+  // Connecting gallery wings bridging the central rotunda to the East, North, and West cinema halls
+  B.solid([[rc[0] - 7, rc[1] + 8], [rc[0] + 9, rc[1] + 8], [rc[0] + 9, rc[1] + 20], [rc[0] - 7, rc[1] + 20]], 0.32, 13.5, () => 'wall', 'roof', b.id);
+  B.solid([[rc[0] + 8, rc[1] - 8], [rc[0] + 24, rc[1] - 8], [rc[0] + 24, rc[1] + 6], [rc[0] + 8, rc[1] + 6]], 0.32, 13.5, () => 'wall', 'roof', b.id);
+  B.solid([[rc[0] - 22, rc[1] - 2], [rc[0] - 8, rc[1] - 2], [rc[0] - 8, rc[1] + 12], [rc[0] - 22, rc[1] + 12]], 0.32, 13.5, () => 'wall', 'roof', b.id);
+
+  // Main 3-storey 16-sided glass rotunda lobby (z = 0.98 .. 14.4 m) + cornice ring
+  const rotundaRing = regPoly(rc, 15.8, 16);
+  B.solid(rotundaRing, 0.98, 14.2, () => 'glass', 'roof', b.id);
+  B.solid(regPoly(rc, 16.6, 16), 14.2, 15.0, () => 'metal', 'roof', b.id);
+
+  // Upper drum (4th level, z = 15.0 .. 18.8 m), stepped dome (5th level, z = 18.8 .. 22.0 m), cap & spire
+  const drumRing = regPoly(rc, 12.6, 16);
+  const domeRing = regPoly(rc, 9.4, 16);
+  const capRing = regPoly(rc, 5.8, 12);
+  B.solid(drumRing, 15.0, 18.8, () => 'glass', 'roof', b.id);
+  B.solid(regPoly(rc, 13.1, 16), 18.8, 19.3, () => 'metal', 'metal', b.id);
+  B.solid(domeRing, 19.3, 22.2, () => 'wall', 'roof', b.id);
+  B.solid(capRing, 22.2, 24.4, () => 'metal', 'metal', b.id);
+  B.line(V(rc[0], rc[1], 24.4), V(rc[0], rc[1], 28.5), 'crease');
+
+  // Perimeter colonnade of 12 structural columns around the rotunda + cantilevered entrance marquee canopy
+  for (let i = 0; i < 12; i++) {
+    const ang = (i * 2 * Math.PI) / 12;
+    const colCenter: Vec2 = [rc[0] + 16.9 * Math.cos(ang), rc[1] + 16.9 * Math.sin(ang)];
+    B.solid(regPoly(colCenter, 0.52, 8), 0.98, 14.2, () => 'wall', 'roof', b.id);
+  }
+
+  // Curved front marquee canopy facing the Thái Hà – Láng Hạ corner (angles -3π/4 .. -π/6)
+  const marqueePts: Vec2[] = [];
+  const innerPts: Vec2[] = [];
+  const N = 8;
+  for (let i = 0; i <= N; i++) {
+    const a = -0.88 * Math.PI + (i / N) * (0.72 * Math.PI);
+    marqueePts.push([rc[0] + 20.4 * Math.cos(a), rc[1] + 20.4 * Math.sin(a)]);
+    innerPts.unshift([rc[0] + 15.5 * Math.cos(a), rc[1] + 15.5 * Math.sin(a)]);
+  }
+  B.solid([...marqueePts, ...innerPts], 4.8, 5.65, () => 'metal', 'metal', b.id);
+
+  if (level === 0) return;
+
+  // Illuminated curved glass panes on all 3 storeys of the rotunda + upper drum + marquee fascia
+  const addCylWindows = (ring: readonly Vec2[], z0: number, z1: number, lamp: string) => {
+    ring.forEach((p, i) => {
+      const q = ring[(i + 1) % ring.length]!, L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (L < 0.8) return;
+      const ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L, nx = uy, ny = -ux, off = 0.08;
+      const nrm = new THREE.Vector3(nx, 0, ny);
+      const at = (t: number, z: number) => V(p[0] + ux * t + nx * off, p[1] + uy * t + ny * off, z);
+      B.window(lamp, [at(0.25, z0), at(L - 0.25, z0), at(L - 0.25, z1), at(0.25, z1)], nrm);
+    });
+  };
+  for (let f = 0; f < 3; f++) {
+    const z0 = 1.2 + f * 4.2 + 0.35, z1 = 1.2 + (f + 1) * 4.2 - 0.35;
+    addCylWindows(rotundaRing, z0, z1, floorId(b, f + 1));
+  }
+  addCylWindows(drumRing, 15.4, 18.3, floorId(b, 4));
+  addCylWindows(domeRing, 19.7, 21.7, floorId(b, 5));
+
+  // Lit cinema marquee sign band along the front canopy edge
+  const marqueeLamp = floorId(b, 1);
+  for (let i = 0; i < marqueePts.length - 1; i++) {
+    const p = marqueePts[i]!, q = marqueePts[i + 1]!, L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+    const ux = (q[0] - p[0]) / L, uy = (q[1] - p[1]) / L, nx = uy, ny = -ux, off = 0.08;
+    const nrm = new THREE.Vector3(nx, 0, ny);
+    const at = (t: number, z: number) => V(p[0] + ux * t + nx * off, p[1] + uy * t + ny * off, z);
+    B.window(marqueeLamp, [at(0.15, 4.92), at(L - 0.15, 4.92), at(L - 0.15, 5.52), at(0.15, 5.52)], nrm);
+  }
 }

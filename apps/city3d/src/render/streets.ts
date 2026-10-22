@@ -99,7 +99,23 @@ export function buildAreas(B: Batch, city: City) {
   const SURF: Partial<Record<Area['kind'], [Surface, number]>> = {
     park: ['grass', 0.02], grass: ['grass', 0.03], plaza: ['plaza', 0.03], 'traffic-island': ['plaza', 0.12], pitch: ['pitch', 0.04], water: ['water', 0.04], pool: ['water', 0.05],
   };
-  for (const a of city.areas) { const k = SURF[a.kind]; if (k) B.flat(k[0], a.polygon, k[1], 'detail'); }
+  for (const a of city.areas) {
+    const k = SURF[a.kind];
+    if (k) B.flat(k[0], a.polygon, k[1], 'detail', a.name || a.subtype ? a.id : undefined);
+  }
+  for (const f of city.features) {
+    if (f.kind !== 'monument' && f.kind !== 'heritage') continue;
+    const [x, y] = f.at;
+    const oct = (r: number): Vec2[] => Array.from({ length: 8 }, (_, i) => [x + r * Math.cos((i * Math.PI) / 4), y + r * Math.sin((i * Math.PI) / 4)]);
+    B.solid(oct(4.8), 0, 0.55, () => 'wall', 'walk', f.id);
+    B.solid(oct(3.2), 0.55, 1.4, () => 'wall', 'roof', f.id);
+    if (f.kind === 'monument') {
+      B.solid(oct(1.5), 1.4, 5.2, () => 'wall', 'roof', f.id);
+      B.solid(oct(0.85), 5.2, 8.6, () => 'metal', 'metal', f.id);
+    } else {
+      B.solid(oct(2.2), 1.4, 2.8, () => 'wall', 'roof', f.id);
+    }
+  }
 }
 
 // ---------- junctions ----------
