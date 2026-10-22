@@ -28,42 +28,67 @@ export interface FurnitureCell {
   pools: THREE.BufferGeometry;
 }
 
+export interface FurnitureBucket {
+  id: string;
+  center: [number, number];
+  props: Prop[];
+  wires: { a: Prop; b: Prop; strands: number }[];
+}
+
 export const STREET_LAMPS = 'street/lamps';
 export const signalLamp = (group: 'x' | 'y', light: 'stop' | 'wait' | 'go') => `signal/${group}/${light}`;
 
 const POLE_H = 8.5;
 
-export function buildFurniture(f: Furniture, size = 64): FurnitureCell[] {
+export function furnitureBuckets(f: Furniture, size = 64): FurnitureBucket[] {
   const cellOf = (p: Vec2) => `${Math.floor(p[0] / size)},${Math.floor(p[1] / size)}`;
   const byId = new Map(f.props.map(p => [p.id, p]));
-  const cells = new Map<string, { poles: Batch; fixtures: Batch; trees: Batch; simple: Batch; wires: number[]; pools: number[] }>();
-  const cell = (p: Vec2) => { const k = cellOf(p); let c = cells.get(k); if (!c) cells.set(k, (c = { poles: new Batch(), fixtures: new Batch(), trees: new Batch(), simple: new Batch(), wires: [], pools: [] })); return c; };
-
-  for (const p of f.props) {
-    const c = cell(p.at);
-    switch (p.kind) {
-      case 'pole': pole(c.poles, p); break;
-      case 'lamp': lampPost(c.fixtures, p, c.pools); break;
-      case 'lamp-on-pole': lampHead(c.poles, p, p.z0 + 6.6, 1.3, c.pools); break;
-      case 'signal': signal(c.fixtures, p); break;
-      case 'tree': tree(c.trees, p, true); tree(c.simple, p, false); break;
-      case 'park-lamp': parkLamp(c.fixtures, p, c.pools); break;
+  const cells = new Map<string, FurnitureBucket>();
+  const get = (p: Vec2) => {
+    const k = cellOf(p);
+    let c = cells.get(k);
+    if (!c) {
+      const [i, j] = k.split(',').map(Number) as [number, number];
+      cells.set(k, (c = { id: k, center: [(i + 0.5) * size, (j + 0.5) * size], props: [], wires: [] }));
     }
-  }
+    return c;
+  };
+  for (const p of f.props) get(p.at).props.push(p);
   for (const w of f.wires) {
     const a = byId.get(w.from), b = byId.get(w.to);
-    if (a && b) wire(cell(a.at).wires, a, b, w.strands);
+    if (a && b) get(a.at).wires.push({ a, b, strands: w.strands });
   }
+  return [...cells.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+}
 
-  return [...cells].map(([k, c]) => {
-    const [i, j] = k.split(',').map(Number) as [number, number];
-    return {
-      id: k, center: [(i + 0.5) * size, (j + 0.5) * size] as [number, number],
-      poles: layerOf(c.poles), fixtures: layerOf(c.fixtures), trees: layerOf(c.trees), simpleTrees: layerOf(c.simple, false),
-      wires: new LineSegmentsGeometry().setPositions(c.wires.length ? c.wires : [0, 0, 0, 0, 0, 0]),
-      pools: poolGeometry(c.pools),
-    };
-  }).sort((a, b) => (a.id < b.id ? -1 : 1));
+export function buildFurnitureCell(b: FurnitureBucket): FurnitureCell {
+  const poles = new Batch(), fixtures = new Batch(), trees = new Batch(), simple = new Batch();
+  const wires: number[] = [], pools: number[] = [];
+  for (const p of b.props) {
+    switch (p.kind) {
+      case 'pole': pole(poles, p); break;
+      case 'lamp': lampPost(fixtures, p, pools); break;
+      case 'lamp-on-pole': lampHead(poles, p, p.z0 + 6.6, 1.3, pools); break;
+      case 'signal': signal(fixtures, p); break;
+      case 'tree': tree(trees, p, true); tree(simple, p, false); break;
+      case 'park-lamp': parkLamp(fixtures, p, pools); break;
+    }
+  }
+  for (const w of b.wires) wire(wires, w.a, w.b, w.strands);
+  return {
+    id: b.id,
+    center: b.center,
+    poles: layerOf(poles),
+    fixtures: layerOf(fixtures),
+    trees: layerOf(trees),
+    simpleTrees: layerOf(simple, false),
+    wires: new LineSegmentsGeometry().setPositions(wires.length ? wires : [0, 0, 0, 0, 0, 0]),
+    pools: poolGeometry(pools),
+  };
+}
+
+export function buildFurniture(f: Furniture, size = 64): FurnitureCell[] {
+  return furnitureBuckets(f, size).map(buildFurnitureCell);
 }
 
 /** a box of half sizes (along heading, across, height) at a point, turned to the heading */

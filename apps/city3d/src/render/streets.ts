@@ -74,10 +74,25 @@ export function buildStreets(B: Batch, city: City) {
     edge (flat). In Hà Nội the shop fronts open straight onto the sidewalk. */
 export function buildForecourts(B: Batch, city: City) {
   const streets = city.streets.filter(s => s.layer === 0 && s.kind !== 'footway' && s.kind !== 'steps');
+  const G = 64, grid = new Map<string, City['streets']>();
+  for (const s of streets) {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of s.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    const pad = s.width / 2 + 16;
+    for (let i = Math.floor((x0 - pad) / G); i <= Math.floor((x1 + pad) / G); i++) {
+      for (let j = Math.floor((y0 - pad) / G); j <= Math.floor((y1 + pad) / G); j++) {
+        const k = `${i},${j}`, l = grid.get(k);
+        if (l) l.push(s); else grid.set(k, [s]);
+      }
+    }
+  }
   for (const b of city.buildings) {
-    const f = frontStreet(b.footprint, b.front, streets);
+    const R = b.footprint, p = R[b.front]!, q = R[(b.front + 1) % R.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    const near = grid.get(`${Math.floor(mid[0] / G)},${Math.floor(mid[1] / G)}`);
+    if (!near) continue;
+    const f = frontStreet(R, b.front, near);
     if (!f || f.gap < 0.3 || f.gap > 15) continue;
-    const S = f.street, R = b.footprint, p = R[b.front]!, q = R[(b.front + 1) % R.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    const S = f.street;
     // which side of the street the building is on: right is (−dy, dx) along the path
     const i = nearestSeg(S.path, mid), a = S.path[i - 1]!, bb = S.path[i]!;
     const right = (-(bb[1] - a[1])) * (mid[0] - a[0]) + (bb[0] - a[0]) * (mid[1] - a[1]) > 0;

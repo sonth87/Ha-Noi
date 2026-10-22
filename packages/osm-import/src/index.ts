@@ -10,9 +10,15 @@ export { projector, type Frame } from './frame';
 
 export const AREA_CONFIGS: Readonly<Record<string, AreaConfig>> = { [NGA_TU_THAI_HA.area]: NGA_TU_THAI_HA };
 
+const cityCache = new Map<string, { city: City; report: ImportReport }>();
+
 /** the city of an area, ready to draw */
 export function loadCity(areaId: string): { city: City; report: ImportReport } {
+  const cached = cityCache.get(areaId);
+  if (cached) return cached;
   const cfg = AREA_CONFIGS[areaId];
   if (!cfg) throw new Error(`no import settings for area "${areaId}"`);
-  return importArea(loadArea(areaId).data, cfg, ATTRIBUTION);
+  const built = importArea(loadArea(areaId).data, cfg, ATTRIBUTION);
+  cityCache.set(areaId, built);
+  return built;
 }

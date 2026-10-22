@@ -68,19 +68,66 @@ const EPS = 0.05;
 const same = (a: Vec2, b: Vec2) => dist(a, b) < EPS;
 const isRoad = (s: Street) => s.kind !== 'footway' && s.kind !== 'steps';
 
+function pointIndex<T>(items: readonly T[], getPt: (item: T) => Vec2) {
+  const grid = new Map<string, T[]>();
+  for (const item of items) {
+    const p = getPt(item);
+    const gx = Math.floor(p[0]), gy = Math.floor(p[1]);
+    const k = `${gx},${gy}`;
+    const list = grid.get(k);
+    if (list) list.push(item);
+    else grid.set(k, [item]);
+  }
+  return {
+    near(p: Vec2): T[] {
+      const gx = Math.floor(p[0]), gy = Math.floor(p[1]);
+      const out: T[] = [];
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const cell = grid.get(`${gx + dx},${gy + dy}`);
+          if (cell) for (const item of cell) if (same(getPt(item), p)) out.push(item);
+        }
+      }
+      return out;
+    },
+    find(p: Vec2): T | undefined {
+      const gx = Math.floor(p[0]), gy = Math.floor(p[1]);
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const cell = grid.get(`${gx + dx},${gy + dy}`);
+          if (cell) for (const item of cell) if (same(getPt(item), p)) return item;
+        }
+      }
+      return undefined;
+    },
+    some(p: Vec2): boolean {
+      return this.find(p) !== undefined;
+    },
+  };
+}
+
+const networkCache = new WeakMap<City, Network>();
+
 export function roadNetwork(city: City): Network {
-  const junctions = city.junctions.map(j => j.at);
-  const atJunction = (p: Vec2) => junctions.some(j => same(j, p));
+  const cached = networkCache.get(city);
+  if (cached) return cached;
+
+  const jIndex = pointIndex(city.junctions, j => j.at);
+  const atJunction = (p: Vec2) => jIndex.some(p);
   const roads = joinPieces(city.streets.filter(isRoad), atJunction).map(r => smooth(r, atJunction));
-  const nodes: NetNode[] = [];
-  for (const j of city.junctions) {
-    const arms: Arm[] = [];
-    for (const r of roads) {
-      let acc = 0;
-      for (let i = 0; i < r.path.length; i++) {
-        if (i > 0) acc += dist(r.path[i - 1]!, r.path[i]!);
-        if (!same(r.path[i]!, j.at)) continue;
-        const L = polylineLength(r.path);
+
+  const armsByJunction = new Map<string, Arm[]>();
+  for (const j of city.junctions) armsByJunction.set(j.id, []);
+
+  for (const r of roads) {
+    const L = polylineLength(r.path);
+    let acc = 0;
+    for (let i = 0; i < r.path.length; i++) {
+      if (i > 0) acc += dist(r.path[i - 1]!, r.path[i]!);
+      const js = jIndex.near(r.path[i]!);
+      if (!js.length) continue;
+      for (const j of js) {
+        const arms = armsByJunction.get(j.id)!;
         const arm = (dir: 1 | -1) => {
           const q = r.path[i + dir]!, d = dist(q, j.at) || 1, u: Vec2 = [(q[0] - j.at[0]) / d, (q[1] - j.at[1]) / d];
           const fwd = dir === 1;
@@ -90,11 +137,18 @@ export function roadNetwork(city: City): Network {
         if (i > 0 && acc > 0.5) arm(-1);
       }
     }
+  }
+
+  const nodes: NetNode[] = [];
+  for (const j of city.junctions) {
+    const arms = armsByJunction.get(j.id)!;
     // around the node in order of angle
     arms.sort((a, b) => Math.atan2(a.u[1], a.u[0]) - Math.atan2(b.u[1], b.u[0]));
     if (arms.length >= 2) nodes.push({ id: j.id, at: j.at, arms, signals: j.signals });
   }
-  return { roads, nodes, runs: chainRuns(roads, nodes, true, 0.61), routes: chainRuns(roads, nodes, false, 0.35) };
+  const net: Network = { roads, nodes, runs: chainRuns(roads, nodes, true, 0.61), routes: chainRuns(roads, nodes, false, 0.35) };
+  networkCache.set(city, net);
+  return net;
 }
 
 /** roads chained straight through junctions into runs (turning less than `maxTurn` rad; keeping
@@ -102,17 +156,18 @@ export function roadNetwork(city: City): Network {
 function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: number): Run[] {
   const ways = (r: Road) => (r.oneway ? r.lanes : Math.max(1, Math.floor(r.lanes / 2)));
   const fits = (a: Road, b: Road) => (!named || a.name === b.name) && a.kind === b.kind && a.oneway === b.oneway && a.layer === b.layer && (named || (ways(a) > 1) === (ways(b) > 1));
-  const byId = new Map(roads.map(r => [r.id, r])), used = new Set<string>(), out: Run[] = [];
+  const byId = new Map(roads.map(r => [r.id, r])), roadLen = new Map(roads.map(r => [r.id, polylineLength(r.path)])), used = new Set<string>(), out: Run[] = [];
+  const nodeIndex = pointIndex(nodes, n => n.at);
   /** the road that goes straight on from `road` (entered along `dirIn`) at its end p */
   const next = (road: Road, p: Vec2, dirIn: Vec2): { road: Road; reversed: boolean } | null => {
-    const node = nodes.find(n => same(n.at, p));
+    const node = nodeIndex.find(p);
     if (!node) return null;
     let best: { road: Road; reversed: boolean; score: number } | null = null;
     for (const a of node.arms) {
       const r = byId.get(a.road)!;
       if (r === road || used.has(r.id) || !fits(road, r)) continue;
       // the arm must leave the node at an end of its road; a one-way road must leave forward
-      const L = polylineLength(r.path), fromStart = a.at < 0.5 && a.dir === 1, fromEnd = a.at > L - 0.5 && a.dir === -1;
+      const L = roadLen.get(r.id)!, fromStart = a.at < 0.5 && a.dir === 1, fromEnd = a.at > L - 0.5 && a.dir === -1;
       if (!fromStart && !(fromEnd && !r.oneway)) continue;
       const turn = Math.acos(Math.max(-1, Math.min(1, a.u[0] * dirIn[0] + a.u[1] * dirIn[1])));
       const score = turn + Math.abs(r.lanes - road.lanes) * 0.05;
@@ -122,7 +177,7 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
   };
   /** the road that arrives straight into the start of `path` (travelled forward into it) */
   const prev = (road: Road, path: Vec2[]): { road: Road; reversed: boolean } | null => {
-    const p = path[0]!, node = nodes.find(n => same(n.at, p));
+    const p = path[0]!, node = nodeIndex.find(p);
     if (!node) return null;
     const d = dist(path[0]!, path[1]!) || 1, out: Vec2 = [(path[1]![0] - p[0]) / d, (path[1]![1] - p[1]) / d];
     let best: { road: Road; reversed: boolean; score: number } | null = null;
@@ -130,7 +185,7 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
       const r = byId.get(a.road)!;
       if (r === road || used.has(r.id) || !fits(road, r)) continue;
       // arriving: its path ends here (travelled forward), or a two-way road starting here (turned round)
-      const L = polylineLength(r.path), atEnd = a.at > L - 0.5 && a.dir === -1, atStart = a.at < 0.5 && a.dir === 1;
+      const L = roadLen.get(r.id)!, atEnd = a.at > L - 0.5 && a.dir === -1, atStart = a.at < 0.5 && a.dir === 1;
       if (!atEnd && !(atStart && !r.oneway)) continue;
       const turn = Math.acos(Math.max(-1, Math.min(1, -a.u[0] * out[0] - a.u[1] * out[1])));
       const score = turn + Math.abs(r.lanes - road.lanes) * 0.05;
@@ -161,7 +216,7 @@ function chainRuns(roads: Road[], nodes: NetNode[], named: boolean, maxTurn: num
     }
     const passes: Run['nodes'] = [];
     let s = 0;
-    path.forEach((q, i) => { if (i > 0) s += dist(path[i - 1]!, q); const n = nodes.find(m => same(m.at, q)); if (n) passes.push({ node: n.id, at: s }); });
+    path.forEach((q, i) => { if (i > 0) s += dist(path[i - 1]!, q); const n = nodeIndex.find(q); if (n) passes.push({ node: n.id, at: s }); });
     out.push({ id: `${named ? 'run' : 'route'}-${start.id}`, name: start.name, kind: start.kind, oneway: start.oneway, layer: start.layer, path, parts, nodes: passes });
   }
   return out;
@@ -172,8 +227,26 @@ function joinPieces(pieces: Street[], atJunction: (p: Vec2) => boolean): Road[] 
   const left = new Set(pieces);
   const ends = (s: Street) => [s.path[0]!, s.path[s.path.length - 1]!] as const;
   const fits = (a: Street, b: Street) => a.kind === b.kind && a.name === b.name && a.oneway === b.oneway && a.layer === b.layer && Math.abs(a.width - b.width) < 0.5;
-  /** how many pieces end at p */
-  const meeting = (p: Vec2) => pieces.filter(s => ends(s).some(e => same(e, p))).length;
+  const endGrid = new Map<string, { s: Street; idx: number }[]>();
+  pieces.forEach((s, idx) => {
+    for (const e of ends(s)) {
+      const k = `${Math.floor(e[0])},${Math.floor(e[1])}`;
+      const list = endGrid.get(k);
+      if (list) list.push({ s, idx });
+      else endGrid.set(k, [{ s, idx }]);
+    }
+  });
+  const piecesAt = (p: Vec2): Street[] => {
+    const gx = Math.floor(p[0]), gy = Math.floor(p[1]);
+    const hits = new Map<Street, number>();
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const cell = endGrid.get(`${gx + dx},${gy + dy}`);
+        if (cell) for (const { s, idx } of cell) if (!hits.has(s) && ends(s).some(e => same(e, p))) hits.set(s, idx);
+      }
+    }
+    return [...hits.entries()].sort((a, b) => a[1] - b[1]).map(([s]) => s);
+  };
   const out: Road[] = [];
   for (const start of pieces) {
     if (!left.has(start)) continue;
@@ -183,8 +256,9 @@ function joinPieces(pieces: Street[], atJunction: (p: Vec2) => boolean): Road[] 
     for (const forward of [true, false]) {
       for (;;) {
         const tip = forward ? path[path.length - 1]! : path[0]!;
-        if (atJunction(tip) || meeting(tip) !== 2) break;
-        const next = [...left].find(s => fits(start, s) && ends(s).some(e => same(e, tip)));
+        const atTip = piecesAt(tip);
+        if (atJunction(tip) || atTip.length !== 2) break;
+        const next = atTip.find(s => left.has(s) && fits(start, s));
         if (!next) break;
         const [a, b] = ends(next);
         // a one-way piece must keep the direction of travel; a two-way one may be turned round

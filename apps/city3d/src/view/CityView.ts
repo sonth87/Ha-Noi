@@ -27,7 +27,7 @@ import {
   type City, type Lane, type Signals, type Track, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { beaconsOf, buildBase, buildTile, cityFloors, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
-import { STREET_LAMPS, buildFurniture, signalLamp, type FurnitureCell } from '@render/furniture';
+import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
@@ -104,7 +104,7 @@ const SHELL_VERT = `uniform vec2 res;
   }`;
 
 interface TileState { tile: Tile; layers: Map<Detail, { layer: Layer; group: THREE.Group | null }>; shown: Detail | -1 }
-interface CellState { cell: FurnitureCell; groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null; wires: LineSegments2 | null; pulses: LineSegments2 | null; pools: THREE.Mesh | null }
+interface CellState { bucket: FurnitureBucket; cell: FurnitureCell | null; groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null; wires: LineSegments2 | null; pulses: LineSegments2 | null; pools: THREE.Mesh | null }
 interface Fleet { model: VehicleModel; meshes: THREE.InstancedMesh[]; list: Vehicle[] }
 interface Train { track: Track; cars: THREE.Group[]; doors: THREE.MeshBasicMaterial; stopping: boolean }
 
@@ -193,8 +193,7 @@ export class CityView {
     this.floors = cityFloors(city);
     this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const }));
     const net = roadNetwork(city);
-    this.cells = buildFurniture(streetFurniture(city, net)).map(cell => ({ cell, groups: null, wires: null, pulses: null, pools: null }));
-    for (const c of this.cells) for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) this.layers.add(l);
+    this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null }));
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
@@ -284,15 +283,7 @@ export class CityView {
     mapGroup.add(baseGroup);
     // a remount starts from fresh meshes; the built layers are kept
     for (const t of this.tiles) { for (const v of t.layers.values()) v.group = null; t.shown = -1; }
-    for (const c of this.cells) {
-      c.groups = { poles: this.group(c.cell.poles), fixtures: this.group(c.cell.fixtures), trees: this.group(c.cell.trees), simple: this.group(c.cell.simpleTrees) };
-      c.wires = new LineSegments2(c.cell.wires, this.mats.wire);
-      c.pulses = new LineSegments2(c.cell.wires, this.mats.pulse);
-      c.pulses.computeLineDistances();
-      c.pools = new THREE.Mesh(c.cell.pools, this.mats.pool);
-      c.pools.userData.night = 'pool';
-      mapGroup.add(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple, c.wires, c.pulses, c.pools);
-    }
+    for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const fleets = new Map<VehicleKind, Fleet>();
     for (const kind of KINDS) {
@@ -551,12 +542,13 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // nearby tiles at L1 and the rest at L0 at once, so every building is there from the first frame
+    // nearby tiles at L1 right away; distant tiles stream in on demand or during idle frames
     const first = Math.min(1, this.wantedDetail()) as Detail;
-    for (const t of this.tiles) this.show(t, this.ensure(t, this.nearTile(t) ? first : 0));
+    for (const t of this.tiles) if (this.nearTile(t)) this.show(t, this.ensure(t, first));
     this.houseLights(false);
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
+    this.distanceStep(true);
     this.nightThings();
     if (this.snap.showcase) this.mountShowcase(this.snap.showcase);
     else this.update({ stats: this.shownStats() });
@@ -1429,7 +1421,30 @@ export class CityView {
     return far <= 0 || Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
   }
 
-  private distanceStep() {
+  private ensureCell(s: CellState) {
+    if (!s.cell) {
+      s.cell = buildFurnitureCell(s.bucket);
+      for (const l of [s.cell.poles, s.cell.fixtures, s.cell.trees, s.cell.simpleTrees]) this.layers.add(l);
+    }
+    if (!s.groups && this.mounted) {
+      const cell = s.cell;
+      s.groups = {
+        poles: this.group(cell.poles),
+        fixtures: this.group(cell.fixtures),
+        trees: this.group(cell.trees),
+        simple: this.group(cell.simpleTrees),
+      };
+      s.wires = new LineSegments2(cell.wires, this.mats.wire);
+      s.pulses = new LineSegments2(cell.wires, this.mats.pulse);
+      s.pulses.computeLineDistances();
+      s.pools = new THREE.Mesh(cell.pools, this.mats.pool);
+      s.pools.userData.night = 'pool';
+      this.mounted.mapGroup.add(s.groups.poles, s.groups.fixtures, s.groups.trees, s.groups.simple, s.wires, s.pulses, s.pools);
+      for (const l of [cell.poles, cell.fixtures, cell.trees, cell.simpleTrees]) this.paintLayer(l);
+    }
+  }
+
+  private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
     const far = this.snap.quality.viewDistance, tFar = this.tileRange(), c = m.controls.target;
@@ -1441,8 +1456,16 @@ export class CityView {
     }
     const q = this.snap.quality, px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
+    const needCell = showFurn || trees !== 'off';
+    let built = 0;
+    const maxBuild = initial ? Infinity : 6;
     for (const s of this.cells) {
-      const on = near(s.cell.center, CELL_R), g = s.groups;
+      const on = near(s.bucket.center, CELL_R);
+      if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
+        this.ensureCell(s);
+        built++;
+      }
+      const g = s.groups;
       if (g) {
         g.fixtures.visible = on && showFurn;
         g.poles.visible = on && showFurn && q.wires;
@@ -1517,6 +1540,15 @@ export class CityView {
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
         this.show(waiting[i]!, this.ensure(waiting[i]!, want));
       }
+    } else if (!busy) {
+      // Pre-warm L0 for distant tiles during idle frames so zooming out later is instant
+      let prewarm = 0;
+      for (const t of this.tiles) {
+        if (t.shown < 0) {
+          this.show(t, this.ensure(t, 0));
+          if (++prewarm >= 3) break;
+        }
+      }
     }
     const pending = busy ? waiting.length : Math.max(0, waiting.length - (want <= 1 ? 3 : 2));
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
@@ -1527,7 +1559,7 @@ export class CityView {
     const s = { ...this.base.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
     for (const t of this.tiles) { const l = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.layer : undefined; if (l) add(l); }
-    for (const c of this.cells) { add(c.cell.fixtures); if (this.snap.quality.wires) add(c.cell.poles); if (this.snap.quality.trees === 'full') add(c.cell.trees); }
+    for (const c of this.cells) if (c.cell) { add(c.cell.fixtures); if (this.snap.quality.wires) add(c.cell.poles); if (this.snap.quality.trees === 'full') add(c.cell.trees); }
     return s;
   }
 

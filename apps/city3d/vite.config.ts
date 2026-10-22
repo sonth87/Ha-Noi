@@ -19,6 +19,18 @@ export default defineConfig({
     },
   },
   server: { port: 5190 },
+  build: {
+    chunkSizeWarningLimit: 4500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('nga-tu-thai-ha.osm.json') || id.includes('packages/osm-data')) return 'osm-data';
+          if (id.includes('node_modules/three')) return 'three';
+          if (id.includes('node_modules/react')) return 'vendor';
+        },
+      },
+    },
+  },
   test: { include: ['src/**/*.test.ts'], environment: 'node' },
 });
 
