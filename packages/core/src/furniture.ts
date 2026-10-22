@@ -92,6 +92,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     for (const side of [1, -1] as const) {
       const taken: number[] = [];
       const shape = (s: number) => { const h = here(s), w = side > 0 ? h.right : h.left; return { r: h.r, w, kerb: side * (h.r.width / 2 + 0.4), mid: side * (h.r.width / 2 + w / 2) }; };
+      const nearMetroStation = (p: Vec2) => city.stations.some(st => st.kind === 'metro' && dist(p, st.at) < 48);
       // poles and their wires, on one side only
       if (side === poleSide) {
         let prev: Prop | null = null;
@@ -101,7 +102,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
           const k = shape(s);
           if (k.w < 1.5) continue;
           const { p, h } = at(s, k.kerb);
-          if (onRoad(p)) continue;
+          if (onRoad(p) || nearMetroStation(p)) continue;
           const pole: Prop = { id: `p-${run.id}-${side}-${Math.round(s)}`, kind: 'pole', at: p, z0: WALK_Z, heading: h - side * Math.PI / 2, road: k.r.id };
           props.push(pole); taken.push(s);
           if (!MAIN.has(run.kind)) props.push({ ...pole, id: `l-${pole.id}`, kind: 'lamp-on-pole' });
@@ -116,7 +117,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
         const k = shape(s);
         if (k.w < 1.5) continue;
         const { p, h } = at(s, k.kerb);
-        if (onRoad(p)) continue;
+        if (onRoad(p) || nearMetroStation(p)) continue;
         props.push({ id: `L-${run.id}-${side}-${Math.round(s)}`, kind: 'lamp', at: p, z0: WALK_Z, heading: h - side * Math.PI / 2, road: k.r.id });
         taken.push(s);
       }
@@ -126,7 +127,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
         // a tree stands mid-sidewalk, a pole at the kerb: they only need 1.5 m along the street
         if (k.w < 2.5 || !free(s) || taken.some(t => Math.abs(t - s) < 1.5) || R.chance(0.1)) continue;
         const { p } = at(s, k.mid);
-        if (onRoad(p)) continue;
+        if (onRoad(p) || nearMetroStation(p)) continue;
         props.push({ id: `t-${run.id}-${side}-${Math.round(s)}`, kind: 'tree', at: p, z0: WALK_Z, heading: 0, size: k.w >= 3.5 ? 'large' : 'medium', road: k.r.id });
       }
     }

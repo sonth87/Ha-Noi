@@ -181,6 +181,23 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
     - Khi `bloom.enabled === false` (mặc định ban ngày hoặc khi tắt glow), vẽ trực tiếp qua `renderer.render(scene, camera)` với phần cứng `antialias: true`, bỏ qua hoàn toàn render target `HalfFloatType` và `OutputPass` của `EffectComposer`.
     - Trong `trafficStep`, gom các xe nằm trong `viewDistance` lên đầu `InstancedMesh` (`o.count = vis`) và chỉ biến đổi/cập nhật buffer nét cạnh cho các xe đang hiển thị (`vehicleLines.geometry.instanceCount = k / 6`).
     - Thiết bị cảm ứng / màn hình nhỏ (`isMobileDevice()`, `VERSION = 3`) mặc định dùng mức **Trung bình** (`pixelRatio: 1.5`, `viewDistance: 250 m`, cây đơn giản, nhà L2) và mặc định đóng bảng cài đặt bên phải khi mới mở trang (`App.tsx`), kèm `overscroll-behavior: none`, `user-select: none` và bố cục thanh công cụ gọn trên màn hình hẹp (`app.css`, `index.html`).
+    - Mở rộng mức thu nhỏ tối đa gấp 3 lần (`controls.minZoom = 0.16`, camera near/far `-5000 .. 7000`), tự mở rộng bán kính hiển thị ô nhà theo khung nhìn (`tileRange`) ở mức khối `L0`, và ẩn dần toàn bộ chi tiết nhỏ/xe cộ/cây xanh theo các ngưỡng `FAR` (`furniture`, `details`, `vehicles`, `trees`, `creases`, `silhouette`).
+
+### ADR-050 · Kiến trúc chi tiết nhà ga Metro 2A trên cao theo ảnh thực tế (trụ đôi xà mũ cánh hẫng, cổng sảnh mở, cầu bộ hành, tháp thang máy và cầu thang/thang cuốn mái vòm)
+- **Trạng thái**: Đã chốt (2026-10-22, người dùng gửi 3 ảnh thực tế nhà ga tuyến Cát Linh – Hà Đông và góp ý: "cái nhà ga metro đang vẽ không được chi tiết lắm ở phần dưới chân nhà ga, đường đi bộ đi lên")
+- **Bối cảnh**: Nhà ga Metro cũ trong `metro.ts` chỉ dựng 8 cột vuông mảnh nằm giữa lòng đường, hộp sảnh kín bốn mặt và hai cầu thang trần đâm thẳng từ hông sảnh xuống giữa lòng đường với một tấm mái phẳng đơn giản.
+- **Quyết định**:
+  - **Chân cầu cạn và chân nhà ga dưới mặt đường (`metro.ts`)**:
+    - Dải phân cách bê tông có gờ bó vỉa (`0 .. 0,34 m`) và bồn cây xanh (`plant`, `0,34 .. 0,78 m`) chạy dọc dưới gầm trụ cầu cạn và gầm nhà ga.
+    - Trụ cầu cạn ngoài ga: thân trụ bê tông vát 8 cạnh trên bệ móng, đỉnh trụ là **mũ trụ chữ T loe vát nghiêng 2 cánh** kèm gối cầu (`metal`) đỡ hai dầm hộp.
+    - Dưới nhà ga: **5 nhịp trụ đôi bê tông lớn ở dải phân cách giữa đường** (có khe giữa gắn ống thoát nước đứng), đỡ **xà mũ ngang cánh hẫng (`cantilever crosshead`) vát chéo đáy** vươn rộng sang hai mép sảnh cùng **hệ 7 dầm dọc và ô cờ trần tối dưới gầm sàn sảnh**, để hai làn đường bộ lưu thông thoáng bên dưới như thực tế.
+  - **Tầng trung chuyển (`z = 6 .. 10 m`), cổng sảnh mở & mái vòm chữ C**:
+    - Hai đầu nhà ga có **hành lang sảnh mở (`open loggia portal`)** hai bên dầm đường ray với **lan can kính tay vịn kim loại**, trần sảnh gắn **dãy đèn huỳnh quang phát sáng**, phía trên nhô **hộp bảng tên ga** và **hai khối vuông trang trí họa tiết hình thoi/tam giác xanh-trắng đan chéo** đặc trưng của tuyến 2A.
+    - Hai bên hông sảnh có dải cửa sổ kính chia đố và **mái hắt ngang bằng khung lam thép**; tầng sân ga có **vách lam xanh nghiêng** và **hai vỏ mái cong chữ C dày** ôm lên đỉnh nối với **khung kèo vòm thép hở và dải mái kính lấy sáng ở giữa**.
+  - **Hệ thống đường đi bộ đi lên từ hai bên vỉa hè (4 cụm lối lên xuống)**:
+    - Từ hai bên tầng sảnh (`z = 6 m`), **4 cầu bộ hành trên cao có dầm thép, mái che và lan can kính trong suốt** vươn ngang qua lòng đường ra hai vỉa hè.
+    - Tại đầu cầu bộ hành trên vỉa hè: **tháp chiếu nghỉ & thang máy đứng từ mặt đất lên sảnh** (có cửa thang máy inox ở tầng trệt, bảng đèn báo và buồng kính tầng trên).
+    - Từ tháp chiếu nghỉ, **cầu thang bộ + thang cuốn dài chạy dọc theo vỉa hè xuống đất**, có **tường chắn hai bên xây bậc giật cấp màu trắng** (nửa trên lộ dầm nghiêng dưới gầm, nửa dưới xây kín có phòng kỹ thuật), **bậc tam cấp và hai bệ tường thấp đón ở chân thang**, **đôi tay vịn thang cuốn chạy dọc độ dốc**, **mái vòm cong nửa trụ bằng tấm lấy sáng trên hệ khung cột thép** uốn dọc theo độ dốc cầu thang và **mái vòm đón cong vươn ra ở cửa lên xuống dưới chân thang** kèm giàn thép chữ X.
 
 ---
 
@@ -190,4 +207,4 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
 |---|---|---|---|
 | ~~Q1~~ | ~~Mét hay 1 m = 10?~~ | — | Đã chốt: mét (ADR-033) |
 | ~~Q2~~ | ~~Gỡ trang thử 3D cũ khỏi app SVG?~~ | — | Đã chốt: giữ để đối chiếu, xóa khi `city3d` thay được (ADR-033) |
-| Q3 | Ga Thái Hà thật: chiều cao các tầng, hình mái, vị trí lối lên? | Khi có ảnh | Đang ước lượng (ADR-042); người dùng gửi ảnh để chỉnh |
+| ~~Q3~~ | ~~Ga Thái Hà thật: chiều cao các tầng, hình mái, vị trí lối lên?~~ | — | Đã chốt theo 3 ảnh thực tế người dùng gửi (ADR-050) |

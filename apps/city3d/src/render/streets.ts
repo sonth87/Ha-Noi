@@ -60,7 +60,10 @@ export function buildStreets(B: Batch, city: City) {
     if (r.oneway) for (let k = 1; k < r.lanes; k++) offs.push(-r.width / 2 + (k * r.width) / r.lanes);
     for (const o of offs) for (const run of pieces(r.path, c.marks)) dashes(B, offsetLine(run, o));
   }
+  const metroStations = city.stations.filter(st => st.kind === 'metro');
   for (const s of city.streets) if (s.kind === 'footway' || s.kind === 'steps') {
+    // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
+    if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) continue;
     if (s.layer > 0 && s.profile.length) bridge(B, s);
     else B.flat('walk', strip(s.path, -s.width / 2, s.width / 2), ROAD_Z * 0.5);
   }

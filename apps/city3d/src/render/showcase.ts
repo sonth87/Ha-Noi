@@ -226,14 +226,26 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
   if (id.startsWith('station:')) {
     const stId = id.slice('station:'.length);
     const orig = city.stations.find(s => s.id === stId) ?? city.stations[0];
-    const hx = 42, hy = 22;
-    // base plate with a 2-way avenue passing underneath the viaduct along x
-    drawPlate(B, hx, hy, 7.5, 16.5, pools, id);
-    // opposite sidewalk & trees on the far side (-y)
-    B.solid([[-hx + 1.4, -hy + 1.4], [hx - 1.4, -hy + 1.4], [hx - 1.4, -7.5], [-hx + 1.4, -7.5]], 0, 0.16, () => 'wall', 'walk');
-    B.flat('road', [[-hx + 1.4, -7.5], [hx - 1.4, -7.5], [hx - 1.4, 7.5], [-hx + 1.4, 7.5]], 0.02);
-    for (const tx of [-hx + 5, -18, 18, hx - 5]) {
-      tree(B, { id: `${id}:ftree:${tx}`, kind: 'tree', at: [tx, -9.2], z0: 0.16, heading: 0, size: 'large', road: 's-front' }, true);
+    const hx = 48, hy = 24;
+    // base plate with a 2-carriageway avenue (y ∈ [-12, 12]) and raised sidewalks on both sides (|y| ∈ [12, 22.6])
+    drawPlate(B, hx, hy, 0, 0, pools, id);
+    const rx0 = -hx + 1.4, rx1 = hx - 1.4, roadEdge = 12.0;
+    B.flat('road', [[rx0, -roadEdge], [rx1, -roadEdge], [rx1, roadEdge], [rx0, roadEdge]], 0.02);
+    for (const sy of [-1, 1] as const) {
+      const w0 = sy > 0 ? roadEdge : -hy + 1.4, w1 = sy > 0 ? hy - 1.4 : -roadEdge;
+      B.solid([[rx0, w0], [rx1, w0], [rx1, w1], [rx0, w1]], 0, 0.16, () => 'wall', 'walk');
+      // dashed lane markings along each carriageway
+      const laneY = sy * 7.2;
+      for (let x = rx0 + 1.5; x + 2.8 <= rx1 - 1.5; x += 5.6) {
+        B.flat('marking', [[x, laneY - 0.13], [x + 2.8, laneY - 0.13], [x + 2.8, laneY + 0.13], [x, laneY + 0.13]], 0.035);
+      }
+      // street lamps & trees near the outer ends of both sidewalks (clear of the stair/escalator ramps)
+      for (const lx of [-hx + 5.5, hx - 5.5]) {
+        lampPost(B, { id: `${id}:lamp:${sy}:${lx}`, kind: 'lamp', at: [lx, sy * (roadEdge + 0.8)], z0: 0.16, heading: sy > 0 ? -Math.PI / 2 : Math.PI / 2, road: 's-front' }, pools);
+      }
+      for (const tx of [-hx + 4.2, hx - 4.2]) {
+        tree(B, { id: `${id}:ftree:${sy}:${tx}`, kind: 'tree', at: [tx, sy * (hy - 3.6)], z0: 0.16, heading: 0, size: 'large', road: 's-front' }, true);
+      }
     }
     const h = 12.5;
     const mockCity: City = {

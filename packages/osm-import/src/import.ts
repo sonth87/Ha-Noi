@@ -94,12 +94,18 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   // ---------- 3. buildings and parts ----------
   type Raw = { id: string; source: string; ring: Vec2[]; t: OsmTags };
   const outlines: Raw[] = [], partsRaw: Raw[] = [];
+  const railPaths = [...ways.values()].filter(w => railKind(tags(w)) === 'metro').map(w => path(w));
+  const isMetroShellOrPier = (t: OsmTags, ring: Vec2[]) =>
+    t.building === 'transportation' || t.building === 'train_station' ||
+    (t.building === 'yes' && t.height === '8' && ringArea(ring) < 12 && railPaths.some(rp => nearPath(centroid(ring), rp, 4)));
   const push = (list: Raw[], id: string, source: string, ring: Vec2[], t: OsmTags) => { const r = normalizeRing(ring); if (r.length >= 3) list.push({ id, source, ring: r, t }); };
   for (const w of ways.values()) {
     const t = tags(w);
     if (w.nodes.length < 4 || w.nodes[0] !== w.nodes[w.nodes.length - 1]) continue;
-    if (t.building && t.building !== 'no') push(outlines, `w${w.id}`, src('way', w.id), path(w), t);
-    else if (t['building:part'] && t['building:part'] !== 'no') push(partsRaw, `w${w.id}`, src('way', w.id), path(w), t);
+    const wPath = path(w);
+    if (t.building && t.building !== 'no') {
+      if (!isMetroShellOrPier(t, wPath)) push(outlines, `w${w.id}`, src('way', w.id), wPath, t);
+    } else if (t['building:part'] && t['building:part'] !== 'no') push(partsRaw, `w${w.id}`, src('way', w.id), wPath, t);
   }
   for (const r of relations) {
     const t = tags(r);
