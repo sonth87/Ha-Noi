@@ -3,17 +3,17 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { loadCity } from '@my-city/osm-import';
 import { CityView } from '@view/CityView';
+import { DEFAULT_AREA_ID } from '@view/constants';
+import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t } from '@view/i18n';
 import { lightOn } from '@view/lights';
+import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
 import { isMobileDevice } from '@view/quality';
-import { STREET_LABEL_MODES, STREET_LABEL_NAMES, type StreetLabelMode } from '@view/streetLabels';
-import { PLACE_INFO_MODES, PLACE_INFO_NAMES, type PlaceInfoMode } from '@view/placeInfo';
-import { QualityPanel } from './QualityPanel';
+import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
 import { LightsPanel } from './LightsPanel';
+import { QualityPanel } from './QualityPanel';
 
-const AREA = 'nga-tu-thai-ha';
-const LIGHT = { go: 'xanh', wait: 'vàng', stop: 'đỏ' } as const;
 let shared: CityView | null = null;
-const view = () => (shared ??= new CityView(loadCity(AREA).city));
+const view = () => (shared ??= new CityView(loadCity(DEFAULT_AREA_ID).city));
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     shared?.unmount();
@@ -127,13 +127,13 @@ const IconRotateCw = () => (
 );
 
 const IconChevronUp = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
     <path d="m18 15-6-6-6 6" />
   </svg>
 );
 
 const IconChevronDownPad = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
     <path d="m6 9 6 6 6-6" />
   </svg>
 );
@@ -152,9 +152,18 @@ const IconSeeThrough = () => (
   </svg>
 );
 
+const IconGlobe = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
+    <path d="M2 12h20" />
+  </svg>
+);
+
 export function App() {
   const v = view();
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
+  const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState(() => !isMobileDevice());
   const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | null>(null);
@@ -224,6 +233,15 @@ export function App() {
     });
   }, [v.places, plSearch, plCat]);
 
+  const signalLabel = {
+    go: t('footer.signal.go', undefined, loc),
+    wait: t('footer.signal.wait', undefined, loc),
+    stop: t('footer.signal.stop', undefined, loc),
+  } as const;
+
+  const streetNames = STREET_LABEL_NAMES_I18N[loc];
+  const placeNames = PLACE_INFO_NAMES_I18N[loc];
+
   return (
     <div className="shell">
       <header className="top" ref={menuWrapRef}>
@@ -235,22 +253,22 @@ export function App() {
             type="button"
             className="picker-trigger"
             aria-expanded={openMenu === 'showcase'}
-            aria-label="Chọn công trình xem riêng trên đế"
+            aria-label={t('top.showcases.aria', undefined, loc)}
             onClick={() => setOpenMenu(m => (m === 'showcase' ? null : 'showcase'))}
           >
             <IconBox />
             <span className="picker-label">
-              {currentShowcase ? currentShowcase.name : `Công trình (${v.showcases.length})`}
+              {currentShowcase ? currentShowcase.name : t('top.showcases', { count: v.showcases.length }, loc)}
             </span>
             <IconChevronDown />
           </button>
           {openMenu === 'showcase' && (
-            <div className="popover-panel" role="dialog" aria-label="Danh sách công trình 3D">
+            <div className="popover-panel" role="dialog" aria-label={t('top.showcases.dialog', undefined, loc)}>
               <div className="popover-search">
                 <IconSearch />
                 <input
                   type="search"
-                  placeholder="Tìm công trình, nhà ga, di tích..."
+                  placeholder={t('top.showcases.search', undefined, loc)}
                   value={scSearch}
                   onChange={e => setScSearch(e.target.value)}
                   autoFocus
@@ -262,7 +280,7 @@ export function App() {
                   aria-pressed={scCat === 'ALL'}
                   onClick={() => setScCat('ALL')}
                 >
-                  Tất cả ({v.showcases.length})
+                  {t('top.showcases.all', { count: v.showcases.length }, loc)}
                 </button>
                 {scGroups.map(g => (
                   <button
@@ -285,10 +303,10 @@ export function App() {
                   }}
                 >
                   <div className="popover-item-main">
-                    <b>Bản đồ toàn khu Đống Đa – Ba Đình</b>
-                    <span>Hiển thị toàn bộ thành phố, giao thông và tàu Metro</span>
+                    <b>{t('top.showcases.mapTitle', undefined, loc)}</b>
+                    <span>{t('top.showcases.mapSub', undefined, loc)}</span>
                   </div>
-                  <em className="popover-tag">Bản đồ</em>
+                  <em className="popover-tag">{t('top.showcases.mapTag', undefined, loc)}</em>
                 </button>
                 {filteredShowcases.map(item => (
                   <button
@@ -308,7 +326,7 @@ export function App() {
                   </button>
                 ))}
                 {filteredShowcases.length === 0 && (
-                  <div className="popover-empty">Không tìm thấy công trình phù hợp</div>
+                  <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
                 )}
               </div>
             </div>
@@ -316,9 +334,9 @@ export function App() {
         </div>
 
         {currentShowcase && (
-          <button type="button" className="icon-btn" onClick={() => v.setShowcase(null)} title="Quay lại bản đồ toàn khu">
+          <button type="button" className="icon-btn" onClick={() => v.setShowcase(null)} title={t('top.backToMap.title', undefined, loc)}>
             <IconArrowLeft />
-            <span>Bản đồ</span>
+            <span>{t('top.backToMap', undefined, loc)}</span>
           </button>
         )}
 
@@ -328,7 +346,7 @@ export function App() {
             type="button"
             className="picker-trigger"
             aria-expanded={openMenu === 'place'}
-            aria-label="Đi tới khu vực trên bản đồ"
+            aria-label={t('top.places.aria', undefined, loc)}
             onClick={() => setOpenMenu(m => (m === 'place' ? null : 'place'))}
           >
             <IconMapPin />
@@ -336,12 +354,12 @@ export function App() {
             <IconChevronDown />
           </button>
           {openMenu === 'place' && (
-            <div className="popover-panel" role="dialog" aria-label="Danh sách khu vực và nhà ga">
+            <div className="popover-panel" role="dialog" aria-label={t('top.places.dialog', undefined, loc)}>
               <div className="popover-search">
                 <IconSearch />
                 <input
                   type="search"
-                  placeholder="Tìm khu vực, phố, quận, nhà ga..."
+                  placeholder={t('top.places.search', undefined, loc)}
                   value={plSearch}
                   onChange={e => setPlSearch(e.target.value)}
                   autoFocus
@@ -353,7 +371,7 @@ export function App() {
                   aria-pressed={plCat === 'ALL'}
                   onClick={() => setPlCat('ALL')}
                 >
-                  Tất cả ({v.places.length})
+                  {t('top.places.all', { count: v.places.length }, loc)}
                 </button>
                 {plGroups.map(g => (
                   <button
@@ -385,37 +403,37 @@ export function App() {
                   </button>
                 ))}
                 {filteredPlaces.length === 0 && (
-                  <div className="popover-empty">Không tìm thấy khu vực phù hợp</div>
+                  <div className="popover-empty">{t('top.places.empty', undefined, loc)}</div>
                 )}
               </div>
             </div>
           )}
         </div>
 
-        <label className="pick" title="Kiểu hiển thị tên đường (Phím tắt: L)">
+        <label className="pick" title={t('top.streetLabels.title', undefined, loc)}>
           <IconSignpost />
-          <span className="pick-title">Tên đường</span>
+          <span className="pick-title">{t('top.streetLabels', undefined, loc)}</span>
           <select
-            aria-label="Kiểu hiển thị tên đường"
+            aria-label={t('top.streetLabels', undefined, loc)}
             value={s.streetLabels}
             onChange={e => v.setStreetLabels(e.target.value as StreetLabelMode)}
           >
             {STREET_LABEL_MODES.map(m => (
-              <option key={m} value={m}>{STREET_LABEL_NAMES[m]}</option>
+              <option key={m} value={m}>{streetNames[m]}</option>
             ))}
           </select>
         </label>
 
-        <label className="pick" title="Hiển thị thông tin tòa nhà, công viên, hồ, di tích, tượng đài (Phím tắt: I)">
+        <label className="pick" title={t('top.placeInfo.title', undefined, loc)}>
           <IconInfo />
-          <span className="pick-title">Thông tin</span>
+          <span className="pick-title">{t('top.placeInfo', undefined, loc)}</span>
           <select
-            aria-label="Hiển thị thông tin công trình và địa điểm"
+            aria-label={t('top.placeInfo', undefined, loc)}
             value={s.placeInfo}
             onChange={e => v.setPlaceInfo(e.target.value as PlaceInfoMode)}
           >
             {PLACE_INFO_MODES.map(m => (
-              <option key={m} value={m}>{PLACE_INFO_NAMES[m]}</option>
+              <option key={m} value={m}>{placeNames[m]}</option>
             ))}
           </select>
         </label>
@@ -428,11 +446,11 @@ export function App() {
               setActivePlaceId('home');
               v.flyTo([0, 0]);
             }}
-            title="Về Ngã tư Thái Hà – Tây Sơn (H)"
-            aria-label="Về Ngã tư Thái Hà"
+            title={t('top.home.title', undefined, loc)}
+            aria-label={t('top.home', undefined, loc)}
           >
             <IconHome />
-            <span className="btn-text">Ngã tư</span>
+            <span className="btn-text">{t('top.home', undefined, loc)}</span>
             <kbd>H</kbd>
           </button>
 
@@ -441,7 +459,7 @@ export function App() {
             className="icon-btn"
             onClick={() => v.toggleMode()}
             aria-pressed={s.mode === '3d'}
-            title="Chuyển góc nhìn 2D / 3D (V)"
+            title={t('top.mode.title', undefined, loc)}
           >
             <span>{s.mode === '2d' ? '2D' : '3D'}</span>
             <kbd>V</kbd>
@@ -452,11 +470,11 @@ export function App() {
             className="icon-btn"
             onClick={() => v.toggleSeeThrough()}
             aria-pressed={s.seeThrough}
-            title="Bật/tắt chế độ nhìn xuyên tòa nhà chắn trước mặt khi zoom vào rất sát (X)"
-            aria-label="Nhìn xuyên tòa nhà chắn trước khi zoom sát"
+            title={t('top.seeThrough.title', undefined, loc)}
+            aria-label={t('top.seeThrough', undefined, loc)}
           >
             <IconSeeThrough />
-            <span className="btn-text">Nhìn xuyên</span>
+            <span className="btn-text">{t('top.seeThrough', undefined, loc)}</span>
             <kbd>X</kbd>
           </button>
 
@@ -465,8 +483,8 @@ export function App() {
             className="icon-only-btn"
             onClick={() => v.toggleDayNight()}
             aria-pressed={s.night}
-            aria-label={s.night ? 'Chế độ Đêm (Nhấn để chuyển sang Ngày)' : 'Chế độ Ngày (Nhấn để chuyển sang Đêm)'}
-            title={s.night ? 'Đang ở chế độ Đêm · Nhấn để chuyển sang Ngày (N)' : 'Đang ở chế độ Ngày · Nhấn để chuyển sang Đêm (N)'}
+            aria-label={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
+            title={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
           >
             {s.night ? <IconMoon /> : <IconSun />}
             <kbd>N</kbd>
@@ -475,57 +493,69 @@ export function App() {
           <button
             type="button"
             className="icon-btn"
+            onClick={() => v.toggleLocale()}
+            title={t('top.locale.title', undefined, loc)}
+            aria-label={t('top.locale.title', undefined, loc)}
+          >
+            <IconGlobe />
+            <span>{LOCALE_LABELS[loc]}</span>
+          </button>
+
+          <button
+            type="button"
+            className="icon-btn"
             onClick={() => setPanel(p => !p)}
             aria-pressed={panel}
-            title="Bảng điều chỉnh Đèn & Chất lượng hiển thị (G)"
-            aria-label="Đèn và chất lượng"
+            title={t('top.settings.title', undefined, loc)}
+            aria-label={t('top.settings', undefined, loc)}
           >
             <IconSliders />
-            <span className="btn-text">Cài đặt</span>
+            <span className="btn-text">{t('top.settings', undefined, loc)}</span>
             <kbd>G</kbd>
           </button>
         </div>
       </header>
       <main>
-        <div className="stage" ref={host} aria-label={`Bản đồ 3D Quận Đống Đa & Quận Ba Đình, chế độ ${s.mode}. Kéo để di chuyển${s.mode === '3d' ? ', chuột phải hoặc shift + kéo để xoay và nghiêng' : ''}, cuộn để phóng to vào con trỏ, phím W A S D hoặc mũi tên để đi, nhấp đúp vào cột ghim hoặc công trình để xem thông tin.`}>
+        <div className="stage" ref={host} aria-label={t('stage.aria', { mode: s.mode }, loc)}>
           {currentShowcase && (
             <div className="plaque">
               <b>{currentShowcase.name}</b>
               <span>{currentShowcase.subtitle}</span>
             </div>
           )}
-          <div className="cam-pad" role="group" aria-label="Điều khiển camera nhanh">
-            <button type="button" onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'} title="Đổi góc nhìn 2D / 3D (V)">
+          <div className="cam-pad" role="group" aria-label={t('cam.aria', undefined, loc)}>
+            <button type="button" onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'} title={t('top.mode.title', undefined, loc)}>
               {s.mode === '2d' ? '2D' : '3D'}
             </button>
-            <button type="button" onClick={() => v.zoom(1.28)} title="Phóng to (+)" aria-label="Phóng to">
+            <button type="button" onClick={() => v.zoom(1.28)} title={t('cam.zoomIn', undefined, loc)} aria-label={t('cam.zoomIn', undefined, loc)}>
               <IconPlus />
             </button>
-            <button type="button" onClick={() => v.zoom(1 / 1.28)} title="Thu nhỏ (−)" aria-label="Thu nhỏ">
+            <button type="button" onClick={() => v.zoom(1 / 1.28)} title={t('cam.zoomOut', undefined, loc)} aria-label={t('cam.zoomOut', undefined, loc)}>
               <IconMinus />
             </button>
-            <button type="button" onClick={() => v.rotate(-1)} title="Xoay trái 90° (Q)" aria-label="Xoay trái 90 độ">
+            <button type="button" onClick={() => v.rotate(-1)} title={t('cam.rotLeft', undefined, loc)} aria-label={t('cam.rotLeft', undefined, loc)}>
               <IconRotateCcw />
             </button>
-            <button type="button" onClick={() => v.rotate(1)} title="Xoay phải 90° (E)" aria-label="Xoay phải 90 độ">
+            <button type="button" onClick={() => v.rotate(1)} title={t('cam.rotRight', undefined, loc)} aria-label={t('cam.rotRight', undefined, loc)}>
               <IconRotateCw />
             </button>
-            <button type="button" onClick={() => v.tilt(1)} title="Nâng cao góc camera (R)" aria-label="Nâng cao góc camera">
+            <button type="button" onClick={() => v.tilt(1)} title={t('cam.tiltUp', undefined, loc)} aria-label={t('cam.tiltUp', undefined, loc)}>
               <IconChevronUp />
             </button>
-            <button type="button" onClick={() => v.tilt(-1)} title="Hạ thấp góc camera sát phố (F)" aria-label="Hạ thấp góc camera">
+            <button type="button" onClick={() => v.tilt(-1)} title={t('cam.tiltDown', undefined, loc)} aria-label={t('cam.tiltDown', undefined, loc)}>
               <IconChevronDownPad />
             </button>
           </div>
         </div>
         {panel && (
           <aside className="panel">
-            <LightsPanel lights={s.lights} onChange={p => v.setLights(p)} />
+            <LightsPanel lights={s.lights} locale={loc} onChange={p => v.setLights(p)} />
             <QualityPanel
               quality={s.quality}
               streetLabels={s.streetLabels}
               placeInfo={s.placeInfo}
               seeThrough={s.seeThrough}
+              locale={loc}
               stats={s.stats}
               detail={s.detail}
               pending={s.pending}
@@ -539,9 +569,18 @@ export function App() {
         )}
       </main>
       <footer>
-        <span className="hint">kéo: di chuyển · click tầng: bật/tắt đèn · nhấp đúp công trình/ghim: xem thông tin · {s.mode === '3d' ? 'chuột phải / shift + kéo: xoay, nghiêng · ' : ''}cuộn: phóng</span>
+        <span className="hint">{t(s.mode === '3d' ? 'footer.hint.3d' : 'footer.hint.2d', undefined, loc)}</span>
         <span className="read">
-          {currentShowcase ? `đế mô hình · ${currentShowcase.name}` : 'Đống Đa – Ba Đình'} · {s.mode} · góc {s.mode === '2d' ? s.view : `${s.heading}°`} · L{s.detail} · cửa sáng {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%{s.lit ? ` + ${s.lit} tầng` : ''}{!currentShowcase ? ` · ${s.vehicles} xe · Tây Sơn ${LIGHT[s.signals.x]} ${s.signals.xLeft}s · Thái Hà ${LIGHT[s.signals.y]} ${s.signals.yLeft}s` : ''} · {s.fps} fps
+          {currentShowcase
+            ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
+            : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
+          · {s.mode} · {t('footer.angle', undefined, loc)} {s.mode === '2d' ? s.view : `${s.heading}°`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
+          {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
+          {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
+          {!currentShowcase
+            ? ` · ${s.vehicles} ${t('footer.vehicles', undefined, loc)} · X ${signalLabel[s.signals.x]} ${s.signals.xLeft}s · Y ${signalLabel[s.signals.y]} ${s.signals.yLeft}s`
+            : ''}{' '}
+          · {s.fps} fps
         </span>
         <span className="credit">© OpenStreetMap contributors</span>
       </footer>

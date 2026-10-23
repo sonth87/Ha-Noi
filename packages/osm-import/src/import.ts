@@ -12,7 +12,7 @@
 import {
   applyOverrides, bbox, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
   inRect, normalizeRing, pointInRing, polylineLength, area as ringArea, storeyHeights, streetShape,
-  type Area, type Building, type BuildingPart, type City, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
+  type Area, type Building, type BuildingPart, type City, type CityPlace, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
 } from '@my-city/core';
 import type { OsmExtract, OsmNode, OsmRelation, OsmTags, OsmWay } from '@my-city/osm-data';
 import { projector, type Frame } from './frame';
@@ -22,9 +22,21 @@ export interface AreaConfig {
   /** osm-data area id */
   area: string;
   name: string;
+  /** default city/metropolis name for fallback addresses (e.g. 'Hà Nội') */
+  cityName?: string;
   frame: Frame;
   /** the part of the frame to keep: a union of rectangles (m) */
   region: Rect[];
+  /** optional resolver turning city-frame [x, y] into an administrative district name */
+  districtOf?: (pt: Vec2) => string;
+  /** optional heritage / monument / park descriptions keyed by place name */
+  heritageNotes?: Readonly<Record<string, string>>;
+  /** optional area name normalizations keyed by raw name or source id */
+  areaNameOverrides?: Readonly<Record<string, string>>;
+  /** optional station metadata resolver */
+  stationMeta?: (rawName: string, at: Vec2) => { lineTag?: string; lineName?: string; address?: string };
+  /** curated quick-navigation places for the area */
+  places?: CityPlace[];
   overrides: Overrides;
 }
 
@@ -212,7 +224,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       roof: 'flat', source: p.source,
     }));
     // When OSM only mapped the tower building:part(s) inside a larger podium outline, keep the base podium too
-    const isBespoke = b.source === 'osm:way/136257265' || b.source === 'osm:way/850419282';
+    const ov = cfg.overrides.buildings?.[b.source];
+    const isBespoke = Boolean(ov?.model && ov?.parts);
     const rawArea = raw.reduce((s, p) => s + ringArea(p.ring), 0), baseArea = ringArea(b.ring);
     const maxPartLevels = raw.length ? Math.max(...raw.map(p => levelsOf(p.t) ?? levels)) : levels;
     const needPodium = raw.length > 0 && !isBespoke && rawArea < baseArea * 0.82;
@@ -237,10 +250,14 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     }
     const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
     const subtype = inferSubtype(b.t) ?? campus?.subtype;
+    const district = cfg.districtOf?.(c);
+    const description = name ? cfg.heritageNotes?.[name.trim()] : undefined;
     return {
       id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
       ...(address ? { address } : {}),
+      ...(district ? { district } : {}),
       ...(subtype ? { subtype } : {}),
+      ...(description ? { description } : {}),
       source: b.source,
     };
   });
@@ -269,12 +286,18 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
         if (d < bestD) { bestD = d; bestSt = s.name; }
       }
     }
+    const rawName = t.name?.trim();
+    const name = (rawName && cfg.areaNameOverrides?.[rawName]) ?? cfg.areaNameOverrides?.[source] ?? rawName;
     const address = formatOsmAddress(t, bestD < 220 ? bestSt : undefined);
+    const district = cfg.districtOf?.(c);
     const subtype = inferSubtype(t) ?? (kind === 'park' ? 'park' : kind === 'water' ? 'lake' : undefined);
+    const description = (name && cfg.heritageNotes?.[name]) ?? (rawName && cfg.heritageNotes?.[rawName]);
     areas.push({
-      id, kind, name: t.name, polygon: clipped,
+      id, kind, name, polygon: clipped,
       ...(address ? { address } : {}),
+      ...(district ? { district } : {}),
       ...(subtype ? { subtype } : {}),
+      ...(description ? { description } : {}),
       source,
     });
   };
@@ -297,6 +320,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       let bestSt: string | undefined, bestD = Infinity;
       for (const s of nearSt) for (const p of s.path) { const d = dist(at, p); if (d < bestD) { bestD = d; bestSt = s.name; } }
       const address = formatOsmAddress(t, bestD < 220 ? bestSt : undefined);
+      const district = cfg.districtOf?.(at);
+      const description = t.name ? cfg.heritageNotes?.[t.name.trim()] : undefined;
       const subtitle = t.artwork_type === 'statue'
         ? 'Tượng đài lịch sử'
         : t.historic === 'archaeological_site'
@@ -305,6 +330,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       features.push({
         id: `n${n.id}`, kind, name: t.name,
         ...(address ? { address } : {}),
+        ...(district ? { district } : {}),
+        ...(description ? { description } : {}),
         subtitle,
         at, source: src('node', n.id),
       });
@@ -428,14 +455,28 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const at = xy.get(n.id)!, kind = t.station === 'subway' || t.station === 'light_rail' ? 'metro' : t.station === 'tram' ? 'tram' : 'rail';
     if (!inside(at) && !rails.some(r => r.kind === kind && r.path.some(p => dist(p, at) < 80))) continue;
     if (t.name && stations.some(s => s.kind === kind && s.name === t.name && dist(s.at, at) < 120)) continue;
-    stations.push({ id: `st${n.id}`, name: t.name, kind, at, platforms: platformRings.filter(r => dist(centroid(r), at) < 120), source: src('node', n.id) });
+    const meta = cfg.stationMeta?.(t.name ?? '', at);
+    const district = cfg.districtOf?.(at);
+    stations.push({
+      id: `st${n.id}`, name: t.name, kind, at,
+      platforms: platformRings.filter(r => dist(centroid(r), at) < 120),
+      ...(meta?.lineTag ? { lineTag: meta.lineTag } : {}),
+      ...(meta?.lineName ? { lineName: meta.lineName } : {}),
+      ...(meta?.address ? { address: meta.address } : {}),
+      ...(district ? { district } : {}),
+      source: src('node', n.id),
+    });
   }
 
   // ---------- 7. hand corrections ----------
   const base: City = {
-    id: cfg.area, name: cfg.name, bounds: R, region,
+    id: cfg.area, name: cfg.name,
+    ...(cfg.cityName ? { cityName: cfg.cityName } : {}),
+    bounds: R, region,
     streets: streets.sort(byId), junctions: junctions.sort(byId), buildings: buildings.sort(byId), areas: areas.sort(byId), features: features.sort(byId),
-    rails: rails.sort(byId), stations: stations.sort(byId), attribution: [attribution],
+    rails: rails.sort(byId), stations: stations.sort(byId),
+    ...(cfg.places ? { places: cfg.places } : {}),
+    attribution: [attribution],
   };
   const { city, unused } = applyOverrides(base, cfg.overrides);
   report.unusedOverrides = unused;

@@ -22,28 +22,40 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
+import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
-  METRO, centroid, floorZ, metroTracks, pointInRing, trainAt, trainCount, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes,
-  type City, type Lane, type Signals, type Track, type Vec2, type Vehicle, type VehicleKind,
+  METRO, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
+  type City, type Lane, type Signals, type Track, type Vehicle, type VehicleKind,
 } from '@my-city/core';
+import { Batch, type Surface } from '@render/batch';
 import { beaconsOf, buildBase, buildTile, cityFloors, layerOf, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
+import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
+import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
-import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
-import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { Batch, type Surface } from '@render/batch';
-import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
-import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
+import {
+  CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
+  HOVER_THROTTLE_MS, ISO_EL, MIN_ZOOM_TO_CURSOR_EL, MOVE_KEYS, ORBIT_RADIUS, PAN_BOUNDS_MARGIN,
+  SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS, azOf,
+} from './constants';
+import { LOCALES, getLocale, setGlobalLocale, t, type Locale } from './i18n';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
 import {
-  STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
-  type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
-} from './streetLabels';
+  createPlaceLabelNode, createStreetLabelNode, createStreetPlaceEntry,
+  renderHoverBannerDom, renderPopupCardDom, syncPopupBulbDom,
+} from './overlayDom';
 import {
   PLACE_INFO_MODES, buildPlaceCatalog, selectVisiblePlaceLabels,
   type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
 } from './placeInfo';
+import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
+import { CityEventBus, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
+import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
+import {
+  STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
+  type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
+} from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
 
 export type Mode = '2d' | '3d';
@@ -77,34 +89,11 @@ export interface Snapshot {
   streetLabels: StreetLabelMode;
   /** place/building/park/monument/heritage info display mode: 'off', 'popup', or 'label' */
   placeInfo: PlaceInfoMode;
-  /** see-through foreground buildings when zoomed in very close (default: false) */
+  /** see-through foreground buildings when zoomed in very close (default: true) */
   seeThrough: boolean;
+  /** current UI and catalog language ('vi' | 'en') */
+  locale: Locale;
 }
-
-const ISO_EL = Math.asin(1 / Math.sqrt(3));
-const FRUSTUM = 300;   // metres tall at zoom 1
-const CELL_R = 46;     // half the diagonal of a 64 m cell
-const azOf = (k: number) => Math.PI / 4 - (k * Math.PI) / 2;
-const KINDS: VehicleKind[] = ['bike', 'sedan', 'hatch', 'taxi', 'van'];
-
-const SURFACE_TOKEN: Record<Surface, string> = {
-  ground: '--body', wall: '--body', roof: '--deck', glass: '--glass', road: '--recess', walk: '--deck',
-  marking: '--line', grass: '--panel', water: '--glass', pitch: '--recess', plaza: '--deck',
-  metal: '--deck', awning: '--deck', plant: '--panel',
-};
-
-const SHELL_VERT = `uniform vec2 res;
-  void main() {
-    vec4 p4 = vec4(position, 1.0); vec3 n = normal;
-    #ifdef USE_INSTANCING
-      p4 = instanceMatrix * p4; n = mat3(instanceMatrix) * n;
-    #endif
-    vec4 p = projectionMatrix * modelViewMatrix * p4;
-    vec4 d4 = projectionMatrix * vec4(normalize(normalMatrix * n), 0.0);
-    vec2 d = length(d4.xy) > 1e-5 ? normalize(d4.xy) : vec2(0.0);
-    p.xy += d * 2.0 / res * p.w;
-    gl_Position = p;
-  }`;
 
 interface TileState {
   tile: Tile;
@@ -114,31 +103,48 @@ interface TileState {
   cutLayer: Layer | null;
   cutGroup: THREE.Group | null;
 }
-interface BldgBounds {
-  id: string;
-  tileIdx: number;
-  cx: number;
-  cy: number;
-  r: number;
-  topZ: number;
-  footprint: readonly Vec2[];
+
+interface CellState {
+  bucket: FurnitureBucket;
+  cell: FurnitureCell | null;
+  groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null;
+  wires: LineSegments2 | null;
+  pulses: LineSegments2 | null;
+  pools: THREE.Mesh | null;
 }
-interface CellState { bucket: FurnitureBucket; cell: FurnitureCell | null; groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null; wires: LineSegments2 | null; pulses: LineSegments2 | null; pools: THREE.Mesh | null }
-interface Fleet { model: VehicleModel; meshes: THREE.InstancedMesh[]; list: Vehicle[] }
-interface Train { track: Track; offset: number; cars: THREE.Group[]; doors: THREE.MeshBasicMaterial; stopping: boolean }
+
+interface Fleet {
+  model: VehicleModel;
+  meshes: THREE.InstancedMesh[];
+  list: Vehicle[];
+}
+
+interface Train {
+  track: Track;
+  offset: number;
+  cars: THREE.Group[];
+  doors: THREE.MeshBasicMaterial;
+  stopping: boolean;
+}
 
 export class CityView {
   readonly base: Layer;
   readonly stationShell: Layer;
   readonly tiles: TileState[];
-  private readonly bldgBounds: BldgBounds[] = [];
+  private readonly bldgBounds: BldgBounds[];
   readonly cells: CellState[];
   readonly floors: string[];
   readonly lanes: Lane[];
   readonly tracks: Track[];
   readonly showcases: ShowcaseItem[];
   readonly streetCatalog: StreetEntry[];
-  readonly placeCatalog: PlaceCatalog;
+  placeCatalog: PlaceCatalog;
+  readonly sdk: CitySDK;
+  private readonly events = new CityEventBus();
+  private readonly extensions = new Map<string, { ext: CityExtension; cleanup?: () => void }>();
+  private readonly popupActions = new Map<string, PopupActionDescriptor>();
+  private readonly customLayers = new Map<string, THREE.Object3D>();
+  private readonly showcaseIdSet: ReadonlySet<string>;
   private readonly streetById = new Map<string, StreetEntry>();
   private readonly panBounds: { x0: number; y0: number; x1: number; y1: number };
   private readonly showcaseCache = new Map<string, BuiltShowcase>();
@@ -175,9 +181,21 @@ export class CityView {
   private urlDirtyAt = 0;
   private lastUrlWrite = 0;
   private mounted: {
-    host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; stationShellGroup: THREE.Group; showcaseGroup: THREE.Group;
-    camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer | null; bloom: UnrealBloomPass | null;
-    beacons: THREE.Mesh[]; fleets: Map<VehicleKind, Fleet>; vehicleLines: LineSegments2; stop: () => void;
+    host: HTMLElement;
+    renderer: THREE.WebGLRenderer;
+    scene: THREE.Scene;
+    mapGroup: THREE.Group;
+    stationShellGroup: THREE.Group;
+    showcaseGroup: THREE.Group;
+    extensionGroup: THREE.Group;
+    camera: THREE.OrthographicCamera;
+    controls: OrbitControls;
+    composer: EffectComposer | null;
+    bloom: UnrealBloomPass | null;
+    beacons: THREE.Mesh[];
+    fleets: Map<VehicleKind, Fleet>;
+    vehicleLines: LineSegments2;
+    stop: () => void;
   } | null = null;
   private turn: { a0: number; a1: number; e0: number; e1: number; t0: number } | null = null;
   private sim = { t: 0, prev: null as Signals | null, phase: -1, slow: 0 };
@@ -191,13 +209,11 @@ export class CityView {
     }),
     crease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     baseCrease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
-    // window outlines are coloured per segment (dark, or the accent when lit): the material stays white
     detail: new LineMaterial({ linewidth: 1, vertexColors: true, color: 0xffffff, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     wire: new LineMaterial({ linewidth: 1, transparent: true }),
     pulse: new LineMaterial({ linewidth: 2, dashed: true, dashSize: 0.8, gapSize: 23, transparent: true }),
     windows: new THREE.MeshBasicMaterial({ vertexColors: true, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -2 }),
     vehicle: Object.fromEntries((['body', 'top', 'glass', 'wheel', 'head', 'tail', 'sign'] as VehiclePart[]).map(p => { const onTop = p === 'glass' || p === 'head' || p === 'tail' || p === 'sign'; return [p, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: onTop ? -1 : 1, polygonOffsetUnits: onTop ? -1 : 1 })]; })) as Record<Exclude<VehiclePart, 'beam'>, THREE.MeshBasicMaterial>,
-    // a pool of light: the accent fading from the middle out, added onto the ground (iso-glow's light pools)
     pool: new THREE.ShaderMaterial({
       uniforms: { color: { value: new THREE.Color() }, opacity: { value: 0.16 } },
       vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
@@ -210,12 +226,9 @@ export class CityView {
     beaconOn: new THREE.MeshBasicMaterial(),
     beaconOff: new THREE.MeshBasicMaterial(),
   };
-  /** window fill and outline per shade (iso-glow: lit = accent with an accent-hi outline, hi =
-      accent-hi, dim = lit at 45 % over the wall, off = dark) */
-  /** the vehicles' outline: a copy of the shared one, so it can fade without fading the buildings' */
   private readonly vehicleShell = (() => {
     const m = this.mats.shell.clone();
-    m.uniforms.res = this.mats.shell.uniforms.res!;   // one resolution for both
+    m.uniforms.res = this.mats.shell.uniforms.res!;
     return m;
   })();
   private farF = 0;
@@ -232,24 +245,18 @@ export class CityView {
     this.layers.add(this.stationShell);
     this.floors = cityFloors(city);
     this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null }));
-    this.tiles.forEach((ts, tileIdx) => {
-      for (const b of ts.tile.buildings) {
-        const c = centroid(b.footprint);
-        let r = 4;
-        for (const p of b.footprint) r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]));
-        let topZ = 4;
-        for (const part of b.parts) topZ = Math.max(topZ, floorZ(part, part.floors.length));
-        this.bldgBounds.push({ id: b.id, tileIdx, cx: c[0], cy: c[1], r, topZ, footprint: b.footprint });
-      }
-    });
+    this.bldgBounds = buildBuildingBoundsIndex(this.tiles);
     const net = roadNetwork(city);
     this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null }));
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
+    this.showcaseIdSet = new Set(this.showcases.map(s => s.id));
     this.streetCatalog = buildStreetCatalog(city);
     for (const s of this.streetCatalog) this.streetById.set(s.id, s);
-    this.placeCatalog = buildPlaceCatalog(city, new Set(this.showcases.map(s => s.id)));
+    const initLocale = getLocale();
+    this.placeCatalog = buildPlaceCatalog(city, this.showcaseIdSet, initLocale);
+
     const b = city.bounds;
     let x0 = b.x0, y0 = b.y0, x1 = b.x1, y1 = b.y1;
     for (const st of city.stations) {
@@ -263,18 +270,17 @@ export class CityView {
       const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       this.mats.surface.set(s, mat);
     }
-    // day (the light theme) by default (user, 2026-10-21); night (the dark theme and the lamps) is
-    // one switch, remembered
+
     let theme: Theme = 'light';
     try { if (localStorage.getItem('city3d-theme') === 'dark') theme = 'dark'; } catch { /* default */ }
     let streetLabels: StreetLabelMode = 'pin';
     try {
-      const savedLbl = localStorage.getItem('city3d-street-labels') as StreetLabelMode | null;
+      const savedLbl = localStorage.getItem(STORAGE_KEYS.STREET_LABELS) as StreetLabelMode | null;
       if (savedLbl && STREET_LABEL_MODES.includes(savedLbl)) streetLabels = savedLbl;
     } catch { /* default */ }
     let placeInfo: PlaceInfoMode = 'popup';
     try {
-      const savedPlace = localStorage.getItem('city3d-place-info') as PlaceInfoMode | null;
+      const savedPlace = localStorage.getItem(STORAGE_KEYS.PLACE_INFO) as PlaceInfoMode | null;
       if (savedPlace && PLACE_INFO_MODES.includes(savedPlace)) placeInfo = savedPlace;
     } catch { /* default */ }
 
@@ -304,8 +310,100 @@ export class CityView {
     this.snap = {
       mode: initMode, view: initView, heading: Math.round(initHeading), theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
-      showcase: validShowcase, streetLabels, placeInfo, seeThrough: initUrl?.seeThrough ?? true,
+      showcase: validShowcase, streetLabels, placeInfo, seeThrough: initUrl?.seeThrough ?? true, locale: initLocale,
     };
+
+    this.sdk = this.createSDK();
+  }
+
+  private createSDK(): CitySDK {
+    const sdk: CitySDK = {
+      events: this.events,
+      getCity: () => this.city,
+      getSnapshot: () => this.snap,
+      getLocale: () => this.snap.locale,
+      setLocale: locale => this.setLocale(locale),
+      flyTo: pt => this.flyTo(pt),
+      setZoom: zoom => {
+        const m = this.mounted;
+        if (!m) return;
+        m.camera.zoom = Math.max(m.controls.minZoom, Math.min(m.controls.maxZoom, zoom));
+        m.camera.updateProjectionMatrix();
+      },
+      setMode: mode => this.setMode(mode),
+      setNight: night => {
+        this.setNight(night);
+        this.setTheme(night ? 'dark' : 'light');
+      },
+      setSeeThrough: on => this.setSeeThrough(on),
+      setShowcase: id => this.setShowcase(id),
+      openPlace: id => {
+        const entry = this.placeCatalog.byId.get(id);
+        if (!entry) return false;
+        this.openPopup(entry);
+        return true;
+      },
+      closePopup: () => this.closePopup(),
+      getPlace: id => this.placeCatalog.byId.get(id),
+      searchPlaces: query => {
+        const q = query.trim().toLowerCase();
+        if (!q) return [...this.placeCatalog.labels];
+        const out: PlaceEntry[] = [];
+        for (const entry of this.placeCatalog.byId.values()) {
+          if (entry.name.toLowerCase().includes(q) || entry.address.toLowerCase().includes(q)) {
+            out.push(entry);
+          }
+        }
+        return out;
+      },
+      setLamp: (id, on) => this.setLamp(id, on),
+      addCustomLayer: (id, object) => {
+        const prev = this.customLayers.get(id);
+        if (prev && this.mounted) this.mounted.extensionGroup.remove(prev);
+        this.customLayers.set(id, object);
+        if (this.mounted) this.mounted.extensionGroup.add(object);
+      },
+      removeCustomLayer: id => {
+        const obj = this.customLayers.get(id);
+        if (!obj) return;
+        this.customLayers.delete(id);
+        if (this.mounted) this.mounted.extensionGroup.remove(obj);
+      },
+      registerPopupAction: action => {
+        this.popupActions.set(action.id, action);
+        if (this.activePopup) this.renderPopupContent();
+        return () => {
+          this.popupActions.delete(action.id);
+          if (this.activePopup) this.renderPopupContent();
+        };
+      },
+      getPopupActions: () => Array.from(this.popupActions.values()),
+      use: extension => {
+        if (this.extensions.has(extension.id)) this.sdk.unuse(extension.id);
+        if (extension.popupActions) {
+          for (const act of extension.popupActions) this.popupActions.set(act.id, act);
+        }
+        const cleanup = this.mounted && extension.onMount ? (extension.onMount(sdk) ?? undefined) : undefined;
+        this.extensions.set(extension.id, { ext: extension, ...(cleanup ? { cleanup } : {}) });
+        if (this.activePopup) this.renderPopupContent();
+        return () => this.sdk.unuse(extension.id);
+      },
+      unuse: extensionId => {
+        const rec = this.extensions.get(extensionId);
+        if (!rec) return;
+        this.extensions.delete(extensionId);
+        if (rec.ext.popupActions) {
+          for (const act of rec.ext.popupActions) this.popupActions.delete(act.id);
+        }
+        try { rec.cleanup?.(); } catch { /* ignore */ }
+        try { rec.ext.onUnmount?.(sdk); } catch { /* ignore */ }
+        if (this.activePopup) this.renderPopupContent();
+      },
+      getExtensions: () => Array.from(this.extensions.values(), r => r.ext),
+      on: (event, handler) => this.events.on(event, handler),
+      off: (event, handler) => this.events.off(event, handler),
+    };
+    return sdk;
   }
 
   // ---------- store ----------
@@ -325,17 +423,18 @@ export class CityView {
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.touchAction = 'none';
-    const onLost = (e: Event) => e.preventDefault();   // let the browser restore the context; three re-uploads everything
+    const onLost = (e: Event) => e.preventDefault();
     renderer.domElement.addEventListener('webglcontextlost', onLost);
 
     const scene = new THREE.Scene();
     const mapGroup = new THREE.Group();
     const showcaseGroup = new THREE.Group();
+    const extensionGroup = new THREE.Group();
     showcaseGroup.visible = false;
-    scene.add(mapGroup, showcaseGroup);
+    for (const obj of this.customLayers.values()) extensionGroup.add(obj);
+    scene.add(mapGroup, showcaseGroup, extensionGroup);
 
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 7000);
-    // the view opens on the saved/URL target (defaulting to the area's origin crossroads)
     const target = new THREE.Vector3(this.savedCam.x, 0, this.savedCam.z);
     camera.zoom = this.savedCam.zoom;
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -346,8 +445,6 @@ export class CityView {
     controls.zoomSpeed = 1.2;
     controls.minZoom = 0.14; controls.maxZoom = 60;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
-    // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
-    // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
@@ -364,7 +461,6 @@ export class CityView {
     const baseGroup = this.group(this.base, true);
     const stationShellGroup = this.group(this.stationShell, false);
     mapGroup.add(baseGroup, stationShellGroup);
-    // a remount starts from fresh meshes; the built layers are kept
     for (const t of this.tiles) {
       for (const v of t.layers.values()) v.group = null;
       t.shown = -1;
@@ -374,7 +470,7 @@ export class CityView {
     for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const fleets = new Map<VehicleKind, Fleet>();
-    for (const kind of KINDS) {
+    for (const kind of VEHICLE_KINDS) {
       const fleet: Fleet = { model: vehicleModel(kind), meshes: [], list: this.vehicles.filter(v => v.kind === kind) };
       this.fleetMeshes(fleet, mapGroup);
       fleets.set(kind, fleet);
@@ -426,7 +522,6 @@ export class CityView {
       return null;
     };
 
-    // Double click / double tap: open popup info on callout pins or buildings/places, otherwise fly to spot on ground
     const onDbl = (e: MouseEvent) => {
       const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
       if (pinHit) {
@@ -451,8 +546,6 @@ export class CityView {
       flyToClient(e.clientX, e.clientY);
     };
 
-    // Mobile two-finger gesture enhancements: allow two-finger twist rotation even when starting in 2D mode,
-    // and disable zoomToCursor on touch or low camera angles so pinch-zoom never slides the target away.
     let down: [number, number] | null = null;
     let lastTap: { t: number; x: number; y: number } | null = null;
     let touchGesture: { ang0: number; dist0: number } | null = null;
@@ -474,7 +567,6 @@ export class CityView {
         while (dAng > Math.PI) dAng -= 2 * Math.PI;
         while (dAng < -Math.PI) dAng += 2 * Math.PI;
         if (Math.abs(dAng) > 0.24) {
-          // User is twisting two fingers to rotate -> seamlessly unlock 3D orbit rotation
           this.setMode('3d');
           touchGesture = null;
         }
@@ -482,11 +574,10 @@ export class CityView {
     };
     const onTouchEnd = () => { touchGesture = null; };
     const onWheel = () => {
-      // OrbitControls' internal _TILT_LIMIT is 20° (0.349 rad); only enable zoomToCursor comfortably above that
-      controls.zoomToCursor = this.elevation() >= 0.38;
+      controls.zoomToCursor = this.elevation() >= MIN_ZOOM_TO_CURSOR_EL;
     };
     const onDown = (e: PointerEvent) => {
-      controls.zoomToCursor = e.pointerType === 'mouse' && this.elevation() >= 0.38;
+      controls.zoomToCursor = e.pointerType === 'mouse' && this.elevation() >= MIN_ZOOM_TO_CURSOR_EL;
       down = [e.clientX, e.clientY];
     };
 
@@ -499,7 +590,7 @@ export class CityView {
         return;
       }
       const now = performance.now();
-      if (now - lastHoverTime < 45) return;
+      if (now - lastHoverTime < HOVER_THROTTLE_MS) return;
       lastHoverTime = now;
 
       const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
@@ -516,16 +607,15 @@ export class CityView {
       }
       this.clearHoveredPin();
 
-      // When zoomed out far, buildings are too small to need hover banners
       const px = this.pxPerMetre();
-      if (this.snap.placeInfo === 'off' || px < 3.2) {
+      if (this.snap.placeInfo === 'off' || px < HOVER_MIN_PX_PER_METRE) {
         this.hideHoverBanner();
         renderer.domElement.style.cursor = '';
         return;
       }
       const picked = pickAtClient(e.clientX, e.clientY);
       const entry = picked ? this.placeCatalog.byId.get(picked.owner) : undefined;
-      if (!entry || (entry.category === 'building' && entry.tier > 1 && px < 5.0)) {
+      if (!entry || (entry.category === 'building' && entry.tier > 1 && px < HOVER_REGULAR_BLDG_MIN_PX_PER_METRE)) {
         this.hideHoverBanner();
         renderer.domElement.style.cursor = picked?.floor ? 'pointer' : '';
         return;
@@ -581,7 +671,6 @@ export class CityView {
         if (this.activePopup) this.closePopup();
         return;
       }
-      // Single click on a building toggles its floor light (double click opens the popup)
       if (picked.floor) {
         this.setLamp(picked.floor, !this.lit.has(picked.floor));
         this.syncPopupBulb();
@@ -644,6 +733,10 @@ export class CityView {
       this.streetLabelsStep();
       this.placeInfoStep();
       this.syncUrlState(now);
+      for (const { ext } of this.extensions.values()) {
+        try { ext.onTick?.(dt, this.sdk); } catch { /* isolate extension errors */ }
+      }
+      this.events.emit('tick', { dt, now });
       if (this.mounted) {
         if (this.mounted.bloom?.enabled && this.mounted.composer) this.mounted.composer.render();
         else this.mounted.renderer.render(scene, camera);
@@ -695,7 +788,7 @@ export class CityView {
     window.addEventListener('hashchange', onPopState);
 
     this.mounted = {
-      host, renderer, scene, mapGroup, stationShellGroup, showcaseGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, stationShellGroup, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         window.removeEventListener('popstate', onPopState);
@@ -715,11 +808,20 @@ export class CityView {
         renderer.domElement.removeEventListener('webglcontextlost', onLost);
       },
     };
+    if (typeof window !== 'undefined') window.MyCitySDK = this.sdk;
+    for (const rec of this.extensions.values()) {
+      try {
+        const cleanup = rec.ext.onMount?.(this.sdk);
+        if (cleanup) rec.cleanup = cleanup;
+      } catch { /* ignore */ }
+    }
+    this.events.emit('ready', { city: this.city });
+
     this.applyMode(this.snap.mode, false);
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // Build all bespoke landmark tiles (Viet Tower, Novotel, VPBank Tower, Rạp Chiếu phim Quốc gia) plus the closest tiles immediately
+    // Build all bespoke landmark tiles plus the closest tiles immediately
     const first = Math.min(1, this.wantedDetail()) as Detail;
     const landmarkTiles = this.tiles.filter(t => t.tile.buildings.some(b => b.model));
     const closestTiles = [...this.tiles]
@@ -758,6 +860,10 @@ export class CityView {
         place: this.activePopup?.entry.id ?? this.savedCam.place,
       };
     }
+    for (const rec of this.extensions.values()) {
+      try { rec.cleanup?.(); } catch { /* ignore */ }
+      rec.cleanup = undefined;
+    }
     m.stop();
     this.timers.forEach(clearTimeout); this.timers = [];
     this.labelLayer?.remove();
@@ -781,8 +887,38 @@ export class CityView {
   }
 
   // ---------- commands ----------
-  setMode(mode: Mode) { this.update({ mode }); this.applyMode(mode, true); }
+  setMode(mode: Mode) {
+    this.update({ mode });
+    this.applyMode(mode, true);
+    this.events.emit('mode:change', { mode });
+  }
   toggleMode() { this.setMode(this.snap.mode === '2d' ? '3d' : '2d'); }
+
+  setLocale(locale: Locale) {
+    if (locale === this.snap.locale) return;
+    setGlobalLocale(locale);
+    this.placeCatalog = buildPlaceCatalog(this.city, this.showcaseIdSet, locale);
+    this.update({ locale });
+    if (this.placeLayer) {
+      this.placeLayer.replaceChildren();
+      this.placeNodes.clear();
+      this.placeItems.clear();
+      this.placeSig = '';
+    }
+    if (this.activePopup) {
+      const updated = this.placeCatalog.byId.get(this.activePopup.entry.id);
+      if (updated) this.activePopup.entry = updated;
+      this.renderPopupContent();
+    }
+    this.placeInfoStep(true);
+    this.events.emit('locale:change', { locale });
+  }
+
+  toggleLocale() {
+    const idx = LOCALES.indexOf(this.snap.locale);
+    const next = LOCALES[(idx + 1) % LOCALES.length]!;
+    this.setLocale(next);
+  }
 
   /** switch between the full city map (id = null) and a standalone diorama showcase on an iso-glow base plate */
   setShowcase(id: string | null) {
@@ -807,6 +943,7 @@ export class CityView {
       this.update({ showcase: null, pending: 0, lit: this.countLit(), floors: this.floors.length, stats: this.shownStats() });
       this.streetLabelsStep(true);
       this.placeInfoStep(true);
+      this.events.emit('showcase:change', { showcase: null });
       return;
     }
     if (m && !this.snap.showcase) {
@@ -815,6 +952,7 @@ export class CityView {
     this.mountShowcase(id);
     this.streetLabelsStep(true);
     this.placeInfoStep(true);
+    this.events.emit('showcase:change', { showcase: id });
   }
 
   private mountShowcase(id: string) {
@@ -841,7 +979,7 @@ export class CityView {
       m.showcaseGroup.add(this.group(built.layer));
       if (built.shellLayer) {
         const shellGroup = this.group(built.shellLayer);
-        shellGroup.visible = !(this.snap.seeThrough && built.item.zoom >= 5.5);
+        shellGroup.visible = !(this.snap.seeThrough && built.item.zoom >= SEE_THROUGH.SHOWCASE_MIN_ZOOM);
         m.showcaseGroup.add(shellGroup);
         this.activeShowcase.shellGroup = shellGroup;
         this.paintLayer(built.shellLayer);
@@ -895,7 +1033,9 @@ export class CityView {
     this.update({ theme });
     try { localStorage.setItem('city3d-theme', theme); } catch { /* not remembered */ }
     this.applyTheme(theme);
+    this.events.emit('theme:change', { theme, night: this.snap.night });
   }
+
   /** Ngày ↔ Đêm: the light theme by day, the dark theme and the lamps by night, one switch (ADR-045) */
   toggleDayNight() {
     const night = !this.snap.night;
@@ -914,7 +1054,7 @@ export class CityView {
   setStreetLabels(streetLabels: StreetLabelMode) {
     if (streetLabels === this.snap.streetLabels) return;
     this.update({ streetLabels });
-    try { localStorage.setItem('city3d-street-labels', streetLabels); } catch { /* not remembered */ }
+    try { localStorage.setItem(STORAGE_KEYS.STREET_LABELS, streetLabels); } catch { /* not remembered */ }
     this.streetLabelsStep(true);
   }
 
@@ -927,7 +1067,7 @@ export class CityView {
   setPlaceInfo(placeInfo: PlaceInfoMode) {
     if (placeInfo === this.snap.placeInfo) return;
     this.update({ placeInfo });
-    try { localStorage.setItem('city3d-place-info', placeInfo); } catch { /* not remembered */ }
+    try { localStorage.setItem(STORAGE_KEYS.PLACE_INFO, placeInfo); } catch { /* not remembered */ }
     if (placeInfo === 'off') {
       this.hideHoverBanner();
       this.closePopup();
@@ -992,7 +1132,6 @@ export class CityView {
     };
 
     const now = performance.now();
-    // Fast path while actively dragging/panning: just re-project existing DOM nodes without collision/DOM churn
     if (this.interacting && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
       for (const [key, item] of this.labelItems) {
         const node = this.labelNodes.get(key);
@@ -1027,58 +1166,7 @@ export class CityView {
       this.labelItems.set(key, item);
       let btn = this.labelNodes.get(key);
       if (!btn) {
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.dataset.tier = String(item.tier);
-
-        if (mode === 'pin') {
-          btn.className = 'street-pin';
-          btn.style.setProperty('--stem', `${item.stemHeightPx}px`);
-          btn.setAttribute('aria-label', item.info ? `${item.name} — ${item.info}` : item.name);
-
-          const card = document.createElement('span');
-          card.className = 'pin-card';
-          const title = document.createElement('b');
-          title.className = 'pin-title';
-          title.textContent = item.shortName;
-          card.appendChild(title);
-          if (item.info) {
-            const meta = document.createElement('span');
-            meta.className = 'pin-meta';
-            meta.textContent = item.info;
-            card.appendChild(meta);
-          }
-
-          const stem = document.createElement('i');
-          stem.className = 'pin-stem';
-
-          const base = document.createElement('i');
-          base.className = 'pin-base';
-          for (const cls of ['w1', 'w2', 'w3']) {
-            const wave = document.createElement('u');
-            wave.className = `pin-wave ${cls}`;
-            base.appendChild(wave);
-          }
-          const dot = document.createElement('s');
-          dot.className = 'pin-dot';
-          base.appendChild(dot);
-
-          btn.append(card, stem, base);
-        } else {
-          btn.className = 'street-map-label';
-          btn.title = item.info ? `${item.name} · ${item.info}` : item.name;
-          const txt = document.createElement('span');
-          txt.className = 'map-label-text';
-          txt.textContent = item.name;
-          btn.appendChild(txt);
-          if (item.info) {
-            const meta = document.createElement('em');
-            meta.className = 'map-label-meta';
-            meta.textContent = item.info;
-            btn.appendChild(meta);
-          }
-        }
-
+        btn = createStreetLabelNode(item, mode);
         layer.appendChild(btn);
         this.labelNodes.set(key, btn);
       }
@@ -1116,7 +1204,6 @@ export class CityView {
       };
     };
 
-    // Update anchored popup card position if open
     if (popupEl && this.activePopup && !this.snap.showcase) {
       const entry = this.activePopup.entry;
       const scr = project([entry.world[0], entry.world[1], entry.world[2] + 2.5]);
@@ -1143,7 +1230,7 @@ export class CityView {
     }
 
     const c = m.controls.target, cp = m.camera.position;
-    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${this.activePopup?.entry.id ?? ''}`;
+    const sig = `${mode}|${this.snap.locale}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${this.activePopup?.entry.id ?? ''}`;
     if (!force && sig === this.placeSig) return;
     this.placeSig = sig;
 
@@ -1157,7 +1244,6 @@ export class CityView {
     }
 
     const now = performance.now();
-    // Fast path while actively dragging/panning: just re-project existing DOM nodes
     if (this.interacting && !force && this.placeItems.size > 0 && now - this.lastPlaceSelect < 140) {
       for (const [key, item] of this.placeItems) {
         const node = this.placeNodes.get(key);
@@ -1188,42 +1274,7 @@ export class CityView {
       this.placeItems.set(key, { entry: item.entry, x: item.x, y: item.y, anchorWorld: item.anchorWorld, offsetY: item.offsetY });
       let btn = this.placeNodes.get(key);
       if (!btn) {
-        const entry = item.entry;
-        btn = document.createElement('button');
-        btn.type = 'button';
-        btn.dataset.category = entry.category;
-        btn.dataset.tier = String(entry.tier);
-
-        if (mode === 'label') {
-          btn.className = 'place-label-card';
-          const head = document.createElement('span');
-          head.className = 'place-label-head';
-          const badge = document.createElement('i');
-          badge.className = 'place-label-badge';
-          badge.textContent = entry.badge;
-          const title = document.createElement('b');
-          title.className = 'place-label-name';
-          title.textContent = entry.name;
-          head.append(badge, title);
-
-          const addr = document.createElement('span');
-          addr.className = 'place-label-addr';
-          addr.textContent = entry.address;
-
-          const pointer = document.createElement('s');
-          pointer.className = 'place-label-stem';
-
-          btn.append(head, addr, pointer);
-        } else {
-          btn.className = 'place-marker-pill';
-          const dot = document.createElement('i');
-          dot.className = 'place-marker-dot';
-          const txt = document.createElement('span');
-          txt.className = 'place-marker-text';
-          txt.textContent = entry.name;
-          btn.append(dot, txt);
-        }
-
+        btn = createPlaceLabelNode(item.entry, mode);
         layer.appendChild(btn);
         this.placeNodes.set(key, btn);
       }
@@ -1252,7 +1303,6 @@ export class CityView {
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    // 1. Place labels / pills first (higher z-index)
     if (this.snap.placeInfo !== 'off') {
       const isCard = this.snap.placeInfo === 'label';
       for (const [key, item] of this.placeItems) {
@@ -1264,7 +1314,6 @@ export class CityView {
       }
     }
 
-    // 2. Street callout pins / map labels
     if (this.snap.streetLabels !== 'off') {
       const isPin = this.snap.streetLabels === 'pin';
       for (const [key, item] of this.labelItems) {
@@ -1305,35 +1354,9 @@ export class CityView {
     this.setHoveredPin(null);
   }
 
-  /** Synthesize a rich PlaceEntry popup for a street when double-clicked on a callout pin */
   private openStreetPopup(street: StreetEntry, world: [number, number]) {
-    const tierDesc =
-      street.tier === 1
-        ? 'Trục giao thông huyết mạch đô thị kết nối liên quận Đống Đa – Ba Đình.'
-        : street.tier === 2
-          ? 'Tuyến phố chính tập trung thương mại, dịch vụ, cơ quan và khu dân cư sầm uất.'
-          : 'Tuyến phố / ngõ nội khu kết nối các tổ dân phố và khu tập thể.';
-    const lenM = Math.round(street.totalLength);
-    const entry: PlaceEntry = {
-      id: `street:${street.id}`,
-      name: street.name,
-      category: 'building',
-      categoryLabel: street.tier === 1 ? 'Trục đường lớn' : street.tier === 2 ? 'Tuyến phố chính' : 'Tuyến phố nội khu',
-      badge: 'ĐG',
-      address: `${street.name}, Hà Nội`,
-      description: tierDesc,
-      metrics: [
-        { label: 'Chiều dài tuyến', value: lenM >= 1000 ? `${(lenM / 1000).toFixed(2)} km` : `${lenM} m` },
-        ...(street.lanes ? [{ label: 'Quy mô làn', value: `${street.lanes} làn xe` }] : []),
-        { label: 'Bề rộng lòng đường', value: `${street.width} m` },
-        { label: 'Cấp đường', value: street.tier === 1 ? 'Cấp 1 (Trục chính)' : street.tier === 2 ? 'Cấp 2 (Phố chính)' : 'Cấp 3 (Nội khu)' },
-      ],
-      world: [world[0], world[1], 4],
-      ground: world,
-      tier: street.tier,
-      minPxPerMetre: street.minPxPerMetre,
-      source: 'osm',
-    };
+    const cityName = this.city.cityName ?? this.city.name.split(':')[0]?.trim() ?? '';
+    const entry = createStreetPlaceEntry(street, world, cityName, this.snap.locale);
     this.openPopup(entry);
   }
 
@@ -1345,31 +1368,12 @@ export class CityView {
       return;
     }
     const floorNum = floor ? Number(floor.split('#')[1]) + 1 : null;
-    const floorTag = floorNum && Number.isFinite(floorNum) ? ` · Tầng ${floorNum}` : '';
-    const sig = `${entry.id}|${floorTag}`;
+    const floorTag = floorNum && Number.isFinite(floorNum) ? ` · ${t('popup.floor', { floor: floorNum }, this.snap.locale)}` : '';
+    const sig = `${entry.id}|${floorTag}|${this.snap.locale}`;
     if (this.hoveredPlaceId !== sig) {
       this.hoveredPlaceId = sig;
-      banner.dataset.category = entry.category;
-      banner.replaceChildren();
-      const top = document.createElement('div');
-      top.className = 'hover-banner-top';
-      const badge = document.createElement('span');
-      badge.className = 'hover-banner-badge';
-      badge.textContent = entry.categoryLabel;
-      const hint = document.createElement('span');
-      hint.className = 'hover-banner-hint';
-      hint.textContent = 'Nhấp đúp xem chi tiết';
-      top.append(badge, hint);
-
-      const title = document.createElement('strong');
-      title.className = 'hover-banner-title';
-      title.textContent = entry.name;
-
-      const sub = document.createElement('span');
-      sub.className = 'hover-banner-sub';
-      sub.textContent = `${entry.address}${floorTag}`;
-
-      banner.append(top, title, sub);
+      renderHoverBannerDom(banner, entry, floorTag, this.snap.locale);
+      this.events.emit('place:hover', { entry, ...(floor ? { floor } : {}) });
     }
     const w = m.host.clientWidth;
     const bx = Math.max(120, Math.min(w - 120, x));
@@ -1381,7 +1385,10 @@ export class CityView {
   private hideHoverBanner() {
     if (!this.hoverBanner) return;
     this.hoverBanner.style.display = 'none';
-    this.hoveredPlaceId = null;
+    if (this.hoveredPlaceId !== null) {
+      this.hoveredPlaceId = null;
+      this.events.emit('place:hover', { entry: null });
+    }
   }
 
   private openPopup(entry: PlaceEntry, floor?: string) {
@@ -1390,6 +1397,7 @@ export class CityView {
     this.savedCam.place = entry.id;
     this.renderPopupContent();
     this.placeInfoStep(true);
+    this.events.emit('place:select', { entry, ...(floor ? { floor } : {}) });
   }
 
   closePopup() {
@@ -1400,6 +1408,7 @@ export class CityView {
       this.popupCard.replaceChildren();
     }
     this.placeInfoStep(true);
+    this.events.emit('place:select', { entry: null });
   }
 
   private isEntryLit(entry: PlaceEntry): boolean {
@@ -1438,112 +1447,29 @@ export class CityView {
   private syncPopupBulb() {
     const popupEl = this.popupCard, active = this.activePopup;
     if (!popupEl || !active) return;
-    const bulbBtn = popupEl.querySelector<HTMLButtonElement>('.popup-bulb');
-    if (!bulbBtn) return;
-    const isLit = this.isEntryLit(active.entry);
-    bulbBtn.classList.toggle('lit', isLit);
-    bulbBtn.setAttribute('aria-pressed', String(isLit));
-    bulbBtn.title = isLit ? 'Tắt đèn công trình' : 'Bật đèn công trình';
+    syncPopupBulbDom(popupEl, this.isEntryLit(active.entry), this.snap.locale);
   }
 
   private renderPopupContent() {
     const popupEl = this.popupCard, active = this.activePopup;
     if (!popupEl || !active) return;
-    const { entry, floor } = active;
-    popupEl.dataset.category = entry.category;
-    popupEl.replaceChildren();
-
-    const header = document.createElement('div');
-    header.className = 'popup-header';
-    const badgeWrap = document.createElement('div');
-    badgeWrap.className = 'popup-badges';
-    const badge = document.createElement('span');
-    badge.className = 'popup-badge';
-    badge.textContent = entry.categoryLabel;
-    badgeWrap.appendChild(badge);
-    if (floor) {
-      const fNum = Number(floor.split('#')[1]) + 1;
-      if (Number.isFinite(fNum)) {
-        const fBadge = document.createElement('span');
-        fBadge.className = 'popup-floor-badge';
-        fBadge.textContent = `Tầng ${fNum}`;
-        badgeWrap.appendChild(fBadge);
-      }
-    }
-
-    const headRight = document.createElement('div');
-    headRight.className = 'popup-head-actions';
-
-    if (entry.buildingId || entry.category === 'station') {
-      const bulbBtn = document.createElement('button');
-      bulbBtn.type = 'button';
-      bulbBtn.className = 'popup-bulb';
-      bulbBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6" fill="none"/><path d="M10 22h4" fill="none"/></svg>';
-      bulbBtn.addEventListener('click', () => {
-        this.toggleEntryLamps(entry);
+    renderPopupCardDom({
+      popupEl,
+      entry: active.entry,
+      ...(active.floor ? { floor: active.floor } : {}),
+      isLit: this.isEntryLit(active.entry),
+      locale: this.snap.locale,
+      sdk: this.sdk,
+      customActions: Array.from(this.popupActions.values()),
+      onToggleLamps: () => {
+        this.toggleEntryLamps(active.entry);
         this.syncPopupBulb();
-      });
-      headRight.appendChild(bulbBtn);
-    }
-
-    const closeBtn = document.createElement('button');
-    closeBtn.type = 'button';
-    closeBtn.className = 'popup-close';
-    closeBtn.title = 'Đóng (Esc)';
-    closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
-    closeBtn.addEventListener('click', () => this.closePopup());
-    headRight.appendChild(closeBtn);
-    header.append(badgeWrap, headRight);
-
-    const title = document.createElement('h3');
-    title.className = 'popup-title';
-    title.textContent = entry.name;
-
-    const addr = document.createElement('div');
-    addr.className = 'popup-addr';
-    addr.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg><span></span>`;
-    addr.querySelector('span')!.textContent = entry.address;
-
-    const desc = document.createElement('p');
-    desc.className = 'popup-desc';
-    desc.textContent = entry.description;
-
-    const grid = document.createElement('div');
-    grid.className = 'popup-metrics';
-    for (const m of entry.metrics) {
-      const cell = document.createElement('div');
-      cell.className = 'popup-metric';
-      const lbl = document.createElement('span');
-      lbl.textContent = m.label;
-      const val = document.createElement('strong');
-      val.textContent = m.value;
-      cell.append(lbl, val);
-      grid.appendChild(cell);
-    }
-
-    popupEl.append(header, title, addr, desc, grid);
-
-    if (entry.showcaseId) {
-      const actions = document.createElement('div');
-      actions.className = 'popup-actions';
-      const scId = entry.showcaseId;
-      const scBtn = document.createElement('button');
-      scBtn.type = 'button';
-      scBtn.className = 'popup-btn';
-      scBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span>Xem đế 3D</span>';
-      scBtn.addEventListener('click', () => {
-        this.setShowcase(scId);
-      });
-      actions.appendChild(scBtn);
-      popupEl.appendChild(actions);
-    }
-
-    this.syncPopupBulb();
-    popupEl.style.display = '';
+      },
+      onClose: () => this.closePopup(),
+      onOpenShowcase: scId => this.setShowcase(scId),
+    });
   }
 
-  /** night: the street lamps come on, pulses run along the wires; the houses and the vehicles
-      light as their settings say (auto: at night) */
   setNight(night: boolean) {
     this.update({ night });
     this.streetLamps();
@@ -1562,10 +1488,8 @@ export class CityView {
     this.applyBloom();
   }
 
-  /** the share of windows lit now (the house light settings, eased in and out over half a second) */
   private ambient = 0;
 
-  /** the windows to what the house light settings ask for */
   private houseLights(ease: boolean) {
     this.timers.forEach(clearTimeout); this.timers = [];
     const L = this.snap.lights, target = lightOn(L.house, this.snap.night) ? L.share : 0, from = this.ambient;
@@ -1576,7 +1500,6 @@ export class CityView {
     }
   }
 
-  /** street lamps, garden lamps and the stations' lamps, as the street light setting says */
   private streetLamps() {
     const on = lightOn(this.snap.lights.street, this.snap.night);
     this.setLamp(STREET_LAMPS, on, false);
@@ -1588,7 +1511,6 @@ export class CityView {
 
   private countLit() { return this.activeFloors().reduce((n, f) => n + (this.lit.has(f) ? 1 : 0), 0); }
 
-  /** every floor on, or every floor off when any is on */
   toggleAll() {
     const list = this.activeFloors();
     const on = !list.some(f => this.lit.has(f));
@@ -1597,9 +1519,7 @@ export class CityView {
     this.syncPopupBulb();
   }
 
-  /** keys held to move: W A S D or the arrows */
   private held = new Set<string>();
-  private static MOVE: Record<string, [number, number]> = { w: [0, 1], arrowup: [0, 1], s: [0, -1], arrowdown: [0, -1], a: [-1, 0], arrowleft: [-1, 0], d: [1, 0], arrowright: [1, 0] };
 
   keyUp(e: KeyboardEvent) { this.held.delete(e.key.toLowerCase()); }
 
@@ -1607,7 +1527,7 @@ export class CityView {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const k = e.key.toLowerCase();
     if (k === 'escape' && this.activePopup) { this.closePopup(); return true; }
-    if (CityView.MOVE[k]) { this.held.add(k); return true; }
+    if (MOVE_KEYS[k]) { this.held.add(k); return true; }
     switch (k) {
       case 'r': this.tilt(1); return true;
       case 'f': this.tilt(-1); return true;
@@ -1633,7 +1553,6 @@ export class CityView {
     if (m) {
       for (const [kind, f] of m.fleets) {
         f.list = this.vehicles.filter(v => v.kind === kind);
-        // more than the meshes hold: make them again
         if (f.list.length > (f.meshes[0]?.instanceMatrix.count ?? 0)) this.fleetMeshes(f, m.mapGroup);
         for (const o of f.meshes) o.count = f.list.length;
       }
@@ -1643,8 +1562,6 @@ export class CityView {
     }
   }
 
-  /** a fleet's instanced meshes: one per part, its shell; the head and tail lamps and the taxi sign
-      change colour at night, the beams only show at night in the dark theme */
   private fleetMeshes(f: Fleet, parent: THREE.Object3D) {
     for (const o of f.meshes) { parent.remove(o); o.dispose(); }
     const n = Math.max(1, f.list.length);
@@ -1660,16 +1577,12 @@ export class CityView {
     for (const o of f.meshes) { o.frustumCulled = false; o.count = f.list.length; parent.add(o); }
   }
 
-  /** one line buffer for the creases of every vehicle, rewritten each frame */
   private linesFor(fleets: Map<VehicleKind, Fleet>): LineSegmentsGeometry {
     let n = 0;
     for (const f of fleets.values()) n += f.list.length * f.model.lines.length;
-    const g = new LineSegmentsGeometry().setPositions(new Float32Array(Math.max(6, n)));
-    return g;
+    return new LineSegmentsGeometry().setPositions(new Float32Array(Math.max(6, n)));
   }
 
-  /** a train's four cars, each a group of its parts, its outline and its lines; the last car turned
-      round so the train has a cab at both ends */
   private trainMeshes(track: Track, offset: number, parent: THREE.Object3D): Train {
     const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const cars = Array.from({ length: METRO.cars }, (_, i) => {
@@ -1686,7 +1599,6 @@ export class CityView {
     return { track, offset, cars, doors, stopping: false };
   }
 
-  /** each frame: the trains by their timetable; the platform edge lights while a train stands there */
   private trainStep() {
     const hide = this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles;
     const lit = new Set<string>();
@@ -1715,17 +1627,15 @@ export class CityView {
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'edge'), lit.has(stationLamp(st, 'edge')), false);
   }
 
-  /** cars in the theme's colours; windows lit at night, doors lit while the train stands at a station */
   private trainColors() {
     const css = getComputedStyle(document.documentElement), tok = (n: string) => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff');
-    const t = this.mats.train, night = this.snap.night;
-    t.body.color = tok('--body'); t.top.color = tok('--deck'); t.glass.color = tok('--glass');
-    t.win.color = tok(night ? '--accent' : '--recess'); t.head.color = tok(night ? '--accent-hi' : '--detail');
+    const tMat = this.mats.train, night = this.snap.night;
+    tMat.body.color = tok('--body'); tMat.top.color = tok('--deck'); tMat.glass.color = tok('--glass');
+    tMat.win.color = tok(night ? '--accent' : '--recess'); tMat.head.color = tok(night ? '--accent-hi' : '--detail');
     for (const tr of this.trains) tr.doors.color = tok(tr.stopping ? '--accent-hi' : '--recess');
     if (this.activeShowcase) this.activeShowcase.doors.color = tok('--accent-hi');
   }
 
-  /** each frame: lights by the clock, everyone moves, the instances follow */
   private trafficStep(dt: number) {
     const m = this.mounted;
     if (!m) return;
@@ -1776,7 +1686,7 @@ export class CityView {
     }
   }
 
-  // ---------- view distance and the quality stepping down by itself ----------
+  // ---------- view distance and auto quality ----------
   private tileRange() {
     const m = this.mounted, far = this.snap.quality.viewDistance;
     if (!m || far <= 0) return 0;
@@ -1840,7 +1750,6 @@ export class CityView {
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
-    // Never build heavy furniture cells mid-drag on mobile/desktop; stream them in during idle frames
     const maxBuild = initial ? 4 : this.interacting ? 0 : 2;
     for (const s of this.cells) {
       const on = near(s.bucket.center, CELL_R);
@@ -1865,21 +1774,19 @@ export class CityView {
     const q = this.snap.quality;
     if (!q.autoQuality || this.snap.pending > 0 || document.hidden) { this.sim.slow = 0; return; }
     this.sim.slow = fps < 28 ? this.sim.slow + 1 : 0;
-    if (this.sim.slow < 6) return;   // 3 s below 28 fps
+    if (this.sim.slow < 6) return;
     this.sim.slow = 0;
     const lower = lowerLevel(q);
     if (lower) this.setQuality(lower, lower.level);
   }
 
   // ---------- detail levels and tiles ----------
-  /** the detail level the quality settings and the zoom ask for */
   private wantedDetail(): Detail {
     const m = this.mounted;
     const px = m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4;
     return detailFor(px, this.snap.quality);
   }
 
-  /** a tile's layer at a level, built (and its meshes made) if need be */
   private ensure(t: TileState, level: Detail): Detail {
     let v = t.layers.get(level);
     if (!v) {
@@ -1902,7 +1809,6 @@ export class CityView {
     t.shown = level;
   }
 
-  /** each frame: show every nearby tile at the wanted level when it is built, and build more when not mid-gesture */
   private detailStep() {
     const m = this.mounted;
     if (!m) return;
@@ -1916,13 +1822,11 @@ export class CityView {
         this.show(t, this.ensure(t, want));
         this.syncTileVisibility(t, true);
       } else {
-        // never leave a visible street bare while panning/flying: put up L0 massing right away
         if (t.shown < 0) this.show(t, this.ensure(t, 0));
         this.syncTileVisibility(t, true);
         waiting.push(t);
       }
     }
-    // Always stream L0 massing for any remaining unbuilt tiles (closest first) so no tile on the map ever stays empty
     if (unbuilt.length) {
       unbuilt.sort((a, b) => dist2(a.tile.center, c) - dist2(b.tile.center, c));
       const l0Budget = this.interacting ? 3 : isMobileDevice() ? 5 : 8;
@@ -1961,7 +1865,6 @@ export class CityView {
     return s;
   }
 
-  /** the meshes of a layer, with the shared materials */
   private group(layer: Layer, isBase = false): THREE.Group {
     const g = new THREE.Group();
     for (const [s, geo] of layer.surfaces) {
@@ -1979,25 +1882,23 @@ export class CityView {
     return g;
   }
 
-  /** line tiers and windows on or off per the quality settings and zoom level */
   private tiers(g: THREE.Object3D) {
     const q = this.snap.quality, auto = q.autoDetail && !this.snap.showcase, px = this.pxPerMetre();
     g.traverse(o => {
-      const t = o.userData.tier as (keyof Quality | 'streetLines') | undefined;
-      if (!t) return;
-      let on = t === 'streetLines' ? q.creases : (q[t] as boolean);
+      const tier = o.userData.tier as (keyof Quality | 'streetLines') | undefined;
+      if (!tier) return;
+      let on = tier === 'streetLines' ? q.creases : (q[tier] as boolean);
       if (auto && on) {
-        if (t === 'details' && px < FAR.details) on = false;
-        else if (t === 'creases' && px < FAR.creases) on = false;
-        else if (t === 'streetLines' && px < FAR.streetLines) on = false;
-        else if (t === 'silhouette' && px < FAR.silhouette) on = false;
-        else if (t === 'windows' && px < 1.8) on = false;
+        if (tier === 'details' && px < FAR.details) on = false;
+        else if (tier === 'creases' && px < FAR.creases) on = false;
+        else if (tier === 'streetLines' && px < FAR.streetLines) on = false;
+        else if (tier === 'silhouette' && px < FAR.silhouette) on = false;
+        else if (tier === 'windows' && px < 1.8) on = false;
       }
       o.visible = on;
     });
   }
 
-  /** things that only show at night (headlight beams: only in the dark theme too) */
   private nightThings() {
     const m = this.mounted;
     if (m) m.scene.traverse(o => { const k = o.userData.night; if (k) o.visible = this.nightOn(k as string); });
@@ -2007,14 +1908,10 @@ export class CityView {
     this.trainColors();
   }
 
-  /** the pools of light under the street lamps: when the lamps are on, in the dark theme */
   private poolsOn() { return lightOn(this.snap.lights.street, this.snap.night) && this.snap.theme === 'dark'; }
 
-  /** vehicles take the theme's colours; their lamps and the taxi sign light at night */
   private vehicleColors(tok: (n: string) => THREE.Color) {
     const v = this.mats.vehicle, night = lightOn(this.snap.lights.vehicle, this.snap.night);
-    // zoomed out a vehicle is a grey block (darker than the road) with a faint outline: it still
-    // reads as a vehicle, with none of the lines inside it (ADR-045)
     const f = this.farF;
     v.body.color = tok('--body').lerp(tok('--line'), 0.45 * f); v.top.color = tok('--deck').lerp(tok('--line'), 0.45 * f);
     (this.vehicleShell.uniforms.color!.value as THREE.Color).copy(tok('--line').lerp(tok('--recess'), 0.6 * f)); v.glass.color = tok('--glass'); v.wheel.color = tok('--recess');
@@ -2030,17 +1927,16 @@ export class CityView {
     if (on === this.lit.has(id)) return;
     if (on) this.lit.add(id); else this.lit.delete(id);
     for (const l of this.layers) this.paint(l, id);
-    if (notify) this.update({ lit: this.countLit() });
+    if (notify) {
+      this.update({ lit: this.countLit() });
+      this.events.emit('building:lightToggle', { id, on });
+    }
   }
 
-  /** a lamp's windows to its colours: off, or each window in its own shade (render/lights.ts),
-      its outline with it */
   private paint(layer: Layer, id: string) {
     const ranges = layer.lamps.get(id);
     if (!ranges) return;
     const fill = layer.windows.getAttribute('color') as THREE.BufferAttribute, floor = this.lit.has(id), share = isHouseLamp(id) ? this.ambient : 0;
-    /** a window's shade: its floor switched on (all its windows, each in its shade), or it is among
-        the share of windows lit (never one of the dark ones then) */
     const shade = (k: number): Shade => { const s = windowShade(id, k); return floor ? s : windowRank(id, k) < share ? (s === 'off' ? 'dim' : s) : 'off'; };
     let k = 0;
     for (const r of ranges) for (let w = r.start; w < r.start + r.count; w += 6, k++) {
@@ -2059,7 +1955,6 @@ export class CityView {
     col.data.needsUpdate = true;
   }
 
-  /** every window and line of a layer to the current colours */
   private paintLayer(layer: Layer) {
     const fill = layer.windows.getAttribute('color') as THREE.BufferAttribute, off = this.colors.off;
     for (let v = 0; v < fill.count; v++) fill.setXYZ(v, off.r, off.g, off.b);
@@ -2105,7 +2000,6 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     m.renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
-    // Dispose any existing composer so applyBloom() rebuilds it only if bloom is active in dark mode
     if (m.composer) {
       m.composer.dispose();
       m.composer = null;
@@ -2126,8 +2020,6 @@ export class CityView {
     (this.mats.shell.uniforms.res!.value as THREE.Vector2).copy(res);
   }
 
-  /** glow round lit things: only allocate EffectComposer + UnrealBloomPass when actually active in dark mode
-      so Day mode and mobile Safari never allocate 100+ MB of unused HalfFloatType render targets */
   private applyBloom() {
     const m = this.mounted;
     if (!m) return;
@@ -2165,10 +2057,8 @@ export class CityView {
   // ---------- zoomed out: less of the small things (ADR-044, ADR-049) ----------
   private far = '';
 
-  /** pixels per metre on screen now */
   private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
 
-  /** when zoomed out, building lines fade and turn off (pure color blocks), while street lines stay subtly visible */
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
@@ -2194,13 +2084,11 @@ export class CityView {
     }
   }
 
-  /** is a night-only thing on now */
   private nightOn(k: string) {
     const cars = lightOn(this.snap.lights.vehicle, this.snap.night);
     return k === 'beam' ? cars && this.snap.theme === 'dark' : k === 'pool' ? this.poolsOn() : this.snap.night;
   }
 
-  /** the tree look in use: full trees turn simple when zoomed out, and hide completely when very far out */
   private treeLook() {
     const q = this.snap.quality, px = this.pxPerMetre();
     if (!q.autoDetail || q.trees === 'off') return q.trees;
@@ -2209,40 +2097,26 @@ export class CityView {
   }
 
   // ---------- moving about (ADR-043) ----------
-  /** places to fly to: key intersections/corridors across Đống Đa, Ba Đình, and every metro station */
+  /** places to fly to: read from `city.places` (defined per AreaConfig) + all metro stations */
   get places(): { id: string; name: string; group: string; at: [number, number] }[] {
+    const configured = this.city.places ?? [
+      { id: 'home', name: this.city.cityName ?? this.city.name, group: t('top.places.defaultGroup', undefined, this.snap.locale), at: [0, 0] as [number, number] },
+    ];
+    const stationPrefix = this.snap.locale === 'en' ? 'Station' : 'Ga';
+    const metroGroup = t('top.places.metroGroup', undefined, this.snap.locale);
     return [
-      { id: 'home', name: 'Ngã tư Thái Hà – Tây Sơn', group: 'Quận Đống Đa', at: [0, 0] },
-      { id: 'vpbank-lang-ha', name: 'VPBank Tower (89 Láng Hạ – Cuối Thái Hà)', group: 'Quận Đống Đa', at: [223, -1206] },
-      { id: 'rap-chieu-phim-quoc-gia', name: 'Rạp Chiếu phim Quốc gia (87 Láng Hạ)', group: 'Quận Đống Đa', at: [310, -1148] },
-      { id: 'thai-thinh', name: 'Phố Thái Thịnh – Yên Lãng', group: 'Quận Đống Đa', at: [-260, -560] },
-      { id: 'nga-tu-so', name: 'Ngã Tư Sở', group: 'Quận Đống Đa', at: [-785, -36] },
-      { id: 'chua-boc', name: 'Chùa Bộc – Học viện Ngân hàng', group: 'Quận Đống Đa', at: [50, 560] },
-      { id: 'pham-ngoc-thach', name: 'Phạm Ngọc Thạch – Kim Liên', group: 'Quận Đống Đa', at: [420, 880] },
-      { id: 'ho-dac-di', name: 'Hồ Đắc Di – Nam Đồng', group: 'Quận Đống Đa', at: [520, 480] },
-      { id: 'nguyen-luong-bang', name: 'Nguyễn Lương Bằng – Gò Đống Đa', group: 'Quận Đống Đa', at: [420, -20] },
-      { id: 'o-cho-dua', name: 'Ô Chợ Dừa', group: 'Quận Đống Đa', at: [1142, 50] },
-      { id: 'xa-dan', name: 'Phố Xã Đàn', group: 'Quận Đống Đa', at: [986, 500] },
-      { id: 'kham-thien', name: 'Phố Khâm Thiên', group: 'Quận Đống Đa', at: [1420, 210] },
-      { id: 'ton-duc-thang', name: 'Tôn Đức Thắng – Văn Miếu Quốc Tử Giám', group: 'Quận Đống Đa', at: [1520, -720] },
-      { id: 'hoang-cau', name: 'Hồ Hoàng Cầu', group: 'Quận Đống Đa', at: [750, -520] },
-      { id: 'hao-nam', name: 'Phố Hào Nam – Cát Linh', group: 'Quận Đống Đa', at: [980, -820] },
-      { id: 'thanh-cong', name: 'Hồ Thành Công – Huỳnh Thúc Kháng', group: 'Quận Ba Đình', at: [210, -1420] },
-      { id: 'giang-vo', name: 'Hồ Giảng Võ – Triển lãm Giảng Võ', group: 'Quận Ba Đình', at: [520, -1820] },
-      { id: 'kim-ma', name: 'Trục Kim Mã – Núi Trúc', group: 'Quận Ba Đình', at: [720, -2100] },
-      { id: 'lotte-lieu-giai', name: 'Lotte Center – Liễu Giai – Đào Tấn', group: 'Quận Ba Đình', at: [-80, -2420] },
-      { id: 'ngoc-khanh', name: 'Hồ Thủ Lệ – Ngọc Khánh', group: 'Quận Ba Đình', at: [-420, -2180] },
-      { id: 'lang-bac', name: 'Quảng trường Ba Đình – Lăng Chủ tịch Hồ Chí Minh', group: 'Quận Ba Đình', at: [2150, -2380] },
-      { id: 'hoang-thanh', name: 'Hoàng thành Thăng Long – Điện Biên Phủ', group: 'Quận Ba Đình', at: [2380, -2120] },
-      { id: 'truc-bach', name: 'Hồ Trúc Bạch – Quán Thánh – Phan Đình Phùng', group: 'Quận Ba Đình', at: [2750, -2950] },
-      { id: 'doi-can', name: 'Phố Đội Cấn – Ngọc Hà', group: 'Quận Ba Đình', at: [1280, -2480] },
-      ...this.city.stations.map(s => ({ id: s.id, name: `Ga ${s.name ?? ''}`.trim(), group: 'Nhà ga Metro', at: [s.at[0], s.at[1]] as [number, number] })),
+      ...configured,
+      ...this.city.stations.map(s => ({
+        id: s.id,
+        name: `${stationPrefix} ${s.name ?? ''}`.trim(),
+        group: metroGroup,
+        at: [s.at[0], s.at[1]] as [number, number],
+      })),
     ];
   }
 
   private fly: { from: THREE.Vector3; to: THREE.Vector3; t0: number } | null = null;
 
-  /** glide the view's middle to a point on the ground (the city model's x, y); switches back to the map if in showcase mode */
   flyTo(p: [number, number], exitShowcase = true) {
     if (exitShowcase && this.snap.showcase) this.setShowcase(null);
     const m = this.mounted;
@@ -2250,7 +2124,6 @@ export class CityView {
     this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], m.controls.target.y, p[1]), t0: performance.now() };
   }
 
-  /** zoom in (k > 1) or out, round the middle of the view */
   zoom(k: number) {
     const m = this.mounted;
     if (!m) return;
@@ -2258,7 +2131,6 @@ export class CityView {
     m.camera.updateProjectionMatrix();
   }
 
-  /** tilt up (+1) or down (-1); automatically unlocks 3D mode if currently in 2D */
   tilt(dir: 1 | -1) {
     if (!this.mounted) return;
     if (this.snap.mode !== '3d') {
@@ -2268,19 +2140,16 @@ export class CityView {
     this.startTurn(this.azimuth(), Math.max(0.12, Math.min(1.45, this.elevation() + dir * 0.16)));
   }
 
-  /** stabilize pan speed, zoom-to-cursor, and target elevation when the camera is tilted low */
   private syncLowCamera() {
     const m = this.mounted;
     if (!m) return;
     const el = Math.max(0.08, this.elevation());
-    // Scale pan speed when camera is low so vertical screen drag doesn't fling the target 8x across the ground plane
     m.controls.panSpeed = Math.max(0.24, Math.min(1, Math.sin(el) / Math.sin(ISO_EL)));
-    if (el < 0.38) m.controls.zoomToCursor = false;
+    if (el < MIN_ZOOM_TO_CURSOR_EL) m.controls.zoomToCursor = false;
 
-    // When tilted low in 3D and zoomed in, gently lift target.y so buildings stay framed instead of staring at the asphalt
     let wantY = 0;
-    if (this.snap.mode === '3d' && !this.activeShowcase && el < 0.38) {
-      const lowF = Math.max(0, Math.min(1, (0.38 - el) / 0.24));
+    if (this.snap.mode === '3d' && !this.activeShowcase && el < MIN_ZOOM_TO_CURSOR_EL) {
+      const lowF = Math.max(0, Math.min(1, (MIN_ZOOM_TO_CURSOR_EL - el) / 0.24));
       const zoomF = Math.max(0, Math.min(1, (m.camera.zoom - 0.9) / 2.2));
       wantY = lowF * zoomF * 12;
     }
@@ -2291,7 +2160,6 @@ export class CityView {
     }
   }
 
-  /** keep the orthographic camera at a fixed 1000 m orbit radius from controls.target so OrbitControls' zoomToCursor never collapses camera.position.y */
   private stabilizeCamera() {
     const m = this.mounted;
     if (!m) return;
@@ -2307,7 +2175,7 @@ export class CityView {
     const az = Math.atan2(dz, dx);
     const rawEl = Math.asin(Math.max(-1, Math.min(1, dy / dist)));
     const el = this.snap.mode === '2d' ? ISO_EL : Math.max(0.10, Math.min(1.43, rawEl));
-    if (Math.abs(dist - 1000) > 0.5 || Math.abs(el - rawEl) > 1e-4) {
+    if (Math.abs(dist - ORBIT_RADIUS) > 0.5 || Math.abs(el - rawEl) > 1e-4) {
       this.place(m.camera, m.controls, az, el);
     }
   }
@@ -2320,18 +2188,11 @@ export class CityView {
     }
   }
 
-  /**
-   * See-through mode (`Nhìn xuyên`):
-   * 1. For Metro Stations (`ga tàu`): removes the station's outer shell/roof (`stationShellGroup` / `showcase.shellGroup`)
-   *    so the user looks into the interior of the station (platforms, stopping 4-car train, benches, departure screens, concourse gates).
-   * 2. For Buildings (`tòa nhà`): when zoomed in close (`camera -> A -> B`), hides the entire foreground occluding building `A`
-   *    in the camera's center sightline so the user sees completely through `A` to the buildings/scene `B` behind it.
-   */
   private syncForegroundCut() {
     const m = this.mounted;
     if (!m) return;
     if (this.activeShowcase?.shellGroup) {
-      this.activeShowcase.shellGroup.visible = !(this.snap.seeThrough && m.camera.zoom >= 5.5);
+      this.activeShowcase.shellGroup.visible = !(this.snap.seeThrough && m.camera.zoom >= SEE_THROUGH.SHOWCASE_MIN_ZOOM);
     }
     if (!this.snap.seeThrough || this.snap.showcase) {
       m.stationShellGroup.visible = true;
@@ -2339,62 +2200,26 @@ export class CityView {
       return;
     }
 
-    const zoom = m.camera.zoom;
-    const el = Math.max(0.08, this.elevation());
-    const tx = m.controls.target.x, tz = m.controls.target.z;
-
-    // 1. Metro station interior view when zoomed in to a metro station (zoom >= 8.0)
-    const minStationZoom = el < 0.34 ? 6.5 : 8.0;
-    const nearStation = zoom >= minStationZoom && this.city.stations.some(s => Math.hypot(s.at[0] - tx, s.at[1] - tz) < 65);
+    const { nearStation, hiddenByTile } = computeForegroundCut({
+      city: this.city,
+      bldgBounds: this.bldgBounds,
+      zoom: m.camera.zoom,
+      elevation: this.elevation(),
+      targetX: m.controls.target.x,
+      targetZ: m.controls.target.z,
+      cameraX: m.camera.position.x,
+      cameraZ: m.camera.position.z,
+    });
     m.stationShellGroup.visible = !nearStation;
 
-    // 2. Full-building see-through only when zoomed in very close to buildings
-    const minZoomForBldg = el < 0.34 ? 15.0 : 19.0;
-    if (zoom < minZoomForBldg) {
+    if (hiddenByTile.size === 0) {
       this.clearAllTileCuts();
       return;
-    }
-
-    const fx = tx - m.camera.position.x;
-    const fz = tz - m.camera.position.z;
-    const len = Math.hypot(fx, fz);
-    if (len < 1e-3) {
-      this.clearAllTileCuts();
-      return;
-    }
-    const nx = fx / len, nz = fz / len;
-    const tanEl = Math.tan(el);
-    const corridorW = Math.max(2.2, 14 / zoom);
-    const byTile = new Map<number, string[]>();
-
-    for (const b of this.bldgBounds) {
-      const dx = b.cx - tx, dz = b.cy - tz;
-      const along = dx * nx + dz * nz;
-      if (along < -52 || along > b.r + 4) continue;
-      const cross = Math.abs(-dx * nz + dz * nx);
-      if (cross > b.r + corridorW) continue;
-
-      // Sample point along the view ray closest to this building's depth
-      const sampleAlong = Math.min(2.5, Math.max(-48, along));
-      const sx = tx + nx * sampleAlong, sz = tz + nz * sampleAlong;
-      const inFootprint = pointInRing([sx, sz], b.footprint) || cross <= b.r * 0.78 + 1.5;
-      if (!inFootprint) continue;
-
-      const isBlockingInFront = along < -Math.max(4.0, b.r * 0.65) && !pointInRing([tx, tz], b.footprint) && b.topZ >= Math.max(3.5, (-along - b.r) * tanEl * 0.68);
-      const isRightInFace = Math.abs(along) <= b.r + 3.0 && (zoom >= 21.0 || (el < 0.34 && zoom >= 16.5));
-      if (isBlockingInFront || isRightInFace) {
-        let list = byTile.get(b.tileIdx);
-        if (!list) {
-          list = [];
-          byTile.set(b.tileIdx, list);
-        }
-        list.push(b.id);
-      }
     }
 
     for (let idx = 0; idx < this.tiles.length; idx++) {
       const t = this.tiles[idx]!;
-      const hidden = byTile.get(idx);
+      const hidden = hiddenByTile.get(idx);
       if (!hidden || !hidden.length || t.shown < 0) {
         if (t.cutKey) {
           t.cutKey = '';
@@ -2418,19 +2243,17 @@ export class CityView {
     }
   }
 
-  /** held keys move the view over the ground, about half a screen a second, the way it faces */
   private keysMove(dt: number) {
     const m = this.mounted;
     if (!m || !this.held.size) return;
     let fx = 0, fy = 0;
-    for (const k of this.held) { const d = CityView.MOVE[k]; if (d) { fx += d[0]; fy += d[1]; } }
+    for (const k of this.held) { const d = MOVE_KEYS[k]; if (d) { fx += d[0]; fy += d[1]; } }
     if (!fx && !fy) return;
     const f = m.controls.target.clone().sub(m.camera.position).setY(0).normalize(), right = new THREE.Vector3(-f.z, 0, f.x);
     const step = new THREE.Vector3().addScaledVector(f, fy).addScaledVector(right, fx).normalize().multiplyScalar(((FRUSTUM / m.camera.zoom) * 0.5) * dt);
     m.controls.target.add(step); m.camera.position.add(step);
   }
 
-  /** the view's middle stays within the expanded map bounds (including all metro stations), or within the showcase plate */
   private keepInside() {
     const m = this.mounted;
     if (!m) return;
@@ -2442,7 +2265,8 @@ export class CityView {
       return;
     }
     const b = this.panBounds;
-    const x = Math.max(b.x0 - 120, Math.min(b.x1 + 120, t.x)), z = Math.max(b.y0 - 120, Math.min(b.y1 + 120, t.z));
+    const x = Math.max(b.x0 - PAN_BOUNDS_MARGIN, Math.min(b.x1 + PAN_BOUNDS_MARGIN, t.x));
+    const z = Math.max(b.y0 - PAN_BOUNDS_MARGIN, Math.min(b.y1 + PAN_BOUNDS_MARGIN, t.z));
     if (x !== t.x || z !== t.z) { const d = new THREE.Vector3(x - t.x, 0, z - t.z); t.add(d); m.camera.position.add(d); }
   }
 
@@ -2463,7 +2287,6 @@ export class CityView {
 
   private startTurn(a1: number, e1: number) {
     let a0 = this.azimuth();
-    // the short way round
     while (a1 - a0 > Math.PI) a0 += 2 * Math.PI;
     while (a0 - a1 > Math.PI) a0 -= 2 * Math.PI;
     this.turn = { a0, a1, e0: this.elevation(), e1, t0: performance.now() };
@@ -2472,20 +2295,20 @@ export class CityView {
   private animate(now: number) {
     const m = this.mounted;
     if (m && this.fly) {
-      const f = this.fly, u = Math.min(1, (now - f.t0) / 700), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+      const f = this.fly, u = Math.min(1, (now - f.t0) / FLY_DURATION_MS), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
       const next = f.from.clone().lerp(f.to, e), d = next.clone().sub(m.controls.target);
       m.controls.target.add(d); m.camera.position.add(d);
       if (u >= 1) this.fly = null;
     }
     const t = this.turn;
     if (!m || !t) return;
-    const u = Math.min(1, (now - t.t0) / 450), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
+    const u = Math.min(1, (now - t.t0) / TURN_DURATION_MS), e = u < 0.5 ? 2 * u * u : 1 - (-2 * u + 2) ** 2 / 2;
     this.place(m.camera, m.controls, t.a0 + (t.a1 - t.a0) * e, t.e0 + (t.e1 - t.e0) * e);
     if (u >= 1) this.turn = null;
   }
 
   private place(camera: THREE.OrthographicCamera, controls: OrbitControls, az: number, el: number) {
-    const R = 1000, c = controls.target;
+    const R = ORBIT_RADIUS, c = controls.target;
     camera.position.set(c.x + R * Math.cos(el) * Math.cos(az), c.y + R * Math.sin(el), c.z + R * Math.cos(el) * Math.sin(az));
     camera.lookAt(c);
   }
@@ -2528,6 +2351,15 @@ export class CityView {
     }
     this.urlSyncedSig = sig;
     this.lastUrlWrite = now;
+
+    this.events.emit('camera:change', {
+      x: mapTarget.x,
+      z: mapTarget.z,
+      zoom: mapZoom,
+      heading,
+      tilt,
+      mode: this.snap.mode,
+    });
 
     const nextUrl = formatUrlState(
       {

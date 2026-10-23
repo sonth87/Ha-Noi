@@ -3,16 +3,16 @@
    camera heading (`0h..360h`), elevation/tilt (`35.3t`), 2D/3D mode (`2d`/`3d`), and active view
    options (night theme, see-through, street labels, place info, showcase, or open place popup). */
 import { AREA_CONFIGS, projector, unprojector, type Frame } from '@my-city/osm-import';
-import { STREET_LABEL_MODES, type StreetLabelMode } from './streetLabels';
+import { DEFAULT_AREA_ID, FRUSTUM, ISO_EL } from './constants';
 import { PLACE_INFO_MODES, type PlaceInfoMode } from './placeInfo';
+import { STREET_LABEL_MODES, type StreetLabelMode } from './streetLabels';
 
-const DEFAULT_FRAME: Frame = AREA_CONFIGS['nga-tu-thai-ha']?.frame ?? {
+const DEFAULT_FRAME: Frame = AREA_CONFIGS[DEFAULT_AREA_ID]?.frame ?? {
   origin: [21.0092471, 105.8243958],
   bearing: 62.5,
 };
 
-const FRUSTUM = 300;
-const ISO_EL_DEG = (Math.asin(1 / Math.sqrt(3)) * 180) / Math.PI; // ~35.264°
+const ISO_EL_DEG = (ISO_EL * 180) / Math.PI; // ~35.264°
 
 export interface UrlViewState {
   /** target ground position in city metres [x, z] */

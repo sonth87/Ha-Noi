@@ -72,8 +72,16 @@ export interface Building {
   model?: string;
   /** street address from OSM or inferred from the nearest street */
   address?: string;
+  /** administrative district / locality name (e.g. 'Quận Đống Đa', 'Quận Ba Đình') */
+  district?: string;
   /** semantic subtype from OSM tags ('heritage', 'hospital', 'university', 'cinema', …) */
   subtype?: string;
+  /** rich architectural or historical description for popup cards */
+  description?: string;
+  /** true for iconic signature landmarks prioritized in 3D showcases and floating labels */
+  isSignatureLandmark?: boolean;
+  /** true for secondary twin blocks that should not duplicate a primary tower's Tier-1 label */
+  isSecondaryTwin?: boolean;
   source: SourceId;
 }
 
@@ -86,8 +94,12 @@ export interface Area {
   polygon: Vec2[];
   /** bordering street or address */
   address?: string;
+  /** administrative district / locality name */
+  district?: string;
   /** semantic subtype from OSM tags ('heritage', 'park', 'lake', …) */
   subtype?: string;
+  /** rich description for popup cards */
+  description?: string;
   source: SourceId;
 }
 
@@ -98,7 +110,9 @@ export interface Feature {
   kind: FeatureKind;
   name?: string;
   address?: string;
+  district?: string;
   subtitle?: string;
+  description?: string;
   at: Vec2;
   source: SourceId;
 }
@@ -125,12 +139,29 @@ export interface Station {
   at: Vec2;
   /** the platforms (outlines) */
   platforms: Vec2[][];
+  /** short line badge (e.g. 'Metro 2A', 'Metro 3') */
+  lineTag?: string;
+  /** full transit line name */
+  lineName?: string;
+  /** station street address */
+  address?: string;
+  /** administrative district / locality name */
+  district?: string;
   source: SourceId;
+}
+
+export interface CityPlace {
+  id: string;
+  name: string;
+  group: string;
+  at: [number, number];
 }
 
 export interface City {
   id: string;
   name: string;
+  /** default city/metropolis name for fallback addresses (e.g. 'Hà Nội') */
+  cityName?: string;
   /** the part of the world the model covers: the box round it, and the rectangles it is made of */
   bounds: { x0: number; y0: number; x1: number; y1: number };
   region: { x0: number; y0: number; x1: number; y1: number }[];
@@ -141,6 +172,8 @@ export interface City {
   features: Feature[];
   rails: Rail[];
   stations: Station[];
+  /** curated quick-navigation places / intersections for this city area */
+  places?: CityPlace[];
   /** data credits the app must show (e.g. "© OpenStreetMap contributors") */
   attribution: string[];
 }

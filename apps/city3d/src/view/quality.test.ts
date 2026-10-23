@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { loadCity } from '@my-city/osm-import';
+import { loadCity, loadCityAsync } from '@my-city/osm-import';
+import { tilesOf } from '@render/city';
 import { isHouseLamp, windowRank, windowShade } from '@render/lights';
-import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
+import { DEFAULT_AREA_ID, SEE_THROUGH } from './constants';
+import { setGlobalLocale, t } from './i18n';
 import { lightOn } from './lights';
-import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
 import { buildPlaceCatalog, selectVisiblePlaceLabels } from './placeInfo';
+import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
+import { CityEventBus } from './sdk';
+import { buildBuildingBoundsIndex, computeForegroundCut } from './seeThrough';
+import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
 import { formatUrlState, parseUrlState } from './urlState';
 
 describe('quality', () => {
@@ -73,7 +78,7 @@ describe('zoomed out', () => {
 
 describe('street labels (pin callout & map modes)', () => {
   it('filters by zoom level, keeps callout pins sparse, and aligns map labels along streets', () => {
-    const { city } = loadCity('nga-tu-thai-ha');
+    const { city } = loadCity(DEFAULT_AREA_ID);
     const catalog = buildStreetCatalog(city);
     expect(catalog.some(e => e.name === 'Phố Thái Hà' && e.shortName === 'Thái Hà')).toBe(true);
 
@@ -96,8 +101,8 @@ describe('street labels (pin callout & map modes)', () => {
 
 describe('place info catalog & labels (off, popup, label modes)', () => {
   it('indexes buildings, parks, lakes, monuments, heritage sites, and stations with names, addresses, and metrics', () => {
-    const { city } = loadCity('nga-tu-thai-ha');
-    const catalog = buildPlaceCatalog(city, new Set(['building:w677190114', 'building:w677190123']));
+    const { city } = loadCity(DEFAULT_AREA_ID);
+    const catalog = buildPlaceCatalog(city, new Set(['bldg:w677190114', 'bldg:w1115247053']));
 
     const vpbank = catalog.byId.get('w677190114');
     expect(vpbank?.name).toContain('VPBank');
@@ -146,6 +151,58 @@ describe('place info catalog & labels (off, popup, label modes)', () => {
         expect(ids.has('w677190114')).toBe(true);
       }
     }
+  });
+});
+
+describe('multi-language (i18n) & data-driven catalog', () => {
+  it('translates UI strings and builds localized place catalogs in Vietnamese and English', async () => {
+    const { city } = await loadCityAsync(DEFAULT_AREA_ID);
+    expect(city.cityName).toBe('Hà Nội');
+    expect(city.places?.length).toBeGreaterThan(10);
+
+    setGlobalLocale('en');
+    expect(t('top.seeThrough')).toBe('See-through');
+    const enCatalog = buildPlaceCatalog(city, new Set(), 'en');
+    const enVp = enCatalog.byId.get('w677190114');
+    expect(enVp?.badge).toBe('Landmark');
+    expect(enVp?.metrics[0]?.label).toBe('Category');
+
+    setGlobalLocale('vi');
+    expect(t('top.seeThrough')).toBe('Nhìn xuyên');
+    const viCatalog = buildPlaceCatalog(city, new Set(), 'vi');
+    const viVp = viCatalog.byId.get('w677190114');
+    expect(viVp?.badge).toBe('Công trình lớn');
+    expect(viVp?.metrics[0]?.label).toBe('Phân loại');
+  });
+});
+
+describe('SDK event bus & see-through foreground cut', () => {
+  it('emits and unsubscribes events cleanly and computes metro station / building see-through cuts', () => {
+    const bus = new CityEventBus();
+    const events: string[] = [];
+    const off = bus.on('mode:change', ({ mode }) => events.push(mode));
+    bus.emit('mode:change', { mode: '3d' });
+    off();
+    bus.emit('mode:change', { mode: '2d' });
+    expect(events).toEqual(['3d']);
+
+    const { city } = loadCity(DEFAULT_AREA_ID);
+    const tiles = tilesOf(city).map(tile => ({ tile }));
+    const bldgBounds = buildBuildingBoundsIndex(tiles);
+    expect(bldgBounds.length).toBe(city.buildings.length);
+
+    const st = city.stations[0]!;
+    const cutAtStation = computeForegroundCut({
+      city,
+      bldgBounds,
+      zoom: SEE_THROUGH.STATION_MIN_ZOOM_NORMAL + 0.5,
+      elevation: 0.6,
+      targetX: st.at[0],
+      targetZ: st.at[1],
+      cameraX: st.at[0] + 500,
+      cameraZ: st.at[1] + 500,
+    });
+    expect(cutAtStation.nearStation).toBe(true);
   });
 });
 

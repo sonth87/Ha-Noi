@@ -98,29 +98,34 @@ function buildingBoundsPts(b: Building): Vec2[] {
 export function showcasesOf(city: City): ShowcaseItem[] {
   const out: ShowcaseItem[] = [];
 
-  // 1. Featured OSM landmarks (sorted with Việt Tower, Novotel, VPBank Tower, Rạp Chiếu phim Quốc gia first)
-  const priorityOrder = [
-    'osm:way/136257265',
-    'osm:way/850419282',
-    'osm:way/677190114',
-    'osm:way/1115247053',
-  ];
+  // 1. Featured OSM landmarks (bespoke 3D models first, then signature landmarks, then tall towers)
+  const bespokeModelPriority: Record<string, number> = {
+    'viet-tower': 0,
+    novotel: 1,
+    'vpbank-tower': 2,
+    'national-cinema': 3,
+  };
   const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
   const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
 
   const landmarks = city.buildings.filter(b => {
     if (!b.name) return false;
     const lv = maxLevels(b), box = bbox(buildingBoundsPts(b)), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
-    return priorityOrder.includes(b.source) || lv >= 8 || (lv >= 4 && span >= 32 && /Tower|Plaza|Vincom|MIPEC|Novotel|Thái Bình|Sky|VPBank|Chiếu phim|Diamond|Peak|Fortuna|CONINCO|Eurowindow|Capella|Geleximco|Ngân hàng|Đại học|Học viện/i.test(b.name));
+    return Boolean(b.model || b.isSignatureLandmark) || lv >= 8 || (lv >= 4 && span >= 32 && /Tower|Plaza|Vincom|MIPEC|Novotel|Thái Bình|Sky|VPBank|Chiếu phim|Diamond|Peak|Fortuna|CONINCO|Eurowindow|Capella|Geleximco|Ngân hàng|Đại học|Học viện/i.test(b.name));
   });
 
   landmarks.sort((a, b) => {
-    const pa = priorityOrder.indexOf(a.source), pb = priorityOrder.indexOf(b.source);
-    if (pa !== -1 || pb !== -1) return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb);
+    const pa = a.model !== undefined ? (bespokeModelPriority[a.model] ?? 10) : 99;
+    const pb = b.model !== undefined ? (bespokeModelPriority[b.model] ?? 10) : 99;
+    if (pa !== pb) return pa - pb;
     return maxHeight(b) - maxHeight(a) || a.name!.localeCompare(b.name!, 'vi');
   });
 
   const seenNames = new Set<string>();
+  let insertedStations = false;
+  const bespokeCount = landmarks.filter(b => b.model !== undefined).length;
+  let seenBespoke = 0;
+
   for (const b of landmarks) {
     const name = b.name!.trim();
     if (seenNames.has(name)) continue;
@@ -137,14 +142,18 @@ export function showcasesOf(city: City): ShowcaseItem[] {
       zoom: Number(zoom.toFixed(2)),
       radius,
     });
-    // insert Metro stations right after the featured Thái Hà – Láng Hạ landmarks
-    if (b.source === 'osm:way/1115247053') {
+    if (b.model !== undefined) seenBespoke++;
+    // insert Metro stations right after the bespoke 3D model landmarks
+    if (!insertedStations && seenBespoke >= bespokeCount) {
+      insertedStations = true;
       for (const st of city.stations.filter(s => s.kind === 'metro')) {
+        const tag = st.lineTag ?? 'Metro 2A';
+        const lineDesc = st.lineName ?? 'Tuyến 2A Cát Linh – Hà Đông';
         out.push({
           id: `station:${st.id}`,
           group: GROUP_LANDMARK,
-          name: `Ga đường sắt trên cao ${st.name} (Metro 2A)`,
-          subtitle: `Ga ${st.name} · Tuyến 2A Cát Linh – Hà Đông · 3 tầng, cầu cạn & đoàn tàu 4 toa`,
+          name: `Ga đường sắt trên cao ${st.name} (${tag})`,
+          subtitle: `Ga ${st.name} · ${lineDesc} · 3 tầng, cầu cạn & đoàn tàu 4 toa`,
           zoom: 3.4,
           radius: 46,
         });

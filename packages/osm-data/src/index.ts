@@ -21,3 +21,7 @@ export function loadArea(id: string): { area: OsmArea; data: OsmExtract } {
   if (!area || !data) throw new Error(`unknown OSM area "${id}"`);
   return { area, data };
 }
+
+export async function loadAreaAsync(id: string): Promise<{ area: OsmArea; data: OsmExtract }> {
+  return Promise.resolve(loadArea(id));
+}

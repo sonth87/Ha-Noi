@@ -93,9 +93,7 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
   return { ...opts, level: same ?? 'custom' };
 }
 
-const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (7: reset stale autoQuality low-distance settings) */
-const VERSION = 7;
+import { QUALITY_STORAGE_VERSION, STORAGE_KEYS } from './constants';
 
 export function isMobileDevice(): boolean {
   try {
@@ -108,15 +106,15 @@ export function isMobileDevice(): boolean {
 export function loadQuality(): Quality {
   const def: QualityLevel = isMobileDevice() ? 'medium' : 'high';
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(STORAGE_KEYS.QUALITY);
     if (raw) {
       const { v, ...q } = JSON.parse(raw) as Partial<Quality> & { v?: number };
-      if (v === VERSION) return { ...quality(def), ...q };
+      if (v === QUALITY_STORAGE_VERSION) return { ...quality(def), ...q };
     }
   } catch { /* private mode, blocked storage, bad JSON: use the default */ }
   return quality(def);
 }
 
 export function saveQuality(q: Quality) {
-  try { localStorage.setItem(KEY, JSON.stringify({ ...q, v: VERSION })); } catch { /* not remembered, still applied */ }
+  try { localStorage.setItem(STORAGE_KEYS.QUALITY, JSON.stringify({ ...q, v: QUALITY_STORAGE_VERSION })); } catch { /* not remembered, still applied */ }
 }

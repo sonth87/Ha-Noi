@@ -19,6 +19,12 @@ export interface BuildingOverride {
   name?: string;
   kind?: BuildingKind;
   model?: string;
+  /** rich architectural or historical description */
+  description?: string;
+  /** true for primary signature landmarks */
+  isSignatureLandmark?: boolean;
+  /** true for secondary twin blocks */
+  isSecondaryTwin?: boolean;
   /** storeys, for a building without parts (heights from its kind) */
   levels?: number;
   /** storey heights, for a building without parts */
@@ -117,5 +123,17 @@ function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>, byS
     house = { input, spec: resolveHouse(input).spec };
     if (parts.length === 1) parts = [{ ...parts[0]!, floors: houseStoreys(house.spec) }];
   }
-  return { ...b, kind, parts, levelsFrom, house, name: ov.name ?? b.name, model: ov.model ?? b.model, front: ov.front ?? b.front };
+  return {
+    ...b,
+    kind,
+    parts,
+    levelsFrom,
+    house,
+    name: ov.name ?? b.name,
+    model: ov.model ?? b.model,
+    front: ov.front ?? b.front,
+    ...(ov.description !== undefined ? { description: ov.description } : {}),
+    ...(ov.isSignatureLandmark !== undefined ? { isSignatureLandmark: ov.isSignatureLandmark } : {}),
+    ...(ov.isSecondaryTwin !== undefined ? { isSecondaryTwin: ov.isSecondaryTwin } : {}),
+  };
 }

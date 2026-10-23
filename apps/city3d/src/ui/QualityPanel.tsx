@@ -1,25 +1,18 @@
 /* The quality panel (ADR-032, ADR-036, ADR-037): four levels, or any option by hand ("custom"):
    building detail, street life (traffic, poles and wires, trees), view distance, stepping down by
    itself, and the render options. */
-import { LEVEL_NAMES, LEVELS, quality, withOption, type Quality, type QualityLevel, type QualityOptions, type TreeLook } from '@view/quality';
-import { STREET_LABEL_MODES, STREET_LABEL_NAMES, type StreetLabelMode } from '@view/streetLabels';
-import { PLACE_INFO_MODES, PLACE_INFO_NAMES, type PlaceInfoMode } from '@view/placeInfo';
 import type { Snapshot } from '@view/CityView';
-
-const DETAIL = ['L0 · khối', 'L1 · cửa sổ', 'L2 · nhà', 'L3 · mọi chi tiết'];
-
-const TREES: [TreeLook, string][] = [['off', 'Không'], ['simple', 'Đơn giản'], ['full', 'Đầy đủ']];
-const DISTANCE: [number, string][] = [[150, '150 m'], [250, '250 m'], [450, '450 m'], [800, '800 m'], [1500, '1500 m'], [0, 'Hết']];
-
-const TOGGLES: [keyof QualityOptions, string][] = [
-  ['autoDetail', 'Tự giảm chi tiết khi thu nhỏ'], ['wires', 'Cột và dây điện'], ['autoQuality', 'Tự hạ mức khi chậm'], ['windows', 'Cửa sổ'], ['silhouette', 'Nét viền khối'], ['creases', 'Nét cạnh'], ['details', 'Nét chi tiết'], ['bloom', 'Glow (theme tối)'], ['msaa', 'Khử răng cưa'],
-];
+import { LEVEL_NAMES_I18N, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t, type Locale } from '@view/i18n';
+import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
+import { LEVELS, quality, withOption, type Quality, type QualityLevel, type QualityOptions, type TreeLook } from '@view/quality';
+import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
 
 export function QualityPanel({
   quality: q,
   streetLabels,
   placeInfo,
   seeThrough,
+  locale = 'vi',
   stats,
   detail,
   pending,
@@ -33,6 +26,7 @@ export function QualityPanel({
   streetLabels: StreetLabelMode;
   placeInfo: PlaceInfoMode;
   seeThrough: boolean;
+  locale?: Locale;
   stats: Snapshot['stats'];
   detail: Snapshot['detail'];
   pending: number;
@@ -42,68 +36,119 @@ export function QualityPanel({
   onPlaceInfo: (mode: PlaceInfoMode) => void;
   onSeeThrough: (on: boolean) => void;
 }) {
+  const levelNames = LEVEL_NAMES_I18N[locale];
+  const streetNames = STREET_LABEL_NAMES_I18N[locale];
+  const placeNames = PLACE_INFO_NAMES_I18N[locale];
+  const details = [
+    t('quality.detail.0', undefined, locale),
+    t('quality.detail.1', undefined, locale),
+    t('quality.detail.2', undefined, locale),
+    t('quality.detail.3', undefined, locale),
+  ];
+  const trees: [TreeLook, string][] = [
+    ['off', t('quality.trees.off', undefined, locale)],
+    ['simple', t('quality.trees.simple', undefined, locale)],
+    ['full', t('quality.trees.full', undefined, locale)],
+  ];
+  const distance: [number, string][] = [
+    [150, '150 m'],
+    [250, '250 m'],
+    [450, '450 m'],
+    [800, '800 m'],
+    [1500, '1500 m'],
+    [0, t('quality.viewDistance.all', undefined, locale)],
+  ];
+  const toggles: [keyof QualityOptions, string][] = [
+    ['autoDetail', t('quality.autoDetail', undefined, locale)],
+    ['wires', t('quality.wires', undefined, locale)],
+    ['autoQuality', t('quality.autoQuality', undefined, locale)],
+    ['windows', t('quality.windows', undefined, locale)],
+    ['silhouette', t('quality.silhouette', undefined, locale)],
+    ['creases', t('quality.creases', undefined, locale)],
+    ['details', t('quality.details', undefined, locale)],
+    ['bloom', t('quality.bloom', undefined, locale)],
+    ['msaa', t('quality.msaa', undefined, locale)],
+  ];
+
   return (
-    <section aria-label="Chất lượng hiển thị">
-      <h2>Chất lượng · <span className="hi">{LEVEL_NAMES[q.level]}</span></h2>
+    <section aria-label={t('quality.title', undefined, locale)}>
+      <h2>{t('quality.title', undefined, locale)} · <span className="hi">{levelNames[q.level]}</span></h2>
       <div className="levels">
         {(Object.keys(LEVELS) as QualityLevel[]).map(l => (
-          <button key={l} aria-pressed={q.level === l} onClick={() => onChange(quality(l))}>{LEVEL_NAMES[l]}</button>
+          <button key={l} aria-pressed={q.level === l} onClick={() => onChange(quality(l))}>{levelNames[l]}</button>
         ))}
       </div>
       <label className="opt">
-        Tên đường
+        {t('quality.streetLabels', undefined, locale)}
         <select value={streetLabels} onChange={e => onStreetLabels(e.target.value as StreetLabelMode)}>
-          {STREET_LABEL_MODES.map(m => <option key={m} value={m}>{STREET_LABEL_NAMES[m]}</option>)}
+          {STREET_LABEL_MODES.map(m => <option key={m} value={m}>{streetNames[m]}</option>)}
         </select>
       </label>
       <label className="opt">
-        Thông tin địa điểm
+        {t('quality.placeInfo', undefined, locale)}
         <select value={placeInfo} onChange={e => onPlaceInfo(e.target.value as PlaceInfoMode)}>
-          {PLACE_INFO_MODES.map(m => <option key={m} value={m}>{PLACE_INFO_NAMES[m]}</option>)}
+          {PLACE_INFO_MODES.map(m => <option key={m} value={m}>{placeNames[m]}</option>)}
         </select>
       </label>
       <label className="opt">
         <input type="checkbox" checked={seeThrough} onChange={e => onSeeThrough(e.target.checked)} />
-        Nhìn xuyên nhà chắn trước khi zoom sát
+        {t('quality.seeThrough', undefined, locale)}
       </label>
       <label className="opt">
-        Chi tiết nhà
+        {t('quality.houseDetail', undefined, locale)}
         <select value={q.houseDetail} onChange={e => onChange(withOption(q, { houseDetail: Number(e.target.value) as QualityOptions['houseDetail'] }))}>
-          {DETAIL.map((d, i) => <option key={i} value={i}>{d}</option>)}
+          {details.map((d, i) => <option key={i} value={i}>{d}</option>)}
         </select>
       </label>
       <label className="opt">
-        Mật độ xe
+        {t('quality.traffic', undefined, locale)}
         <input type="range" min={0} max={100} step={10} value={Math.round(q.traffic * 100)} onChange={e => onChange(withOption(q, { traffic: Number(e.target.value) / 100 }))} />
         <span className="hi">{Math.round(q.traffic * 100)}%</span>
       </label>
       <label className="opt">
-        Cây
+        {t('quality.trees', undefined, locale)}
         <select value={q.trees} onChange={e => onChange(withOption(q, { trees: e.target.value as TreeLook }))}>
-          {TREES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {trees.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </label>
       <label className="opt">
-        Tầm nhìn xa
+        {t('quality.viewDistance', undefined, locale)}
         <select value={q.viewDistance} onChange={e => onChange(withOption(q, { viewDistance: Number(e.target.value) }))}>
-          {DISTANCE.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+          {distance.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
       </label>
-      {TOGGLES.map(([k, label]) => (
+      {toggles.map(([k, label]) => (
         <label key={k} className="opt">
           <input type="checkbox" checked={q[k] as boolean} onChange={e => onChange(withOption(q, { [k]: e.target.checked }))} />
           {label}
         </label>
       ))}
       <label className="opt">
-        Độ phân giải
+        {t('quality.pixelRatio', undefined, locale)}
         <select value={q.pixelRatio} onChange={e => onChange(withOption(q, { pixelRatio: Number(e.target.value) }))}>
           {[1, 1.5, 2, 3].map(r => <option key={r} value={r}>×{r}</option>)}
         </select>
       </label>
-      <p className="note">Đang vẽ: <span className="hi">{DETAIL[detail]}</span>{pending > 0 ? ` · còn ${pending} ô đang dựng` : ''}</p>
-      {lowered && <p className="note warn">Máy chạy chậm nên đã tự hạ xuống mức {LEVEL_NAMES[lowered as QualityLevel] ?? lowered}.</p>}
-      <p className="stats">{stats.triangles.toLocaleString('vi')} tam giác · {stats.windows.toLocaleString('vi')} cửa · {stats.lines.toLocaleString('vi')} nét</p>
+      <p className="note">
+        {t('quality.drawing', undefined, locale)} <span className="hi">{details[detail]}</span>
+        {pending > 0 ? t('quality.pending', { count: pending }, locale) : ''}
+      </p>
+      {lowered && (
+        <p className="note warn">
+          {t('quality.lowered', { level: levelNames[lowered as QualityLevel] ?? lowered }, locale)}
+        </p>
+      )}
+      <p className="stats">
+        {t(
+          'quality.stats',
+          {
+            triangles: stats.triangles.toLocaleString(locale),
+            windows: stats.windows.toLocaleString(locale),
+            lines: stats.lines.toLocaleString(locale),
+          },
+          locale,
+        )}
+      </p>
     </section>
   );
 }

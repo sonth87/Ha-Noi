@@ -199,6 +199,32 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
     - Tại đầu cầu bộ hành trên vỉa hè: **tháp chiếu nghỉ & thang máy đứng từ mặt đất lên sảnh** (có cửa thang máy inox ở tầng trệt, bảng đèn báo và buồng kính tầng trên).
     - Từ tháp chiếu nghỉ, **cầu thang bộ + thang cuốn dài chạy dọc theo vỉa hè xuống đất**, có **tường chắn hai bên xây bậc giật cấp màu trắng** (nửa trên lộ dầm nghiêng dưới gầm, nửa dưới xây kín có phòng kỹ thuật), **bậc tam cấp và hai bệ tường thấp đón ở chân thang**, **đôi tay vịn thang cuốn chạy dọc độ dốc**, **mái vòm cong nửa trụ bằng tấm lấy sáng trên hệ khung cột thép** uốn dọc theo độ dốc cầu thang và **mái vòm đón cong vươn ra ở cửa lên xuống dưới chân thang** kèm giàn thép chữ X.
 
+### ADR-051 · Nhìn xuyên công trình (See-Through), đồng bộ URL kiểu Google Maps và hiển thị hệ thống các tòa nhà trọng điểm (Always-Visible Landmarks)
+- **Trạng thái**: Đã chốt (2026-10-23)
+- **Bối cảnh**: Người dùng yêu cầu: (1) tàu Metro chạy đúng tốc độ thực tế (~80 km/h tối đa, ≥ 35 km/h trung bình); (2) nhìn xuyên vào bên trong ga tàu khi zoom ≥ 8 và nhìn xuyên qua tòa nhà che khuất bằng hiệu ứng stipple Bayer 4×4 khi zoom ≥ 12 (mặc định bật); (3) nhấp đơn bật/tắt đèn tầng, nhấp đúp mở bảng thông tin tòa nhà (có nút bóng đèn góc trên), chỉ hiện tooltip khi zoom đủ gần; (4) đồng bộ vị trí, góc nhìn, mức zoom và công trình/địa điểm lên URL giống Google Maps (`#@lat,lon,zoom,...`); (5) khắc phục triệt để lỗi một số công trình lớn (Rạp Chiếu Phim Quốc Gia, VPBank Tower…) lúc hiện lúc ẩn do giới hạn `viewDistance` hoặc ngân sách dựng 1 ô/khung hình.
+- **Quyết định**:
+  - **Tốc độ tàu Metro (`core/rail.ts`)**: Nâng tốc độ hành trình lên `17,5 m/s` (~63 km/h, đạt đỉnh ~75–80 km/h giữa chặng), thời gian dừng ga `18 s`, gia tốc `1,25 m/s²`, đảm bảo tốc độ khai thác trung bình ≥ 38 km/h.
+  - **Nhìn xuyên (`view/seeThrough.ts`, `render/metro.ts`)**: Mặc định bật (`seeThrough: true`). Với ga Metro (zoom ≥ 8), chỉ cắt bớt phần mái vòm và vách chắn phía hướng về camera để lộ sảnh, sân ga và đoàn tàu bên trong. Với tòa nhà chắn tầm nhìn (zoom ≥ 12), dùng `discard` theo ma trận Bayer 4×4 trên các tam giác thuộc tòa nhà đang che tâm nhìn để thấy rõ không gian phía sau mà không làm sai lệch chiều sâu.
+  - **Đồng bộ URL (`view/urlState.ts`)**: Đọc khi mở trang và cập nhật `history.replaceState` (debounce 280 ms) theo định dạng `#@lat,lon,zoomz,3d,azdeg,eldeg?place=...&bldg=...&night=1` tương thích phong cách Google Maps.
+  - **Hiển thị hệ thống các tòa nhà trọng điểm (`CityView.ts`, `render/city.ts`)**: Mọi ô (`tile`) chứa công trình trọng điểm (`model != null`, `height >= 32 m`, hoặc có tên và `height >= 16 m`) được đánh dấu `landmarkTileKeys`, dựng ngay ở `L1` khi khởi tạo, luôn hiển thị bất kể khoảng cách `viewDistance` (không bị cắt bởi sương mù/culling), và được ưu tiên nâng cấp `L2/L3` trước các ô nhà thường trong `detailStep`.
+
+### ADR-052 · Tái cấu trúc mô-đun hóa, tách biệt dữ liệu đa thành phố, tách hằng số (`constants`), đa ngôn ngữ (`i18n`) và hệ thống Extension / SDK
+- **Trạng thái**: Đã chốt (2026-10-23, người dùng yêu cầu: "source code hiện tại có vẻ chưa đảm bảo convention, scaleable, maintainable. ok làm tất cả đi. nhớ tách riêng constant nào có thể tách riêng nữa. language nữa nhé. nếu sau bổ sung thêm những tính năng như kiểu extension để cài cắm hay api hoặc sdk tích hợp thì cần chuẩn bị trước gì thì tính dần nhé.")
+- **Bối cảnh**: Trước khi tái cấu trúc, `CityView.ts` dài hơn 2.600 dòng chứa cả hằng số, chuỗi tiếng Việt, DOM popup, shader nhìn xuyên và điều khiển camera; đồng thời `import.ts`, `showcase.ts` và `placeInfo.ts` còn gắn cứng các ID `osm:way/...` và tên quận của riêng khu Thái Hà – Hà Nội, cản trở việc mở rộng sang nhiều khu vực/thành phố khác hoặc tích hợp plugin bên ngoài.
+- **Quyết định**:
+  - **Mô hình dữ liệu đa thành phố (`packages/core`, `packages/osm-import`, `packages/osm-data`)**:
+    - Bổ sung các trường siêu dữ liệu tổng quát vào `Building`, `Station`, `Feature`, `CityModel` (`district`, `description`, `isSignatureLandmark`, `isSecondaryTwin`, `lineTag`, `lineName`, `cityName`, `places?: CityPlace[]`).
+    - Toàn bộ dữ liệu đặc thù của khu vực Thái Hà (tên quận, thuyết minh lịch sử, tuyến tàu, danh sách địa điểm bay tới) được chuyển về `area-nga-tu-thai-ha.ts`. `import.ts` và `showcase.ts` hoạt động hoàn toàn dựa trên dữ liệu cấu hình (`AreaConfig`), không còn bất kỳ ID `osm:way/...` gắn cứng nào.
+    - Bổ sung API nạp bất đồng bộ (`loadAreaAsync`, `loadCityAsync`, `registerAreaConfig`) để sẵn sàng tải động dữ liệu từng khu vực/thành phố theo yêu cầu.
+  - **Tách mô-đun trong `apps/city3d/src/view/`**:
+    - [`constants.ts`](../../apps/city3d/src/view/constants.ts): Tập trung toàn bộ hằng số camera, góc nhìn, ngưỡng zoom, tốc độ phím, thời gian bay, ngưỡng tương tác cảm ứng, màu đèn hiệu, khóa `localStorage`, và ngưỡng nhìn xuyên.
+    - [`i18n.ts`](../../apps/city3d/src/view/i18n.ts): Hệ thống đa ngôn ngữ nhẹ có kiểu tĩnh (`Locale = 'vi' | 'en'`), hỗ trợ dịch giao diện (`t()`), dịch thông tin địa điểm (`localizePlaceText`), lưu trữ ngôn ngữ trong `localStorage` và chuyển đổi trực tiếp trên thanh công cụ (`VI / EN`).
+    - [`seeThrough.ts`](../../apps/city3d/src/view/seeThrough.ts): Tách riêng bộ quản lý shader cắt mặt phẳng ga tàu và Bayer 4×4 stipple cho tòa nhà (`SeeThroughController`).
+    - [`overlayDom.ts`](../../apps/city3d/src/view/overlayDom.ts): Tách riêng việc khởi tạo và cập nhật DOM cho biển tên 3D, tooltip khi di chuột và bảng thông tin chi tiết công trình (hỗ trợ cả các nút hành động mở rộng từ Extension).
+  - **Kiến trúc SDK & Extension / Plugin (`apps/city3d/src/view/sdk.ts`)**:
+    - Cung cấp `CitySDK` (`view.sdk` và `window.MyCitySDK`) làm giao diện lập trình công khai ổn định: điều khiển camera (`flyToWorld`, `flyToGeo`, `flyToBuilding`, `flyToPlace`, `setViewMode`, `setShowcase`), trạng thái giao diện (`setNightMode`, `setSeeThrough`, `setQualityPreset`, `setLocale`), truy vấn mô hình (`getCity`, `getBuildingById`, `getBuildings`, `getPlaces`), hệ thống sự kiện có kiểu (`on('cameraChange' | 'buildingHover' | 'buildingSelect' | 'placeChange' | 'themeChange' | 'localeChange' | 'frame', ...)`), lớp cảnh 3D riêng cho plugin (`getCustomLayerGroup()`), và đăng ký nút hành động tùy chỉnh trong popup công trình (`registerPopupAction`).
+    - Hỗ trợ cài cắm `CityExtension` (`registerExtension`, `unregisterExtension`, `getExtensions`) với vòng đời `onMount(sdk)` / `onDispose()`.
+
 ---
 
 ## Câu hỏi mở
@@ -208,3 +234,4 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
 | ~~Q1~~ | ~~Mét hay 1 m = 10?~~ | — | Đã chốt: mét (ADR-033) |
 | ~~Q2~~ | ~~Gỡ trang thử 3D cũ khỏi app SVG?~~ | — | Đã chốt: giữ để đối chiếu, xóa khi `city3d` thay được (ADR-033) |
 | ~~Q3~~ | ~~Ga Thái Hà thật: chiều cao các tầng, hình mái, vị trí lối lên?~~ | — | Đã chốt theo 3 ảnh thực tế người dùng gửi (ADR-050) |
+

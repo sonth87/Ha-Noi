@@ -7,10 +7,10 @@ Vẽ **bất kỳ** mô hình thành phố nào ([city-model](city-model.md)) b�
 | Thư mục | Chứa | Được dùng | Cấm |
 |---|---|---|---|
 | `src/render/` | Mô hình thành phố → geometry three.js (`buildCityGeometry`). Không vật liệu, không DOM | core, three | React, DOM, `view/`, `ui/` |
-| `src/view/` | `CityView`: renderer, camera, điều khiển, vật liệu từ token, đèn, ngày/đêm, chất lượng; `quality.ts` | mọi thứ | — |
-| `src/ui/` | Vỏ React: thanh trên, bảng chất lượng, dòng trạng thái, ghi nguồn | `view/`, `@my-city/*` | three, `render/` |
+| `src/view/` | `CityView`: điều phối renderer, camera, vật liệu, đèn, ngày/đêm; cùng các mô-đun tách biệt: `constants.ts` (hằng số), `i18n.ts` (đa ngôn ngữ `vi`/`en`), `sdk.ts` (Public SDK, Event Bus & Extension API), `seeThrough.ts` (shader nhìn xuyên ga tàu & tòa nhà), `overlayDom.ts` (nhãn 3D, tooltip, popup), `placeInfo.ts` (tra cứu địa điểm/công trình từ `CityModel`), `urlState.ts` (đồng bộ URL), `quality.ts`, `lights.ts` | mọi thứ | — |
+| `src/ui/` | Vỏ React: thanh trên (kèm chuyển ngôn ngữ `VI/EN`), bảng chất lượng, bảng đèn, dòng trạng thái, ghi nguồn | `view/`, `@my-city/*` | three, `render/` |
 
-Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `CityView` (`useSyncExternalStore`); snapshot đổi khi có sự kiện (chế độ, góc, đèn, chất lượng) và fps tối đa 2 lần/giây, không theo từng frame.
+Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `CityView` (`useSyncExternalStore`); snapshot đổi khi có sự kiện (chế độ, góc, đèn, chất lượng, ngôn ngữ) và fps tối đa 2 lần/giây, không theo từng frame. `CityView` xuất bản `view.sdk` (và `window.MyCitySDK`) để tích hợp Extension / Plugin bên ngoài (ADR-052).
 
 ## 2. Dựng hình (`render/`)
 
