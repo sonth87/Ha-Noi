@@ -19,6 +19,7 @@ export function QualityPanel({
   quality: q,
   streetLabels,
   placeInfo,
+  seeThrough,
   stats,
   detail,
   pending,
@@ -26,10 +27,12 @@ export function QualityPanel({
   onChange,
   onStreetLabels,
   onPlaceInfo,
+  onSeeThrough,
 }: {
   quality: Quality;
   streetLabels: StreetLabelMode;
   placeInfo: PlaceInfoMode;
+  seeThrough: boolean;
   stats: Snapshot['stats'];
   detail: Snapshot['detail'];
   pending: number;
@@ -37,6 +40,7 @@ export function QualityPanel({
   onChange: (q: Quality) => void;
   onStreetLabels: (mode: StreetLabelMode) => void;
   onPlaceInfo: (mode: PlaceInfoMode) => void;
+  onSeeThrough: (on: boolean) => void;
 }) {
   return (
     <section aria-label="Chất lượng hiển thị">
@@ -57,6 +61,10 @@ export function QualityPanel({
         <select value={placeInfo} onChange={e => onPlaceInfo(e.target.value as PlaceInfoMode)}>
           {PLACE_INFO_MODES.map(m => <option key={m} value={m}>{PLACE_INFO_NAMES[m]}</option>)}
         </select>
+      </label>
+      <label className="opt">
+        <input type="checkbox" checked={seeThrough} onChange={e => onSeeThrough(e.target.checked)} />
+        Nhìn xuyên nhà chắn trước khi zoom sát
       </label>
       <label className="opt">
         Chi tiết nhà

@@ -1,0 +1,28 @@
+{
+  "name": "My City 3D · Bản đồ Kiến trúc & Đô thị 3D Tương tác",
+  "short_name": "My City 3D",
+  "description": "Khám phá không gian đô thị 3D trực quan theo thời gian thực: tòa nhà cao tầng, nhà phố, tuyến tàu điện, giao thông, công viên, mặt nước và các công trình điểm nhấn.",
+  "lang": "vi",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#11100e",
+  "theme_color": "#11100e",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon-32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

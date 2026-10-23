@@ -76,6 +76,8 @@ export interface Snapshot {
   streetLabels: StreetLabelMode;
   /** place/building/park/monument/heritage info display mode: 'off', 'popup', or 'label' */
   placeInfo: PlaceInfoMode;
+  /** see-through foreground buildings when zoomed in very close (default: false) */
+  seeThrough: boolean;
 }
 
 const ISO_EL = Math.asin(1 / Math.sqrt(3));
@@ -258,7 +260,7 @@ export class CityView {
     this.snap = {
       mode: '2d', view: 0, heading: 0, theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
-      showcase: null, streetLabels, placeInfo,
+      showcase: null, streetLabels, placeInfo, seeThrough: false,
     };
   }
 
@@ -292,14 +294,14 @@ export class CityView {
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 7000);
     // the view opens on the area's origin (the crossroads), not the middle of the whole region
     const target = new THREE.Vector3(0, 0, 0);
-    camera.zoom = 1.65;
+    camera.zoom = 1.4;
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(target);
     controls.enableDamping = true;
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.2;
-    controls.minZoom = 0.14; controls.maxZoom = 40;
+    controls.minZoom = 0.14; controls.maxZoom = 60;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     // map-style (ADR-043): left drag moves over the ground, right drag (or shift + drag) turns and
     // tilts, the wheel zooms toward the pointer; one finger moves, two pinch+pan in 2D or pinch+turn in 3D
@@ -829,6 +831,16 @@ export class CityView {
     const idx = PLACE_INFO_MODES.indexOf(this.snap.placeInfo);
     const next = PLACE_INFO_MODES[(idx + 1) % PLACE_INFO_MODES.length]!;
     this.setPlaceInfo(next);
+  }
+
+  setSeeThrough(seeThrough: boolean) {
+    if (seeThrough === this.snap.seeThrough) return;
+    this.update({ seeThrough });
+    this.syncForegroundCut();
+  }
+
+  toggleSeeThrough() {
+    this.setSeeThrough(!this.snap.seeThrough);
   }
 
   private streetLabelsStep(force = false) {
@@ -1480,6 +1492,7 @@ export class CityView {
       case 'n': case 't': this.toggleDayNight(); return true;
       case 'l': this.cycleStreetLabels(); return true;
       case 'i': this.cyclePlaceInfo(); return true;
+      case 'x': this.toggleSeeThrough(); return true;
       case ' ': this.toggleAll(); return true;
       default: return false;
     }
@@ -2136,13 +2149,13 @@ export class CityView {
   }
 
   /**
-   * Cut away foreground buildings (camera -> A -> B) when zoomed in close or tilted low,
-   * so building A in front of the focus target B does not block the view of B or its entrance lobby.
+   * Cut away foreground buildings (camera -> A -> B) ONLY when seeThrough is enabled AND zoomed right up close
+   * against a building, so building A in front of the focus target B does not block the close-up view of B.
    */
   private syncForegroundCut() {
     const m = this.mounted;
     const uCut = this.mats.shell.uniforms.cutPlane?.value as THREE.Vector4 | undefined;
-    if (!m || this.snap.showcase) {
+    if (!m || !this.snap.seeThrough || this.snap.showcase) {
       this.cutPlane.normal.set(0, 1, 0);
       this.cutPlane.constant = 1e6;
       uCut?.set(0, 1, 0, 1e6);
@@ -2150,7 +2163,8 @@ export class CityView {
     }
     const zoom = m.camera.zoom;
     const el = Math.max(0.08, this.elevation());
-    if (zoom < 1.85 && el > 0.48) {
+    const minZoomForCut = el < 0.32 ? 18 : 22;
+    if (zoom < minZoomForCut) {
       this.cutPlane.normal.set(0, 1, 0);
       this.cutPlane.constant = 1e6;
       uCut?.set(0, 1, 0, 1e6);
@@ -2168,7 +2182,8 @@ export class CityView {
     const nx = fx / len;
     const nz = fz / len;
     const pitchScale = Math.min(1, Math.sin(el) / Math.sin(ISO_EL));
-    const frontClearance = Math.max(1.5, (38 / Math.pow(zoom, 1.25)) * pitchScale);
+    const zoomRatio = zoom / minZoomForCut;
+    const frontClearance = Math.max(2.5, (11 / Math.pow(zoomRatio, 1.4)) * pitchScale);
     const px = m.controls.target.x - nx * frontClearance;
     const pz = m.controls.target.z - nz * frontClearance;
     const constant = -(nx * px + nz * pz);

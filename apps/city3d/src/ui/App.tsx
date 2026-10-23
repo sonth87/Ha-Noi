@@ -145,6 +145,13 @@ const IconArrowLeft = () => (
   </svg>
 );
 
+const IconSeeThrough = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 export function App() {
   const v = view();
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
@@ -442,6 +449,19 @@ export function App() {
 
           <button
             type="button"
+            className="icon-btn"
+            onClick={() => v.toggleSeeThrough()}
+            aria-pressed={s.seeThrough}
+            title="Bật/tắt chế độ nhìn xuyên tòa nhà chắn trước mặt khi zoom vào rất sát (X)"
+            aria-label="Nhìn xuyên tòa nhà chắn trước khi zoom sát"
+          >
+            <IconSeeThrough />
+            <span className="btn-text">Nhìn xuyên</span>
+            <kbd>X</kbd>
+          </button>
+
+          <button
+            type="button"
             className="icon-only-btn"
             onClick={() => v.toggleDayNight()}
             aria-pressed={s.night}
@@ -505,6 +525,7 @@ export function App() {
               quality={s.quality}
               streetLabels={s.streetLabels}
               placeInfo={s.placeInfo}
+              seeThrough={s.seeThrough}
               stats={s.stats}
               detail={s.detail}
               pending={s.pending}
@@ -512,6 +533,7 @@ export function App() {
               onChange={q => v.setQuality(q)}
               onStreetLabels={m => v.setStreetLabels(m)}
               onPlaceInfo={m => v.setPlaceInfo(m)}
+              onSeeThrough={on => v.setSeeThrough(on)}
             />
           </aside>
         )}
