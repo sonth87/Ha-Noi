@@ -36,7 +36,7 @@ export function buildMetro(B: Batch, city: City) {
   const stations = city.stations.filter(s => s.kind === 'metro');
   const inStation = (p: Vec2) => stations.some(s => dist(s.at, p) < stationLength(s) / 2 + 8);
   for (const r of rails) {
-    const other = pairOf(r, rails), h = r.height, S = resample(r.path, 3);
+    const other = pairOf(r, rails), h = r.height, S = resample(r.path, 12);
     // the outer side: away from the other track, judged half-way along (right of the path is (−dy, dx))
     const m = Math.floor(S.length / 2), p = S[m]!, q = S[Math.min(m + 1, S.length - 1)] ?? p, dd = dist(p, q) || 1;
     const right: Vec2 = [-(q[1] - p[1]) / dd, (q[0] - p[0]) / dd], o = other ? nearest(other.path, p).at : null;
@@ -46,7 +46,7 @@ export function buildMetro(B: Batch, city: City) {
     B.solid(strip(S, -2.25, 2.25), h - 1.15, h - 0.22, () => 'wall', 'roof');
     // the parapet / noise barrier on the outer edge, 1.05 m high with top rail
     B.solid(strip(S, side * 2.02, side * 2.26), h - 0.22, h + 0.92, () => 'wall', 'roof');
-    B.solid(strip(S, side * 1.98, side * 2.3), h + 0.92, h + 1.06, () => 'metal', 'metal');
+    B.flatSolid(strip(S, side * 1.98, side * 2.3), h + 0.92, h + 1.06, 'metal');
     // the rails, standard gauge
     for (const g of [-0.72, 0.72]) {
       const line = offset(S, g);
@@ -55,7 +55,7 @@ export function buildMetro(B: Batch, city: City) {
     // piers between the pair (drawn once: from the rail with the smaller id), none in a station
     if (other && r.id < other.id) {
       const L = polylineLength(r.path);
-      for (let s = 15; s < L; s += 28) {
+      for (let s = 15; s < L; s += 30) {
         const p = at(r.path, s), o = nearest(other.path, p.p).at, m: Vec2 = [(p.p[0] + o[0]) / 2, (p.p[1] - 0 + o[1]) / 2];
         if (inStation(m)) continue;
         const u: Vec2 = [Math.cos(p.h), Math.sin(p.h)], v: Vec2 = [-u[1], u[0]];
@@ -67,25 +67,25 @@ export function buildMetro(B: Batch, city: City) {
         ];
         const zCap0 = h - DECK - 1.55, zCapMid = h - DECK - 0.42, zCapTop = h - DECK - 0.1;
         // median curb island + planted greenery bed around the pier base (as in Photo 1)
-        B.solid(octPier(11.5, 1.85, 0.8), 0, 0.32, () => 'wall', 'walk');
-        B.solid(octPier(10.8, 1.45, 0.6), 0.32, 0.72, () => 'plant', 'plant');
+        B.flatSolid(octPier(11.5, 1.85, 0.8), 0, 0.32, 'walk');
+        B.flatSolid(octPier(10.8, 1.45, 0.6), 0.32, 0.72, 'plant');
         // stepped pier footing + chamfered concrete shaft
-        B.solid(octPier(1.35, 1.45, 0.35), 0, 0.55, () => 'wall', 'roof');
+        B.flatSolid(octPier(1.35, 1.45, 0.35), 0, 0.55, 'wall');
         B.solid(octPier(1.02, 1.12, 0.28), 0.55, zCap0, () => 'wall', 'roof');
         // flared trapezoidal hammerhead pier cap (vát nghiêng chữ T như ảnh 1 & 2)
-        for (let k = 0; k < 4; k++) {
-          const t0 = k / 4, t1 = (k + 1) / 4;
+        for (let k = 0; k < 3; k++) {
+          const t0 = k / 3, t1 = (k + 1) / 3;
           const b0 = 1.15 + (4.85 - 1.15) * t0, b1 = 1.15 + (4.85 - 1.15) * t1;
           const a0 = 1.05 - 0.12 * t0, a1 = 1.05 - 0.12 * t1;
           const zk0 = zCap0 + (zCapMid - zCap0) * t0, zk1 = zCap0 + (zCapMid - zCap0) * t1;
-          B.solid(rect((a0 + a1) / 2, (b0 + b1) / 2), zk0, zk1, () => 'wall', 'roof');
+          B.flatSolid(rect((a0 + a1) / 2, (b0 + b1) / 2), zk0, zk1, 'wall');
         }
         B.solid(rect(0.96, 4.95), zCapMid, zCapTop, () => 'wall', 'roof');
         // bearing pads under the two track box girders
         for (const sg of [-1, 1]) {
           for (const db of [-0.95, 0.95]) {
             const by = sg * 2.1 + db;
-            B.solid([P2(-0.55, by - 0.32), P2(0.55, by - 0.32), P2(0.55, by + 0.32), P2(-0.55, by + 0.32)], zCapTop, h - DECK, () => 'metal', 'metal');
+            B.flatSolid([P2(-0.55, by - 0.32), P2(0.55, by - 0.32), P2(0.55, by + 0.32), P2(-0.55, by + 0.32)], zCapTop, h - DECK, 'metal');
           }
         }
       }

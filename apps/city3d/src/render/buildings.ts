@@ -125,7 +125,7 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
   const dir = (i: number) => { const p = R[i]!, q = R[(i + 1) % n]!; return Math.atan2(q[1] - p[1], q[0] - p[0]); };
   const turn = (i: number) => { let t = Math.abs(dir(i) - dir((i - 1 + n) % n)); if (t > Math.PI) t = 2 * Math.PI - t; return t; };
   const front = b.house && part.id === b.id ? b.front : -1;
-  const isMainEntrancePart = !b.model && !b.house && (part.id === b.id || part === b.parts[0]);
+  const isGroundPart = part.z0 === 0 && b.model !== 'vpbank-tower' && b.model !== 'national-cinema';
   const balconies = level >= 2 && (b.kind === 'apartment' || b.kind === 'school');
   const shopfront = level >= 2 && (b.kind === 'commercial' || b.kind === 'kiosk');
   const hasBeltLines = level >= 2 && !b.model && (b.kind === 'apartment' || b.kind === 'school' || b.kind === 'office' || b.kind === 'hotel');
@@ -140,9 +140,21 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
     const rect = (lamp: string, t0: number, t1: number, z0: number, z1: number) => B.window(lamp, [at(t0, off, z0), at(t1, off, z0), at(t1, off, z1), at(t0, off, z1)], nrm);
     const box = (t0: number, t1: number, s0: number, s1: number, z0: number, z1: number, surf: 'wall' | 'metal' = 'wall') => {
       const ring: Vec2[] = [[t0, s0], [t1, s0], [t1, s1], [t0, s1]].map(([t, s]) => [p[0] + ux * t! + nx * s!, p[1] + uy * t! + ny * s!]);
-      B.solid(ring, z0, z1, () => surf, surf === 'metal' ? 'metal' : 'roof');
+      B.solid(ring, z0, z1, () => surf, surf === 'metal' ? 'metal' : 'roof', b.id);
     };
-    const isFrontEdge = isMainEntrancePart && i === b.front;
+    const isLobbyEdge =
+      isGroundPart &&
+      !b.house &&
+      blockedTo < 1.0 &&
+      ((R === b.footprint && (i === b.front || i === shop)) || (L >= 10 && blockedTo === 0));
+    const isCommercialLobby =
+      style === 'curtain' ||
+      style === 'ribbon' ||
+      b.kind === 'office' ||
+      b.kind === 'commercial' ||
+      b.kind === 'hotel' ||
+      i === shop ||
+      shopfront;
     // bands run on round a curve and stop short of a real corner
     const c0 = turn(i) > 0.5 ? 0.35 : 0, c1 = turn((i + 1) % n) > 0.5 ? 0.35 : 0;
     part.floors.forEach((h, k) => {
@@ -152,92 +164,107 @@ function windows(B: Batch, b: Building, part: BuildingPart, style: Style, level:
         B.line(at(c0, off + 0.01, z + h), at(L - c1, off + 0.01, z + h), 'detail');
         B.line(at(c0, off + 0.01, z + h - 0.14), at(L - c1, off + 0.01, z + h - 0.14), 'detail');
       }
-      // glass bands are panes, about 1.6 m (curtain) or 2 m (ribbon) wide with a 12 cm frame between,
-      // so a lit floor reads as windows (iso-glow) and windows light one at a time
-      if (style === 'curtain' || style === 'ribbon') {
-        if (k === 0 && level >= 2 && isFrontEdge && L >= 4) {
-          // Ground-floor glazed lobby storefront with double entrance door, transom bar & marquee canopy (01-tower.js)
-          const a0 = c0 + 0.25, a1 = L - c1 - 0.25, mid = L * 0.5, dw = Math.min(2.8, (a1 - a0) * 0.34);
+      // 1. Ground-floor 3D Entrance Lobby / Portico (Sảnh đón tòa nhà) for offices, commercial, hotels, towers, apartments & schools
+      if (k === 0 && isLobbyEdge && L >= 3.2) {
+        if (isCommercialLobby) {
+          // Glazed lobby storefront across the ground floor + projecting 3D entrance portico with columns, steps & lit canopy
+          const a0 = c0 + 0.25, a1 = L - c1 - 0.25, mid = L * 0.5;
+          const lw = Math.min(6.2, Math.max(2.6, (a1 - a0) * 0.42));
+          const ld = level >= 2 ? Math.min(1.5, Math.max(0.95, L * 0.08)) : 0.75;
           const bays = Math.max(3, Math.round((a1 - a0) / 1.8)), bw = (a1 - a0) / bays;
           for (let c = 0; c < bays; c++) {
             const bt0 = a0 + c * bw + 0.05, bt1 = a0 + (c + 1) * bw - 0.05;
-            rect(lamp, bt0, bt1, z + 0.08, z + h * 0.86);
-            if (c > 0) B.line(at(a0 + c * bw, off + 0.015, z + 0.08), at(a0 + c * bw, off + 0.015, z + h * 0.86), 'detail');
+            rect(lamp, bt0, bt1, z + 0.08, z + h * 0.84);
+            if (level >= 2 && c > 0) B.line(at(a0 + c * bw, off + 0.015, z + 0.08), at(a0 + c * bw, off + 0.015, z + h * 0.84), 'detail');
           }
-          // Transom bar across the lobby glass + double entrance door leaf seam & jambs
-          B.line(at(a0, off + 0.02, z + h * 0.62), at(a1, off + 0.02, z + h * 0.62), 'detail');
-          B.line(at(mid, off + 0.02, z + 0.08), at(mid, off + 0.02, z + h * 0.62), 'detail');
-          box(mid - dw * 0.5 - 0.1, mid - dw * 0.5, 0, 0.18, z, z + h * 0.66, 'metal');
-          box(mid + dw * 0.5, mid + dw * 0.5 + 0.1, 0, 0.18, z, z + h * 0.66, 'metal');
-          // Entrance threshold step & cantilevered office marquee canopy with lit fascia band
-          box(mid - dw * 0.72, mid + dw * 0.72, 0, 0.92, z, z + 0.14, 'wall');
-          box(mid - dw * 0.85, mid + dw * 0.85, 0, 1.15, z + h * 0.68, z + h * 0.84, 'metal');
+          // Stepped granite entrance podium (bậc tam cấp đại sảnh)
+          box(mid - lw * 0.58, mid + lw * 0.58, 0, ld + 0.36, z, z + 0.14, 'wall');
+          if (level >= 2) {
+            box(mid - lw * 0.52, mid + lw * 0.52, 0, ld + 0.14, z + 0.14, z + 0.26, 'wall');
+            // 3D portico columns framing the lobby entrance
+            const colW = Math.min(0.36, lw * 0.12);
+            box(mid - lw * 0.5, mid - lw * 0.5 + colW, 0, ld, z + 0.26, z + h * 0.78, 'wall');
+            box(mid + lw * 0.5 - colW, mid + lw * 0.5, 0, ld, z + 0.26, z + h * 0.78, 'wall');
+            // Projecting double glass lobby doors between the portico columns
+            const d0 = mid - lw * 0.5 + colW + 0.06, d1 = mid + lw * 0.5 - colW - 0.06, ds = ld * 0.76;
+            B.window(lamp, [at(d0, ds, z + 0.26), at(mid - 0.04, ds, z + 0.26), at(mid - 0.04, ds, z + h * 0.74), at(d0, ds, z + h * 0.74)], nrm);
+            B.window(lamp, [at(mid + 0.04, ds, z + 0.26), at(d1, ds, z + 0.26), at(d1, ds, z + h * 0.74), at(mid + 0.04, ds, z + h * 0.74)], nrm);
+            B.line(at(mid, ds + 0.02, z + 0.26), at(mid, ds + 0.02, z + h * 0.74), 'detail');
+            B.line(at(a0, off + 0.02, z + h * 0.64), at(a1, off + 0.02, z + h * 0.64), 'detail');
+          }
+          // Projecting 3D lobby canopy & lit fascia sign band
+          box(mid - lw * 0.62, mid + lw * 0.62, 0, ld + 0.3, z + h * 0.76, z + h * 0.94, 'wall');
+          box(mid - lw * 0.64, mid + lw * 0.64, ld + 0.22, ld + 0.36, z + h * 0.74, z + h * 0.96, 'metal');
           B.window(lamp, [
-            at(mid - dw * 0.7, 1.16, z + h * 0.71),
-            at(mid + dw * 0.7, 1.16, z + h * 0.71),
-            at(mid + dw * 0.7, 1.16, z + h * 0.81),
-            at(mid - dw * 0.7, 1.16, z + h * 0.81),
+            at(mid - lw * 0.52, ld + 0.37, z + h * 0.79),
+            at(mid + lw * 0.52, ld + 0.37, z + h * 0.79),
+            at(mid + lw * 0.52, ld + 0.37, z + h * 0.91),
+            at(mid - lw * 0.52, ld + 0.37, z + h * 0.91),
           ], nrm);
           return;
         }
+        // Apartment / school / institutional 3D entrance lobby (1 central lobby, or 2 lobbies on long blocks L >= 26m)
+        const centers = L >= 26 ? [L * 0.28, L * 0.72] : [L * 0.5];
+        const dw = Math.min(3.2, Math.max(1.8, L / (centers.length * 4.2))), dh = h * 0.76;
+        const ld = level >= 2 ? 1.1 : 0.65;
+        for (const mid of centers) {
+          // Stepped entrance stoop (bậc tam cấp sảnh)
+          box(mid - dw * 0.68, mid + dw * 0.68, 0, ld + 0.32, z, z + 0.14, 'wall');
+          if (level >= 2) {
+            box(mid - dw * 0.56, mid + dw * 0.56, 0, ld + 0.12, z + 0.14, z + 0.26, 'wall');
+            // 3D porch cheek walls framing the entrance
+            box(mid - dw * 0.54, mid - dw * 0.42, 0, ld, z + 0.26, z + dh, 'wall');
+            box(mid + dw * 0.42, mid + dw * 0.54, 0, ld, z + 0.26, z + dh, 'wall');
+            // Double-leaf glazed entrance door recessed inside the porch
+            const ds = ld * 0.68;
+            B.window(lamp, [at(mid - dw * 0.4, ds, z + 0.26), at(mid - 0.03, ds, z + 0.26), at(mid - 0.03, ds, z + dh), at(mid - dw * 0.4, ds, z + dh)], nrm);
+            B.window(lamp, [at(mid + 0.03, ds, z + 0.26), at(mid + dw * 0.4, ds, z + 0.26), at(mid + dw * 0.4, ds, z + dh), at(mid + 0.03, ds, z + dh)], nrm);
+            B.line(at(mid, ds + 0.02, z + 0.26), at(mid, ds + 0.02, z + dh), 'detail');
+          } else {
+            rect(lamp, mid - dw * 0.42, mid + dw * 0.42, z + 0.16, z + dh);
+          }
+          // Projecting canopy hood & glowing transom light above the lobby door
+          box(mid - dw * 0.66, mid + dw * 0.66, 0, ld + 0.26, z + dh, z + dh + 0.32, 'wall');
+          box(mid - dw * 0.68, mid + dw * 0.68, ld + 0.18, ld + 0.32, z + dh - 0.02, z + dh + 0.34, 'metal');
+          B.window(lamp, [
+            at(mid - dw * 0.48, ld + 0.33, z + dh + 0.05),
+            at(mid + dw * 0.48, ld + 0.33, z + dh + 0.05),
+            at(mid + dw * 0.48, ld + 0.33, z + dh + 0.27),
+            at(mid - dw * 0.48, ld + 0.33, z + dh + 0.27),
+          ], nrm);
+        }
+        // Flanking ground-floor windows outside the lobby portals
+        const cols = Math.max(1, Math.floor((L - 0.6) / 2.6)), cw = (L - 0.6) / cols, ww = Math.min(1.4, cw * 0.55);
+        for (let c = 0; c < cols; c++) {
+          const m = 0.3 + cw * (c + 0.5);
+          if (centers.some(mid => Math.abs(m - mid) < dw * 0.82 + ww * 0.5)) continue;
+          rect(lamp, m - ww / 2, m + ww / 2, z + 0.3 * h, z + 0.8 * h);
+          if (level >= 2) {
+            B.line(at(m, off + 0.01, z + 0.3 * h), at(m, off + 0.01, z + 0.8 * h), 'detail');
+            box(m - ww / 2 - 0.08, m + ww / 2 + 0.08, 0, 0.12, z + 0.26 * h, z + 0.3 * h, 'wall');
+          }
+        }
+        return;
+      }
+      // glass bands are panes, about 1.6 m (curtain) or 2 m (ribbon) wide with a 12 cm frame between,
+      // so a lit floor reads as windows (iso-glow) and windows light one at a time
+      if (style === 'curtain' || style === 'ribbon') {
         const a0 = c0, a1 = L - c1, n = Math.max(1, Math.round((a1 - a0) / (style === 'curtain' ? 1.6 : 2))), pw = (a1 - a0) / n;
         const [zb, zt] = style === 'curtain' ? [0.08, 0.92] : [0.24, 0.78];
         for (let c = 0; c < n; c++) rect(lamp, a0 + c * pw + (c > 0 ? 0.06 : 0), a0 + (c + 1) * pw - (c < n - 1 ? 0.06 : 0), z + h * zb, z + h * zt);
       }
-      else if (k === 0 && i === front) rect(lamp, L * 0.1, L * 0.9, z + 0.15, z + h * 0.8);   // shop front
-      else if (k === 0 && level >= 2 && i === shop && L >= 3) {
-        // the ground floor on a main street: glass shop fronts and a lit sign band above them + entrance door seam
-        const mid = L * 0.5, dw = Math.min(2.2, (L - c0 - c1 - 0.6) * 0.35);
-        rect(lamp, c0 + 0.3, L - c1 - 0.3, z + 0.1, z + h * 0.72);
-        B.line(at(mid, off + 0.02, z + 0.1), at(mid, off + 0.02, z + h * 0.72), 'detail');
-        box(mid - dw * 0.55, mid + dw * 0.55, 0, 0.55, z, z + 0.12, 'wall');
-        box(c0 + 0.2, L - c1 - 0.2, 0, 0.2, z + h * 0.76, z + h * 0.97, 'metal');
-        B.window(lamp, [at(c0 + 0.3, 0.21, z + h * 0.79), at(L - c1 - 0.3, 0.21, z + h * 0.79), at(L - c1 - 0.3, 0.21, z + h * 0.94), at(c0 + 0.3, 0.21, z + h * 0.94)], nrm);
+      else if (k === 0 && i === front) {
+        // L1 ground-floor house opening + entrance step & canopy
+        rect(lamp, L * 0.12, L * 0.88, z + 0.15, z + h * 0.8);
+        if (L >= 2.6) {
+          box(L * 0.1, L * 0.9, 0, 0.55, z, z + 0.14, 'wall');
+          box(L * 0.08, L * 0.92, 0, 0.65, z + h * 0.8, z + h * 0.94, 'metal');
+        }
       }
       else if (k === 0 && shopfront && L >= 2) {
         const mid = L * 0.5;
         rect(lamp, c0 + 0.2, L - c1 - 0.2, z + 0.1, z + h * 0.85);
         B.line(at(mid, off + 0.02, z + 0.1), at(mid, off + 0.02, z + h * 0.85), 'detail');
-        if (isFrontEdge && L >= 3.2) {
-          const dw = Math.min(2.4, L * 0.34);
-          box(mid - dw * 0.6, mid + dw * 0.6, 0, 0.75, z, z + 0.14, 'wall');
-          box(mid - dw * 0.7, mid + dw * 0.7, 0, 0.9, z + h * 0.78, z + h * 0.92, 'metal');
-        }
-      }
-      else if (k === 0 && level >= 2 && isFrontEdge && L >= 3.2) {
-        // Ground-floor building entrance doorway, steps, canopy hood & glowing transom indicator (02-apartments.js)
-        const mid = L * 0.5, dw = Math.min(2.4, Math.max(1.4, L * 0.28)), dh = h * 0.74;
-        // Two-step entrance stoop
-        box(mid - dw * 0.68, mid + dw * 0.68, 0, 0.82, z, z + 0.12, 'wall');
-        box(mid - dw * 0.55, mid + dw * 0.55, 0, 0.46, z + 0.12, z + 0.24, 'wall');
-        // Double-leaf glazed entrance door + center leaf seam + door frame jambs
-        rect(lamp, mid - dw * 0.46, mid - 0.03, z + 0.24, z + dh);
-        rect(lamp, mid + 0.03, mid + dw * 0.46, z + 0.24, z + dh);
-        B.line(at(mid, off + 0.02, z + 0.24), at(mid, off + 0.02, z + dh), 'detail');
-        box(mid - dw * 0.52, mid - dw * 0.46, 0, 0.14, z + 0.24, z + dh + 0.04, 'metal');
-        box(mid + dw * 0.46, mid + dw * 0.52, 0, 0.14, z + 0.24, z + dh + 0.04, 'metal');
-        // Projecting entrance canopy hood + glowing transom indicator panel
-        box(mid - dw * 0.64, mid + dw * 0.64, 0, 0.76, z + dh + 0.04, z + dh + 0.36, 'metal');
-        B.window(lamp, [
-          at(mid - dw * 0.44, 0.77, z + dh + 0.08),
-          at(mid + dw * 0.44, 0.77, z + dh + 0.08),
-          at(mid + dw * 0.44, 0.77, z + dh + 0.31),
-          at(mid - dw * 0.44, 0.77, z + dh + 0.31),
-        ], nrm);
-        // Flanking ground-floor windows on either side of the central entrance
-        const sideSpan = mid - dw * 0.75 - (c0 + 0.35);
-        if (sideSpan >= 1.4) {
-          const cols = Math.max(1, Math.floor(sideSpan / 2.6)), cw = sideSpan / cols, ww = Math.min(1.4, cw * 0.55);
-          for (let c = 0; c < cols; c++) {
-            const mL = c0 + 0.35 + cw * (c + 0.5);
-            const mR = L - c1 - 0.35 - cw * (c + 0.5);
-            for (const m of [mL, mR]) {
-              rect(lamp, m - ww / 2, m + ww / 2, z + 0.3 * h, z + 0.8 * h);
-              B.line(at(m, off + 0.01, z + 0.3 * h), at(m, off + 0.01, z + 0.8 * h), 'detail');
-              box(m - ww / 2 - 0.08, m + ww / 2 + 0.08, 0, 0.12, z + 0.26 * h, z + 0.3 * h, 'wall');
-            }
-          }
-        }
       }
       else {
         if (L < 1.8) return;

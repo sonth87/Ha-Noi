@@ -34,7 +34,7 @@ import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metr
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import type { Surface } from '@render/batch';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
-import { FAR, detailFor, farness, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
+import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
 import {
   STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
@@ -90,12 +90,16 @@ const SURFACE_TOKEN: Record<Surface, string> = {
   metal: '--deck', awning: '--deck', plant: '--panel',
 };
 
-const SHELL_VERT = `uniform vec2 res;
+const CLIPPED_SURFACES = new Set<Surface>(['wall', 'roof', 'glass', 'metal', 'awning', 'plant']);
+
+const SHELL_VERT = `uniform vec2 res; uniform vec4 cutPlane; varying float vCut;
   void main() {
     vec4 p4 = vec4(position, 1.0); vec3 n = normal;
     #ifdef USE_INSTANCING
       p4 = instanceMatrix * p4; n = mat3(instanceMatrix) * n;
     #endif
+    vec4 worldPos = modelMatrix * p4;
+    vCut = dot(worldPos.xyz, cutPlane.xyz) + cutPlane.w;
     vec4 p = projectionMatrix * modelViewMatrix * p4;
     vec4 d4 = projectionMatrix * vec4(normalize(normalMatrix * n), 0.0);
     vec2 d = length(d4.xy) > 1e-5 ? normalize(d4.xy) : vec2(0.0);
@@ -149,19 +153,23 @@ export class CityView {
   private hoveredPlaceId: string | null = null;
   private mounted: {
     host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; showcaseGroup: THREE.Group;
-    camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer; bloom: UnrealBloomPass;
+    camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer | null; bloom: UnrealBloomPass | null;
     beacons: THREE.Mesh[]; fleets: Map<VehicleKind, Fleet>; vehicleLines: LineSegments2; stop: () => void;
   } | null = null;
   private turn: { a0: number; a1: number; e0: number; e1: number; t0: number } | null = null;
   private sim = { t: 0, prev: null as Signals | null, phase: -1, slow: 0 };
+  /** Vertical cutaway plane in front of controls.target when zoomed in (camera --> A --> B) so foreground buildings A don't block B */
+  private readonly cutPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e6);
   private readonly mats = {
     surface: new Map<Surface, THREE.MeshBasicMaterial>(),
     shell: new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Color() }, res: { value: new THREE.Vector2(1, 1) } },
-      vertexShader: SHELL_VERT, fragmentShader: 'uniform vec3 color; void main() { gl_FragColor = vec4(color, 1.0); }',
+      uniforms: { color: { value: new THREE.Color() }, res: { value: new THREE.Vector2(1, 1) }, cutPlane: { value: new THREE.Vector4(0, 1, 0, 1e6) } },
+      vertexShader: SHELL_VERT,
+      fragmentShader: 'uniform vec3 color; varying float vCut; void main() { if (vCut < 0.0) discard; gl_FragColor = vec4(color, 1.0); }',
       side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 24,
     }),
     crease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
+    baseCrease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     // window outlines are coloured per segment (dark, or the accent when lit): the material stays white
     detail: new LineMaterial({ linewidth: 1, vertexColors: true, color: 0xffffff, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     wire: new LineMaterial({ linewidth: 1, transparent: true }),
@@ -187,6 +195,7 @@ export class CityView {
   private readonly vehicleShell = (() => {
     const m = this.mats.shell.clone();
     m.uniforms.res = this.mats.shell.uniforms.res!;   // one resolution for both
+    m.uniforms.cutPlane = this.mats.shell.uniforms.cutPlane!;
     return m;
   })();
   private farF = 0;
@@ -216,9 +225,19 @@ export class CityView {
       if (st.at[1] > y1) y1 = st.at[1];
     }
     this.panBounds = { x0, y0, x1, y1 };
+    const clipPlanes = [this.cutPlane];
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
-      this.mats.surface.set(s, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 }));
+      const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
+      if (CLIPPED_SURFACES.has(s)) mat.clippingPlanes = clipPlanes;
+      this.mats.surface.set(s, mat);
     }
+    this.mats.windows.clippingPlanes = clipPlanes;
+    this.mats.crease.clippingPlanes = clipPlanes;
+    this.mats.detail.clippingPlanes = clipPlanes;
+    this.mats.wire.clippingPlanes = clipPlanes;
+    this.mats.pulse.clippingPlanes = clipPlanes;
+    this.mats.beaconOn.clippingPlanes = clipPlanes;
+    this.mats.beaconOff.clippingPlanes = clipPlanes;
     // day (the light theme) by default (user, 2026-10-21); night (the dark theme and the lamps) is
     // one switch, remembered
     let theme: Theme = 'light';
@@ -256,6 +275,7 @@ export class CityView {
     if (this.mounted) this.unmount();
     const q = this.snap.quality;
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.localClippingEnabled = true;
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
@@ -272,7 +292,7 @@ export class CityView {
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 7000);
     // the view opens on the area's origin (the crossroads), not the middle of the whole region
     const target = new THREE.Vector3(0, 0, 0);
-    camera.zoom = 1.4;
+    camera.zoom = 1.65;
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.copy(target);
     controls.enableDamping = true;
@@ -296,7 +316,7 @@ export class CityView {
     controls.addEventListener('end', onControlEnd);
     this.place(camera, controls, azOf(this.snap.view), ISO_EL);
 
-    const baseGroup = this.group(this.base);
+    const baseGroup = this.group(this.base, true);
     mapGroup.add(baseGroup);
     // a remount starts from fresh meshes; the built layers are kept
     for (const t of this.tiles) { for (const v of t.layers.values()) v.group = null; t.shown = -1; }
@@ -316,9 +336,6 @@ export class CityView {
     vehicleLines.frustumCulled = false;
     vehicleLines.userData.tier = 'creases';
     mapGroup.add(vehicleLines);
-
-    const composer = new EffectComposer(renderer);
-    const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.35, 0.5);
 
     // double click / double tap: open popup info if double-clicked on a callout pin, otherwise fly to spot on ground
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
@@ -361,8 +378,10 @@ export class CityView {
       const hits = ray.intersectObjects(pickable, false);
       for (const hit of hits) {
         if (hit.faceIndex == null) continue;
+        const surface = hit.object.userData.surface as Surface;
+        if (CLIPPED_SURFACES.has(surface) && this.cutPlane.distanceToPoint(hit.point) < 0) continue;
         const layer = hit.object.userData.layer as Layer;
-        const owner = layer.ownerOf(hit.object.userData.surface as Surface, hit.faceIndex);
+        const owner = layer.ownerOf(surface, hit.faceIndex);
         if (owner) {
           const floor = layer.floorAt(owner, hit.point);
           return { owner, ...(floor ? { floor } : {}), point: hit.point };
@@ -511,7 +530,7 @@ export class CityView {
     const resize = () => {
       const w = host.clientWidth, h = host.clientHeight, a = w / Math.max(1, h);
       renderer.setSize(w, h);
-      this.mounted?.composer.setSize(w, h);
+      this.mounted?.composer?.setSize(w, h);
       camera.left = (-FRUSTUM * a) / 2; camera.right = (FRUSTUM * a) / 2; camera.top = FRUSTUM / 2; camera.bottom = -FRUSTUM / 2;
       camera.updateProjectionMatrix();
       this.resolution();
@@ -529,6 +548,7 @@ export class CityView {
       this.syncLowCamera();
       controls.update();
       this.keepInside();
+      this.syncForegroundCut();
       this.zoomFade();
       const blink = this.snap.night && Math.floor(now / 700) % 2 === 0;
       if (this.snap.showcase) {
@@ -546,7 +566,7 @@ export class CityView {
       this.streetLabelsStep();
       this.placeInfoStep();
       if (this.mounted) {
-        if (this.mounted.bloom.enabled) this.mounted.composer.render();
+        if (this.mounted.bloom?.enabled && this.mounted.composer) this.mounted.composer.render();
         else this.mounted.renderer.render(scene, camera);
       }
       frames++;
@@ -592,7 +612,7 @@ export class CityView {
     this.popupCard = popupCard;
 
     this.mounted = {
-      host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer, bloom, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         controls.removeEventListener('start', onControlStart);
@@ -614,9 +634,13 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // nearby tiles at L1 right away; distant tiles stream in on demand or during idle frames
+    // Build only the closest 10 tiles synchronously so first-frame mount stays fast and within mobile GPU limits
     const first = Math.min(1, this.wantedDetail()) as Detail;
-    for (const t of this.tiles) if (this.nearTile(t)) this.show(t, this.ensure(t, first));
+    const initTiles = [...this.tiles]
+      .filter(t => this.nearTile(t))
+      .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
+      .slice(0, 10);
+    for (const t of initTiles) this.show(t, this.ensure(t, first));
     this.houseLights(false);
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
@@ -649,7 +673,7 @@ export class CityView {
     this.popupCard?.remove();
     this.popupCard = null;
     this.activePopup = null;
-    m.controls.dispose(); m.composer.dispose(); m.renderer.dispose();
+    m.controls.dispose(); m.composer?.dispose(); m.bloom?.dispose(); m.renderer.dispose();
     m.renderer.domElement.remove();
     this.mounted = null;
   }
@@ -1615,6 +1639,7 @@ export class CityView {
   private tileRange() {
     const m = this.mounted, far = this.snap.quality.viewDistance;
     if (!m || far <= 0) return 0;
+    if (this.snap.quality.level === 'low') return far;
     const el = Math.max(0.08, this.elevation());
     const elScale = Math.min(2.4, Math.sin(ISO_EL) / Math.max(0.22, Math.sin(el)));
     return Math.max(far, (FRUSTUM / m.camera.zoom) * 0.95 * elScale);
@@ -1653,19 +1678,21 @@ export class CityView {
   private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
-    const far = this.snap.quality.viewDistance, tFar = this.tileRange(), c = m.controls.target;
+    const q = this.snap.quality, far = q.viewDistance, tFar = this.tileRange(), c = m.controls.target;
+    const hideFar = q.level === 'low';
     const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
     for (const t of this.tiles) {
-      if (!near(t.tile.center, t.tile.radius, tFar) && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
+      const inRange = near(t.tile.center, t.tile.radius, tFar);
+      if (!inRange && !hideFar && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
       const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-      if (v?.group) v.group.visible = true;
+      if (v?.group) v.group.visible = hideFar ? inRange : true;
     }
-    const q = this.snap.quality, px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
+    const px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
     // Never build heavy furniture cells mid-drag on mobile/desktop; stream them in during idle frames
-    const maxBuild = initial ? Infinity : this.interacting ? 0 : 2;
+    const maxBuild = initial ? 4 : this.interacting ? 0 : 2;
     for (const s of this.cells) {
       const on = near(s.bucket.center, CELL_R);
       if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
@@ -1733,10 +1760,15 @@ export class CityView {
     const want = this.wantedDetail(), c = m.controls.target, waiting: TileState[] = [];
     for (const t of this.tiles) {
       if (!this.nearTile(t)) continue;
-      if (t.layers.has(want)) this.show(t, this.ensure(t, want));
-      else {
+      if (t.layers.has(want)) {
+        this.show(t, this.ensure(t, want));
+        const v = t.layers.get(want);
+        if (v?.group) v.group.visible = true;
+      } else {
         // never leave a visible street bare while panning/flying: put up L0 massing right away
         if (t.shown < 0) this.show(t, this.ensure(t, 0));
+        const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+        if (v?.group) v.group.visible = true;
         waiting.push(t);
       }
     }
@@ -1747,13 +1779,13 @@ export class CityView {
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
         this.show(waiting[i]!, this.ensure(waiting[i]!, want));
       }
-    } else if (!busy) {
-      // Pre-warm L0 for distant tiles during idle frames so zooming out later is instant
+    } else if (!busy && this.snap.quality.level !== 'low' && !isMobileDevice()) {
+      // Pre-warm L0 for distant tiles during desktop idle frames so zooming out later is instant
       let prewarm = 0;
       for (const t of this.tiles) {
         if (t.shown < 0) {
           this.show(t, this.ensure(t, 0));
-          if (++prewarm >= 3) break;
+          if (++prewarm >= 2) break;
         }
       }
     }
@@ -1765,13 +1797,16 @@ export class CityView {
     if (this.activeShowcase) return { ...this.activeShowcase.built.layer.stats };
     const s = { ...this.base.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
-    for (const t of this.tiles) { const l = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.layer : undefined; if (l) add(l); }
+    for (const t of this.tiles) {
+      const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+      if (v?.layer && v.group?.visible !== false) add(v.layer);
+    }
     for (const c of this.cells) if (c.cell) { add(c.cell.fixtures); if (this.snap.quality.wires) add(c.cell.poles); if (this.snap.quality.trees === 'full') add(c.cell.trees); }
     return s;
   }
 
   /** the meshes of a layer, with the shared materials */
-  private group(layer: Layer): THREE.Group {
+  private group(layer: Layer, isBase = false): THREE.Group {
     const g = new THREE.Group();
     for (const [s, geo] of layer.surfaces) {
       const mesh = new THREE.Mesh(geo, this.mats.surface.get(s)!);
@@ -1779,7 +1814,8 @@ export class CityView {
       g.add(mesh);
     }
     const shell = new THREE.Mesh(layer.shell, this.mats.shell); shell.userData.tier = 'silhouette';
-    const creases = new LineSegments2(layer.creases, this.mats.crease); creases.userData.tier = 'creases';
+    const creases = new LineSegments2(layer.creases, isBase ? this.mats.baseCrease : this.mats.crease);
+    creases.userData.tier = isBase ? 'streetLines' : 'creases';
     const details = new LineSegments2(layer.details, this.mats.detail); details.userData.tier = 'details';
     const windows = new THREE.Mesh(layer.windows, this.mats.windows); windows.userData.tier = 'windows';
     g.add(shell, creases, details, windows);
@@ -1791,14 +1827,15 @@ export class CityView {
   private tiers(g: THREE.Object3D) {
     const q = this.snap.quality, auto = q.autoDetail && !this.snap.showcase, px = this.pxPerMetre();
     g.traverse(o => {
-      const t = o.userData.tier as keyof Quality | undefined;
+      const t = o.userData.tier as (keyof Quality | 'streetLines') | undefined;
       if (!t) return;
-      let on = q[t] as boolean;
+      let on = t === 'streetLines' ? q.creases : (q[t] as boolean);
       if (auto && on) {
         if (t === 'details' && px < FAR.details) on = false;
         else if (t === 'creases' && px < FAR.creases) on = false;
+        else if (t === 'streetLines' && px < FAR.streetLines) on = false;
         else if (t === 'silhouette' && px < FAR.silhouette) on = false;
-        else if (t === 'windows' && px < 1.1) on = false;
+        else if (t === 'windows' && px < 1.8) on = false;
       }
       o.visible = on;
     });
@@ -1888,6 +1925,7 @@ export class CityView {
     for (const [s, m] of this.mats.surface) m.color = tok(SURFACE_TOKEN[s]);
     (this.mats.shell.uniforms.color!.value as THREE.Color).copy(tok('--line'));
     this.mats.crease.color = tok('--line');
+    this.mats.baseCrease.color = tok('--line');
     this.mats.wire.color = tok('--line');
     this.mats.pulse.color = tok('--accent');
     this.nightThings();
@@ -1911,38 +1949,61 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     m.renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
-    // the composer's render target carries the multisampling; rebuild it on change
-    m.composer.dispose();
-    const target = new THREE.WebGLRenderTarget(1, 1, { samples: q.msaa ? 4 : 0, type: THREE.HalfFloatType });
-    m.composer = new EffectComposer(m.renderer, target);
-    m.composer.addPass(new RenderPass(m.scene, m.camera));
-    m.composer.addPass(m.bloom);
-    m.composer.addPass(new OutputPass());
-    m.composer.setSize(m.host.clientWidth, m.host.clientHeight);
+    // Dispose any existing composer so applyBloom() rebuilds it only if bloom is active in dark mode
+    if (m.composer) {
+      m.composer.dispose();
+      m.composer = null;
+    }
     this.tiers(m.scene);
     this.nightThings();
     this.resolution();
     this.applyBloom();
     this.zoomFade(true);
+    this.distanceStep();
   }
 
   private resolution() {
     const m = this.mounted;
     if (!m) return;
     const res = m.renderer.getDrawingBufferSize(new THREE.Vector2());
-    for (const l of [this.mats.crease, this.mats.detail, this.mats.wire, this.mats.pulse]) l.resolution.copy(res);
+    for (const l of [this.mats.crease, this.mats.baseCrease, this.mats.detail, this.mats.wire, this.mats.pulse]) l.resolution.copy(res);
     (this.mats.shell.uniforms.res!.value as THREE.Vector2).copy(res);
   }
 
-  /** glow round lit things: only the accent is bright enough to pass the threshold; strength from
-      the light settings */
+  /** glow round lit things: only allocate EffectComposer + UnrealBloomPass when actually active in dark mode
+      so Day mode and mobile Safari never allocate 100+ MB of unused HalfFloatType render targets */
   private applyBloom() {
     const m = this.mounted;
     if (!m) return;
     const g = this.snap.lights.glow;
-    m.bloom.enabled = this.snap.quality.bloom && this.snap.theme === 'dark' && g > 0;
-    // iso-glow: windows barely glow, lamps and signs softly — only the bright accent passes
-    m.bloom.strength = 0.45 * g; m.bloom.radius = 0.3; m.bloom.threshold = 0.55;
+    const want = this.snap.quality.bloom && this.snap.theme === 'dark' && g > 0;
+    if (!want) {
+      if (m.bloom) m.bloom.enabled = false;
+      if (m.composer) {
+        m.composer.dispose();
+        m.composer = null;
+      }
+      if (m.bloom) {
+        m.bloom.dispose();
+        m.bloom = null;
+      }
+      return;
+    }
+    if (!m.bloom) {
+      m.bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.8, 0.35, 0.5);
+    }
+    if (!m.composer) {
+      const target = new THREE.WebGLRenderTarget(1, 1, { samples: this.snap.quality.msaa ? 4 : 0, type: THREE.HalfFloatType });
+      m.composer = new EffectComposer(m.renderer, target);
+      m.composer.addPass(new RenderPass(m.scene, m.camera));
+      m.composer.addPass(m.bloom);
+      m.composer.addPass(new OutputPass());
+      m.composer.setSize(m.host.clientWidth, m.host.clientHeight);
+    }
+    m.bloom.enabled = true;
+    m.bloom.strength = 0.45 * g;
+    m.bloom.radius = 0.3;
+    m.bloom.threshold = 0.55;
   }
 
   // ---------- zoomed out: less of the small things (ADR-044, ADR-049) ----------
@@ -1951,22 +2012,21 @@ export class CityView {
   /** pixels per metre on screen now */
   private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
 
-  /** lines fade gently while keeping creases and silhouettes crisp when zoomed out */
+  /** when zoomed out, building lines fade and turn off (pure color blocks), while street lines stay subtly visible */
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
     const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase;
     const f = !auto ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
-    const fCrease = !auto ? 0 : Math.round(Math.max(0, Math.min(1, (FAR.near - px) / (FAR.near - FAR.creases))) * 20) / 20;
-    const key = `${f}|${fCrease}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${this.snap.showcase ?? ''}`;
+    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
     const css = getComputedStyle(document.documentElement);
     this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
-    // Keep building creases and details crisp when zoomed out so the map never looks washed-out or blurry
-    this.mats.crease.opacity = 1 - 0.32 * fCrease;
-    this.mats.detail.opacity = 1 - 0.45 * f;
+    this.mats.crease.opacity = 1 - 0.85 * f;
+    this.mats.baseCrease.opacity = Math.max(0.24, (1 - 0.72 * f) * 0.75);
+    this.mats.detail.opacity = 1 - 0.85 * f;
     this.mats.wire.opacity = 1 - 0.5 * f;
     this.tiers(m.scene);
     m.vehicleLines.visible = this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
@@ -2073,6 +2133,48 @@ export class CityView {
       m.controls.target.y += dy;
       m.camera.position.y += dy;
     }
+  }
+
+  /**
+   * Cut away foreground buildings (camera -> A -> B) when zoomed in close or tilted low,
+   * so building A in front of the focus target B does not block the view of B or its entrance lobby.
+   */
+  private syncForegroundCut() {
+    const m = this.mounted;
+    const uCut = this.mats.shell.uniforms.cutPlane?.value as THREE.Vector4 | undefined;
+    if (!m || this.snap.showcase) {
+      this.cutPlane.normal.set(0, 1, 0);
+      this.cutPlane.constant = 1e6;
+      uCut?.set(0, 1, 0, 1e6);
+      return;
+    }
+    const zoom = m.camera.zoom;
+    const el = Math.max(0.08, this.elevation());
+    if (zoom < 1.85 && el > 0.48) {
+      this.cutPlane.normal.set(0, 1, 0);
+      this.cutPlane.constant = 1e6;
+      uCut?.set(0, 1, 0, 1e6);
+      return;
+    }
+    const fx = m.controls.target.x - m.camera.position.x;
+    const fz = m.controls.target.z - m.camera.position.z;
+    const len = Math.hypot(fx, fz);
+    if (len < 1e-3) {
+      this.cutPlane.normal.set(0, 1, 0);
+      this.cutPlane.constant = 1e6;
+      uCut?.set(0, 1, 0, 1e6);
+      return;
+    }
+    const nx = fx / len;
+    const nz = fz / len;
+    const pitchScale = Math.min(1, Math.sin(el) / Math.sin(ISO_EL));
+    const frontClearance = Math.max(1.5, (38 / Math.pow(zoom, 1.25)) * pitchScale);
+    const px = m.controls.target.x - nx * frontClearance;
+    const pz = m.controls.target.z - nz * frontClearance;
+    const constant = -(nx * px + nz * pz);
+    this.cutPlane.normal.set(nx, 0, nz);
+    this.cutPlane.constant = constant;
+    uCut?.set(nx, 0, nz, constant);
   }
 
   /** held keys move the view over the ground, about half a screen a second, the way it faces */

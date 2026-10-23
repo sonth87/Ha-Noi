@@ -64,26 +64,53 @@ export function buildHouse(B: Batch, b: Building, spec: HouseSpec, level: 2 | 3,
     });
   });
 
-  // ---------- ground floor ----------
+  // ---------- ground floor (3D entrance porch / sảnh tầng 1) ----------
   const panels = spec.signs.some(x => x.type === 'side-panels');
-  const ow = w * (panels ? 0.6 : 0.84), oa = (w - ow) / 2, oz0 = spec.basement + 0.1, oz1 = zG - 0.55;
+  const ow = w * (panels ? 0.62 : 0.84), oa = (w - ow) / 2, oz0 = spec.basement + 0.14, oz1 = zG - 0.5;
   if (spec.ground === 'wall') {
-    // a closed wall with a small door and a window
-    win(L1, w * 0.12, w * 0.12 + 1, spec.basement + 0.05, spec.basement + 2.2, 0.05);
-    win(L1, w * 0.45, w * 0.8, spec.basement + 1, spec.basement + 2.2, 0.05);
+    // Residential ground-floor porch: 2-step stoop, framed double entrance door, canopy hood & side window
+    const d0 = w * 0.1, dw = Math.min(1.6, w * 0.34), d1 = d0 + dw, dm = (d0 + d1) / 2, dh = spec.basement + 2.35;
+    if (spec.basement === 0) {
+      box(d0 - 0.22, d1 + 0.22, 0, 0.62, 0, 0.12, 'wall');
+      box(d0 - 0.14, d1 + 0.14, 0, 0.34, 0.12, 0.22, 'wall');
+    }
+    box(d0 - 0.12, d0, 0, 0.22, spec.basement, dh, 'wall');
+    box(d1, d1 + 0.12, 0, 0.22, spec.basement, dh, 'wall');
+    box(d0 - 0.2, d1 + 0.2, 0, 0.58, dh, dh + 0.22, 'metal');
+    win(L1, d0 + 0.02, dm - 0.02, spec.basement + 0.16, dh - 0.04, 0.08);
+    win(L1, dm + 0.02, d1 - 0.02, spec.basement + 0.16, dh - 0.04, 0.08);
+    line(dm, 0.09, spec.basement + 0.16, dm, 0.09, dh - 0.04);
+    if (w - (d1 + 0.35) >= 0.9) {
+      const w0 = d1 + 0.32, w1 = w - 0.16, wm = (w0 + w1) / 2;
+      win(L1, w0, w1, spec.basement + 0.95, spec.basement + 2.2, 0.06);
+      line(wm, 0.07, spec.basement + 0.95, wm, 0.07, spec.basement + 2.2);
+      box(w0 - 0.06, w1 + 0.06, 0, 0.16, spec.basement + 0.85, spec.basement + 0.95, 'wall');
+    }
   } else {
-    win(L1, oa, oa + ow, oz0, oz1, 0.05);
-    const closed = !spec.shop && (spec.ground === 'fold' || spec.ground === 'roll' || spec.ground === 'iron');
-    if (closed) {
-      // the shutter pulled across the opening hides the light behind it
-      panel('metal', [[oa, 0.1, oz0], [oa + ow, 0.1, oz0], [oa + ow, 0.1, oz1], [oa, 0.1, oz1]], out);
-      const step = spec.ground === 'roll' ? 0.22 : 0.3;
-      if (spec.ground === 'roll') for (let z = oz0 + step; z < oz1; z += step) line(oa, 0.11, z, oa + ow, 0.11, z);
-      else for (let a = oa + step; a < oa + ow; a += step) line(a, 0.11, oz0, a, 0.11, oz1);
-    } else if (spec.ground === 'roll') box(oa, oa + ow, 0, 0.3, oz1 - 0.05, oz1 + 0.25, 'metal');   // rolled up in its box
-    else if (spec.ground === 'fold' || spec.ground === 'iron') { box(oa, oa + 0.18, 0, 0.12, oz0, oz1, 'metal'); box(oa + ow - 0.18, oa + ow, 0, 0.12, oz0, oz1, 'metal'); }
-    else if (spec.ground === 'glass') for (let k = 1; k < Math.round(ow / 1.3); k++) line(oa + (k * ow) / Math.round(ow / 1.3), 0.06, oz0, oa + (k * ow) / Math.round(ow / 1.3), 0.06, oz1);
-    else if (spec.ground === 'wood') for (let k = 1; k < 4; k++) line(oa + (k * ow) / 4, 0.06, oz0, oa + (k * ow) / 4, 0.06, oz1);
+    // Open ground-floor lobby / shopfront with 3D pilasters, entrance steps, transom bar, door leaves & header canopy
+    const pilW = Math.min(0.22, Math.max(0.12, (w - ow) * 0.45));
+    if (spec.basement === 0) {
+      box(oa - pilW, oa + ow + pilW, 0, 0.68, 0, 0.12, 'wall');
+      box(oa - pilW * 0.5, oa + ow + pilW * 0.5, 0, 0.36, 0.12, 0.22, 'wall');
+    }
+    // 3D left & right entrance pilasters framing the ground-floor lobby
+    box(Math.max(0, oa - pilW), oa, 0, 0.28, spec.basement, oz1 + 0.24, 'wall');
+    box(oa + ow, Math.min(w, oa + ow + pilW), 0, 0.28, spec.basement, oz1 + 0.24, 'wall');
+    // Projecting lobby header canopy / roller-shutter housing across the top of the entrance
+    box(Math.max(0, oa - pilW), Math.min(w, oa + ow + pilW), 0, 0.52, oz1, oz1 + 0.26, 'metal');
+    // Glazed ground-floor lobby / shopfront with doorway mullions & transom bar
+    win(L1, oa + 0.04, oa + ow - 0.04, oz0, oz1 - 0.02, 0.08);
+    const zTransom = oz0 + (oz1 - oz0) * 0.72;
+    line(oa + 0.04, 0.09, zTransom, oa + ow - 0.04, 0.09, zTransom);
+    if (spec.ground === 'fold' || spec.ground === 'iron') {
+      box(oa, oa + 0.18, 0, 0.22, oz0, oz1, 'metal');
+      box(oa + ow - 0.18, oa + ow, 0, 0.22, oz0, oz1, 'metal');
+    }
+    const panes = Math.max(2, Math.min(4, Math.round(ow / 1.15)));
+    for (let k = 1; k < panes; k++) {
+      const ak = oa + (k * ow) / panes;
+      line(ak, 0.09, oz0, ak, 0.09, oz1 - 0.02);
+    }
   }
   if (spec.basement > 0) {
     // garage door under the raised floor, three steps up beside it

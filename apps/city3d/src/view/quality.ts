@@ -37,9 +37,9 @@ export interface QualityOptions {
 export interface Quality extends QualityOptions { level: QualityLevel | 'custom' }
 
 export const LEVELS: Record<QualityLevel, QualityOptions> = {
-  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 650, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1.25, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
-  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 1400, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: false, windows: true },
-  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 2400, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
+  low: { traffic: 0.15, wires: false, trees: 'simple', viewDistance: 400, autoQuality: true, houseDetail: 1, autoDetail: true, pixelRatio: 1, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
+  medium: { traffic: 0.3, wires: true, trees: 'simple', viewDistance: 700, autoQuality: true, houseDetail: 2, autoDetail: true, pixelRatio: 1.5, msaa: false, bloom: false, silhouette: true, creases: true, details: false, windows: true },
+  high: { traffic: 0.3, wires: true, trees: 'full', viewDistance: 1200, autoQuality: true, houseDetail: 3, autoDetail: true, pixelRatio: 2, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
   ultra: { traffic: 0.6, wires: true, trees: 'full', viewDistance: 0, autoQuality: false, houseDetail: 3, autoDetail: false, pixelRatio: 3, msaa: true, bloom: true, silhouette: true, creases: true, details: true, windows: true },
 };
 
@@ -57,19 +57,20 @@ export function detailFor(pxPerMetre: number, q: Pick<QualityOptions, 'houseDeta
 }
 
 /** How far out the view is, 0 (close: everything drawn) to 1 (far): from 8 px a metre down to 2.5.
-    With "lower detail when zoomed out" on, lines stay crisp and small things go step by step (ADR-044, ADR-049). */
+    With "lower detail when zoomed out" on, lines fade and small things go step by step (ADR-044, ADR-049). */
 export const FAR = {
   near: 8,
   far: 2.5,
   vehicleLines: 5.5,
   simpleTrees: 4.5,
-  bikes: 2.3,
-  furniture: 2.0,
-  details: 1.35,
-  vehicles: 1.5,
-  trees: 1.1,
-  creases: 0.25,
-  silhouette: 0.15,
+  bikes: 3,
+  furniture: 2.5,
+  details: 2.5,
+  vehicles: 1.8,
+  creases: 1.8,
+  silhouette: 1.5,
+  trees: 1.4,
+  streetLines: 0.45,
 } as const;
 
 export function farness(pxPerMetre: number, q: Pick<QualityOptions, 'autoDetail'>): number {
@@ -93,8 +94,8 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (5: sharp zoomed-out lines + Ba Đình viewDistance) */
-const VERSION = 5;
+/** bumped when the defaults change in a way a saved setting should not outlive (6: mobile Safari memory & pure color blocks when zoomed out) */
+const VERSION = 6;
 
 export function isMobileDevice(): boolean {
   try {

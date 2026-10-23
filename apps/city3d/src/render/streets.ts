@@ -53,7 +53,9 @@ export function buildStreets(B: Batch, city: City) {
     for (const [side, w, cut] of [[1, r.sidewalk.right, c.right], [-1, r.sidewalk.left, c.left]] as const) {
       if (w <= 0) continue;
       const a = r.width / 2;
-      for (const run of pieces(r.path, cut)) B.solid(strip(run, side * a, side * (a + w)), 0, WALK_Z, () => 'walk', 'walk');
+      for (const run of pieces(r.path, cut)) {
+        walkRibbon(B, offsetLine(run, side * a), offsetLine(run, side * (a + w)));
+      }
     }
     const offs: number[] = [];
     const n = r.oneway ? r.lanes : 2 * Math.max(1, Math.floor(r.lanes / 2));
@@ -66,6 +68,21 @@ export function buildStreets(B: Batch, city: City) {
     if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) continue;
     if (s.layer > 0 && s.profile.length) bridge(B, s);
     else B.flat('walk', strip(s.path, -s.width / 2, s.width / 2), ROAD_Z * 0.5);
+  }
+}
+
+/** Draw a continuous raised sidewalk ribbon with a vertical kerb face and a single longitudinal kerb line,
+    without transverse end-cap creases or brick-like subdivisions. */
+function walkRibbon(B: Batch, kerbEdge: readonly Vec2[], backEdge: readonly Vec2[]) {
+  if (kerbEdge.length < 2 || backEdge.length < 2) return;
+  B.flat('walk', [...kerbEdge, ...[...backEdge].reverse()], WALK_Z);
+  for (let i = 1; i < kerbEdge.length; i++) {
+    const a = kerbEdge[i - 1]!, b = kerbEdge[i]!;
+    const L = dist(a, b);
+    if (L < 1e-4) continue;
+    const n = new THREE.Vector3(-(b[1] - a[1]) / L, 0, (b[0] - a[0]) / L);
+    B.quad('walk', [V(a[0], a[1], ROAD_Z), V(b[0], b[1], ROAD_Z), V(b[0], b[1], WALK_Z), V(a[0], a[1], WALK_Z)], n);
+    B.line(V(a[0], a[1], WALK_Z), V(b[0], b[1], WALK_Z), 'crease');
   }
 }
 
@@ -99,8 +116,7 @@ export function buildForecourts(B: Batch, city: City) {
     const walk = right ? S.sidewalk.right : S.sidewalk.left, edge = offsetLine(S.path, (right ? 1 : -1) * (S.width / 2 + walk));
     const p2 = closestOnPath(p, edge).at, q2 = closestOnPath(q, edge).at;
     if (dist(p, p2) > 16 || dist(q, q2) > 16) continue;
-    if (walk > 0) B.solid([p, q, q2, p2], 0, WALK_Z, () => 'walk', 'walk');
-    else B.flat('walk', [p, q, q2, p2], ROAD_Z * 0.6);
+    B.flat('walk', [p, q, q2, p2], walk > 0 ? WALK_Z : ROAD_Z * 0.6);
   }
 }
 
@@ -172,8 +188,7 @@ function junction(B: Batch, node: NetNode, roads: Map<string, Road>): (Corner | 
     // the sidewalk round the corner, when both arms have one on this side
     const w = Math.min(A.walkR, Bm.walkL);
     if (w > 0 && R > 0.5) {
-      const outer = arc(R), inner = arc(Math.max(0.3, R - w)).reverse();
-      B.solid([...outer, ...inner], 0, WALK_Z, () => 'walk', 'walk');
+      walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
     }
     out.push({ tA, tB });
   }
