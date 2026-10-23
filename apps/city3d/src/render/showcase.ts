@@ -25,6 +25,7 @@ export interface ShowcaseItem {
 export interface BuiltShowcase {
   item: ShowcaseItem;
   layer: Layer;
+  shellLayer?: Layer;
   pools: THREE.BufferGeometry;
   beacons: THREE.Vector3[];
   /** metro cars placed on the station showcase (cab, position in city metres, heading) */
@@ -279,14 +280,15 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
         source: 'showcase',
       }],
     };
-    buildMetro(B, mockCity);
+    const shellB = new Batch();
+    buildMetro(B, mockCity, shellB);
     // 4-car train standing at the platform on track 1
     const cars = [-22.5, -7.5, 7.5, 22.5].map((x, k) => ({
       cab: k === 0 || k === 3,
       at: [x, 2.1, h] as [number, number, number],
       heading: k === 3 ? Math.PI : 0,
     }));
-    return { item, layer: layerOf(B, true), pools: poolGeometry(pools), beacons: [], cars, floors: [] };
+    return { item, layer: layerOf(B, true), shellLayer: layerOf(shellB, true), pools: poolGeometry(pools), beacons: [], cars, floors: [] };
   }
 
   // ---- Case 2: OSM Landmark Building showcase ----

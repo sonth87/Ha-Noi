@@ -31,7 +31,7 @@ function pairOf(rail: Rail, rails: Rail[]): Rail | undefined {
   return rails.find(o => o !== rail && o.kind === rail.kind && o.elevated && rail.path.some(p => nearest(o.path, p).d < 8));
 }
 
-export function buildMetro(B: Batch, city: City) {
+export function buildMetro(B: Batch, city: City, shellB: Batch = B) {
   const rails = city.rails.filter(r => r.kind === 'metro' && r.elevated);
   const stations = city.stations.filter(s => s.kind === 'metro');
   const inStation = (p: Vec2) => stations.some(s => dist(s.at, p) < stationLength(s) / 2 + 8);
@@ -91,7 +91,7 @@ export function buildMetro(B: Batch, city: City) {
       }
     }
   }
-  for (const st of stations) station(B, st, rails, city);
+  for (const st of stations) station(B, st, rails, city, shellB);
 }
 
 /** platform length from the data (the platforms' extent), 100 m when none is mapped */
@@ -103,7 +103,7 @@ function stationLength(st: Station): number {
   return Math.min(140, Math.max(60, best));
 }
 
-function station(B: Batch, st: Station, rails: Rail[], city: City) {
+function station(B: Batch, st: Station, rails: Rail[], city: City, shellB: Batch = B) {
   // the station's frame: middle between its two tracks, u along them, v across
   const near = rails.map(r => ({ r, n: nearest(r.path, st.at) })).filter(x => x.n.d < 40).sort((a, b) => a.n.d - b.n.d).slice(0, 2);
   if (!near.length) return;
@@ -116,6 +116,8 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
   const ring = (x0: number, x1: number, y0: number, y1: number): Vec2[] => [P2(x0, y0), P2(x1, y0), P2(x1, y1), P2(x0, y1)];
   const box = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, s: Surface = 'wall', top?: Surface) =>
     B.solid(ring(x0, x1, y0, y1), z0, z1, () => s, top ?? (s === 'wall' ? 'roof' : s), st.id);
+  const boxS = (x0: number, x1: number, y0: number, y1: number, z0: number, z1: number, s: Surface = 'wall', top?: Surface) =>
+    shellB.solid(ring(x0, x1, y0, y1), z0, z1, () => s, top ?? (s === 'wall' ? 'roof' : s), st.id);
   const lamp = stationLamp(st), edge = stationLamp(st, 'edge'), board = stationLamp(st, 'board');
   const nU = (s: number) => new THREE.Vector3(u[0] * s, 0, u[1] * s), nV = (s: number) => new THREE.Vector3(v[0] * s, 0, v[1] * s), up = new THREE.Vector3(0, 1, 0), down = new THREE.Vector3(0, -1, 0);
 
@@ -164,15 +166,44 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
   }
 
   // ---- 2. Concourse level (tầng trung chuyển z = 6.0 .. 10.0 m) & Open End Portals ----
-  // projecting white floor slab band around the entire concourse
+  // projecting white floor slab band around the entire concourse (kept in B so interior floor is visible in see-through)
   box(-cl - 0.45, cl + 0.45, -W - 0.92, W + 0.92, cz0 - 0.08, cz0 + 0.42, 'wall', 'walk');
-  // enclosed middle concourse hall (inset slightly from the open end loggias)
+  // enclosed middle concourse outer hall shell (routed to shellB so see-through reveals the concourse interior)
   const clIn = cl - 3.6;
-  box(-clIn, clIn, -W - 0.55, W + 0.55, cz0 + 0.42, cz1 - 0.35, 'wall', 'roof');
+  boxS(-clIn, clIn, -W - 0.55, W + 0.55, cz0 + 0.42, cz1 - 0.35, 'wall', 'roof');
   // central track support spine running full station length
   box(-hl, hl, -t - 1.35, t + 1.35, cz0 + 0.42, h - DECK, 'wall', 'roof');
-  // concourse ceiling slab + upper fascia band
-  box(-cl - 0.45, cl + 0.45, -W - 0.92, W + 0.92, cz1 - 0.35, cz1 + 0.15, 'wall', 'roof');
+  // concourse ceiling slab + upper fascia band (routed to shellB)
+  boxS(-cl - 0.45, cl + 0.45, -W - 0.92, W + 0.92, cz1 - 0.35, cz1 + 0.15, 'wall', 'roof');
+
+  // Interior concourse furniture on the concourse floor (visible when looking inside via see-through):
+  // ticket booths, automatic fare-gate turnstiles, and internal stairs from concourse up to both platforms
+  const zConcFloor = cz0 + 0.42;
+  for (const sb of [-1, 1]) {
+    const bMid = sb * (t + 1.5 + pw * 0.48);
+    // Ticket office & customer service booth near the center of the concourse
+    box(-4.2, 4.2, bMid - 1.1, bMid + 1.1, zConcFloor, zConcFloor + 2.45, 'wall', 'roof');
+    B.window(board, [P(-3.6, bMid - sb * 1.12, zConcFloor + 0.95), P(3.6, bMid - sb * 1.12, zConcFloor + 0.95), P(3.6, bMid - sb * 1.12, zConcFloor + 2.05), P(-3.6, bMid - sb * 1.12, zConcFloor + 2.05)], nV(-sb));
+    // Two arrays of stainless automatic fare-gate turnstiles (cổng soát vé tự động)
+    for (const aGate of [-clIn * 0.52, clIn * 0.52]) {
+      for (let g = -2; g <= 2; g++) {
+        const bg = bMid + g * 0.72;
+        box(aGate - 0.55, aGate + 0.55, bg - 0.12, bg + 0.12, zConcFloor, zConcFloor + 1.02, 'metal', 'metal');
+        B.window(edge, [P(aGate - 0.35, bg - 0.08, zConcFloor + 1.03), P(aGate + 0.35, bg - 0.08, zConcFloor + 1.03), P(aGate + 0.35, bg + 0.08, zConcFloor + 1.03), P(aGate - 0.35, bg + 0.08, zConcFloor + 1.03)], up);
+      }
+    }
+    // Internal stairs leading from concourse floor up to the side platform (cầu thang nội bộ lên sân ga)
+    for (const dir of [-1, 1]) {
+      const aSt0 = dir * (clIn * 0.24), aSt1 = dir * (clIn * 0.42);
+      const stSteps = 8, zTopSt = h + PLATFORM;
+      for (let k = 0; k < stSteps; k++) {
+        const u0 = k / stSteps, u1 = (k + 1) / stSteps;
+        const x0 = aSt0 + (aSt1 - aSt0) * u0, x1 = aSt0 + (aSt1 - aSt0) * u1;
+        const z0 = zConcFloor + (zTopSt - zConcFloor) * u0, z1 = zConcFloor + (zTopSt - zConcFloor) * u1;
+        box(Math.min(x0, x1), Math.max(x0, x1), bMid - 0.85, bMid + 0.85, z0, z1, 'wall', 'walk');
+      }
+    }
+  }
 
   // open end-loggia balconies at both ends (a = -cl and a = +cl) with glass balustrades, ceiling light strips,
   // "GA THÁI HÀ" sign fascia, and green-white diamond mosaic end-blocks (như ảnh 1, 2, 3)
@@ -182,7 +213,7 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
     // corner pilasters at outer edges
     for (const sb of [-1, 1]) {
       const bEdge = sb * (W + 0.68);
-      box(xLo, xHi, bEdge - 0.24, bEdge + 0.24, cz0 + 0.42, cz1 - 0.35, 'wall', 'roof');
+      boxS(xLo, xHi, bEdge - 0.24, bEdge + 0.24, cz0 + 0.42, cz1 - 0.35, 'wall', 'roof');
       // glass balustrade across the open end portal (lan can kính mặt trước sảnh)
       const b0 = sb > 0 ? t + 1.4 : -W - 0.42, b1 = sb > 0 ? W + 0.42 : -t - 1.4;
       const aRail = sa * (cl + 0.28);
@@ -194,24 +225,24 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
       // recessed ceiling light tubes inside the open portal loggia (dãy đèn huỳnh quang trần sảnh như ảnh 1 & 2)
       for (const aLamp of [sa * (cl - 0.9), sa * (cl - 2.2)]) {
         for (let bl = b0 + 0.65; bl + 1.1 <= b1 - 0.4; bl += 1.55) {
-          B.window(lamp, [P(aLamp - 0.12, bl, cz1 - 0.37), P(aLamp + 0.12, bl, cz1 - 0.37), P(aLamp + 0.12, bl + 1.05, cz1 - 0.37), P(aLamp - 0.12, bl + 1.05, cz1 - 0.37)], down);
+          shellB.window(lamp, [P(aLamp - 0.12, bl, cz1 - 0.37), P(aLamp + 0.12, bl, cz1 - 0.37), P(aLamp + 0.12, bl + 1.05, cz1 - 0.37), P(aLamp - 0.12, bl + 1.05, cz1 - 0.37)], down);
         }
       }
       // projecting white lintel / sign box over each end portal ("GA THÁI HÀ" / "GA LA THÀNH")
       const aSign0 = sa * (cl + 0.15), aSign1 = sa * (cl + 0.72);
-      box(Math.min(aSign0, aSign1), Math.max(aSign0, aSign1), b0 - 0.25, b1 + 0.25, cz1 - 1.05, cz1 + 0.35, 'wall', 'roof');
+      boxS(Math.min(aSign0, aSign1), Math.max(aSign0, aSign1), b0 - 0.25, b1 + 0.25, cz1 - 1.05, cz1 + 0.35, 'wall', 'roof');
       const aFace = sa * (cl + 0.74);
       const bMid = (b0 + b1) / 2, sw = (b1 - b0) * 0.38;
       // dark signboard backing + glowing station name strips
-      B.quad('glass', [P(aFace, bMid - sw, cz1 - 0.82), P(aFace, bMid + sw, cz1 - 0.82), P(aFace, bMid + sw, cz1 + 0.12), P(aFace, bMid - sw, cz1 + 0.12)], nU(sa));
-      B.window(board, [P(aFace + sa * 0.01, bMid - sw * 0.82, cz1 - 0.32), P(aFace + sa * 0.01, bMid + sw * 0.82, cz1 - 0.32), P(aFace + sa * 0.01, bMid + sw * 0.82, cz1 - 0.02), P(aFace + sa * 0.01, bMid - sw * 0.82, cz1 - 0.02)], nU(sa));
-      B.window(lamp, [P(aFace + sa * 0.01, bMid - sw * 0.65, cz1 - 0.68), P(aFace + sa * 0.01, bMid + sw * 0.65, cz1 - 0.68), P(aFace + sa * 0.01, bMid + sw * 0.65, cz1 - 0.46), P(aFace + sa * 0.01, bMid - sw * 0.65, cz1 - 0.46)], nU(sa));
+      shellB.quad('glass', [P(aFace, bMid - sw, cz1 - 0.82), P(aFace, bMid + sw, cz1 - 0.82), P(aFace, bMid + sw, cz1 + 0.12), P(aFace, bMid - sw, cz1 + 0.12)], nU(sa));
+      shellB.window(board, [P(aFace + sa * 0.01, bMid - sw * 0.82, cz1 - 0.32), P(aFace + sa * 0.01, bMid + sw * 0.82, cz1 - 0.32), P(aFace + sa * 0.01, bMid + sw * 0.82, cz1 - 0.02), P(aFace + sa * 0.01, bMid - sw * 0.82, cz1 - 0.02)], nU(sa));
+      shellB.window(lamp, [P(aFace + sa * 0.01, bMid - sw * 0.65, cz1 - 0.68), P(aFace + sa * 0.01, bMid + sw * 0.65, cz1 - 0.68), P(aFace + sa * 0.01, bMid + sw * 0.65, cz1 - 0.46), P(aFace + sa * 0.01, bMid - sw * 0.65, cz1 - 0.46)], nU(sa));
 
       // iconic square end-wall block with green-and-white geometric diamond/triangle mosaic (khối vuông họa tiết hình thoi/tam giác xanh-trắng ở 2 đầu ga)
       const mLo = Math.min(sa * (cl - 1.6), sa * (cl + 0.45)), mHi = Math.max(sa * (cl - 1.6), sa * (cl + 0.45));
       const mb0 = sb > 0 ? t + 1.55 : -W + 0.05, mb1 = sb > 0 ? W - 0.05 : -t - 1.55;
       const mz0 = cz1 + 0.35, mz1 = h + PLATFORM + 3.85;
-      box(mLo, mHi, mb0, mb1, mz0, mz1, 'wall', 'roof');
+      boxS(mLo, mHi, mb0, mb1, mz0, mz1, 'wall', 'roof');
       const mFace = sa * (cl + 0.47);
       const cols = 4, rows = 4, cw = (mb1 - mb0) / cols, rh = (mz1 - mz0) / rows;
       for (let r = 0; r < rows; r++) {
@@ -220,13 +251,13 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
           const yM = (yA + yB) / 2, zM = (zA + zB) / 2;
           // diagonal diamond/triangle facets in green ('plant') on the white block face
           if ((r + c2) % 2 === 0) {
-            B.quad('plant', [P(mFace, yM, zA), P(mFace, yB, zM), P(mFace, yM, zB), P(mFace, yA, zM)], nU(sa));
+            shellB.quad('plant', [P(mFace, yM, zA), P(mFace, yB, zM), P(mFace, yM, zB), P(mFace, yA, zM)], nU(sa));
           } else {
-            B.quad('plant', [P(mFace, yA, zA), P(mFace, yB, zA), P(mFace, yM, zM), P(mFace, yA, zA)], nU(sa));
-            B.quad('plant', [P(mFace, yB, zB), P(mFace, yA, zB), P(mFace, yM, zM), P(mFace, yB, zB)], nU(sa));
+            shellB.quad('plant', [P(mFace, yA, zA), P(mFace, yB, zA), P(mFace, yM, zM), P(mFace, yA, zA)], nU(sa));
+            shellB.quad('plant', [P(mFace, yB, zB), P(mFace, yA, zB), P(mFace, yM, zM), P(mFace, yB, zB)], nU(sa));
           }
-          B.line(P(mFace, yA, zA), P(mFace, yB, zB), 'detail');
-          B.line(P(mFace, yA, zB), P(mFace, yB, zA), 'detail');
+          shellB.line(P(mFace, yA, zA), P(mFace, yB, zB), 'detail');
+          shellB.line(P(mFace, yA, zB), P(mFace, yB, zA), 'detail');
         }
       }
     }
@@ -237,15 +268,15 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
     const b = s * (W + 0.58), n = Math.round((2 * clIn - 2) / 2.2), pw2 = (2 * clIn - 2) / n;
     for (let i = 0; i < n; i++) {
       const x0 = -clIn + 1 + i * pw2 + 0.08, x1 = x0 + pw2 - 0.16;
-      B.window(lamp, [P(x0, b, cz0 + 1.15), P(x1, b, cz0 + 1.15), P(x1, b, cz1 - 0.85), P(x0, b, cz1 - 0.85)], nV(s));
+      shellB.window(lamp, [P(x0, b, cz0 + 1.15), P(x1, b, cz0 + 1.15), P(x1, b, cz1 - 0.85), P(x0, b, cz1 - 0.85)], nV(s));
     }
     // projecting horizontal sunshade louver hoods near the ends of the side facade
     for (const aHood of [-cl + 4.5, cl - 4.5]) {
       const b0 = s > 0 ? W + 0.55 : -W - 1.65, b1 = s > 0 ? W + 1.65 : -W - 0.55;
-      box(aHood - 3.2, aHood + 3.2, b0, b1, cz1 - 0.55, cz1 - 0.38, 'metal', 'metal');
+      boxS(aHood - 3.2, aHood + 3.2, b0, b1, cz1 - 0.55, cz1 - 0.38, 'metal', 'metal');
       for (let r = 0; r < 4; r++) {
         const br = b0 + ((b1 - b0) * (r + 0.5)) / 4;
-        B.line(P(aHood - 3.2, br, cz1 - 0.37), P(aHood + 3.2, br, cz1 - 0.37), 'detail');
+        shellB.line(P(aHood - 3.2, br, cz1 - 0.37), P(aHood + 3.2, br, cz1 - 0.37), 'detail');
       }
     }
   }
@@ -258,14 +289,14 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
     // the lit edge strip along the track side
     const e0 = b0 + s * 0.15, e1 = b0 + s * 0.45;
     B.window(edge, [P(-hl + 1, e0, zp + 0.01), P(hl - 1, e0, zp + 0.01), P(hl - 1, e1, zp + 0.01), P(-hl + 1, e1, zp + 0.01)], up);
-    // outer parapet + slanted green louver screen (vách lam xanh dọc hai bên sân ga như ảnh 1, 2, 3)
+    // outer parapet (in B) + slanted green louver screen (in shellB so see-through opens the side view into the platforms)
     const bOuter = s * W, bLouverTop = s * (W + 0.55);
     box(-hl, hl, s > 0 ? hi - 0.12 : lo, s > 0 ? hi : lo + 0.12, zp, zp + 1.15, 'wall', 'roof');
-    B.panel('plant', [P(-hl + 2, bOuter, zp + 1.15), P(hl - 2, bOuter, zp + 1.15), P(hl - 2, bLouverTop, zp + 3.45), P(-hl + 2, bLouverTop, zp + 3.45)], nV(s));
+    shellB.panel('plant', [P(-hl + 2, bOuter, zp + 1.15), P(hl - 2, bOuter, zp + 1.15), P(hl - 2, bLouverTop, zp + 3.45), P(-hl + 2, bLouverTop, zp + 3.45)], nV(s));
     for (let zL = zp + 1.45; zL <= zp + 3.3; zL += 0.38) {
       const tL = (zL - (zp + 1.15)) / 2.3;
       const bL = bOuter + (bLouverTop - bOuter) * tL;
-      B.line(P(-hl + 2, bL, zL), P(hl - 2, bL, zL), 'detail');
+      shellB.line(P(-hl + 2, bL, zL), P(hl - 2, bL, zL), 'detail');
     }
     // benches & bins along the platform
     for (const a of [-hl + 12, -hl + 26, hl - 26, hl - 12]) {
@@ -279,7 +310,7 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
 
   // ---- 4. Twin C-shell vaulted roof & central skylight steel arch trusses (như ảnh 1, 2, 3) ----
   const zr = zp + 5.2, rise = 2.35, R = W + 0.95, ra = hl + 2.2;
-  // C-shaped curved side shells wrapping from the side louver top around and over the platforms
+  // C-shaped curved side shells wrapping from the side louver top around and over the platforms (routed to shellB)
   for (const s of [-1, 1]) {
     const cPts: [number, number][] = [
       [s * (W + 0.55), zp + 3.45],
@@ -291,24 +322,24 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
     ];
     for (let k = 0; k < cPts.length - 1; k++) {
       const [b0, z0] = cPts[k]!, [b1, z1] = cPts[k + 1]!;
-      B.panel('roof', [P(-ra, b0, z0), P(ra, b0, z0), P(ra, b1, z1), P(-ra, b1, z1)], k < 2 ? nV(s) : up);
-      B.line(P(-ra, b1, z1), P(ra, b1, z1), 'detail');
+      shellB.panel('roof', [P(-ra, b0, z0), P(ra, b0, z0), P(ra, b1, z1), P(-ra, b1, z1)], k < 2 ? nV(s) : up);
+      shellB.line(P(-ra, b1, z1), P(ra, b1, z1), 'detail');
     }
     // thick C-arch end rims at -ra and +ra + transverse panel ribs along the shell
     for (const aRim of [-ra, ra]) {
       for (let k = 0; k < cPts.length - 1; k++) {
         const [b0, z0] = cPts[k]!, [b1, z1] = cPts[k + 1]!;
-        B.line(P(aRim, b0, z0), P(aRim, b1, z1), 'crease');
+        shellB.line(P(aRim, b0, z0), P(aRim, b1, z1), 'crease');
       }
     }
     for (let aRib = -hl + 4; aRib <= hl - 4; aRib += 6) {
       for (let k = 1; k < cPts.length - 1; k++) {
         const [b0, z0] = cPts[k]!, [b1, z1] = cPts[k + 1]!;
-        B.line(P(aRib, b0, z0), P(aRib, b1, z1), 'detail');
+        shellB.line(P(aRib, b0, z0), P(aRib, b1, z1), 'detail');
       }
     }
   }
-  // central skylight vault with exposed steel arch trusses & purlins over the tracks
+  // central skylight vault with exposed steel arch trusses & purlins over the tracks (routed to shellB)
   const skyW = t + 1.35, skyN = 6;
   const skyArc = (k: number): [number, number] => {
     const b = -skyW + (2 * skyW * k) / skyN;
@@ -316,14 +347,14 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
   };
   for (let k = 0; k < skyN; k++) {
     const [b0, z0] = skyArc(k), [b1, z1] = skyArc(k + 1);
-    B.panel('glass', [P(-ra + 0.8, b0, z0), P(ra - 0.8, b0, z0), P(ra - 0.8, b1, z1), P(-ra + 0.8, b1, z1)], up);
-    B.line(P(-ra, b1, z1), P(ra, b1, z1), 'detail');
+    shellB.panel('glass', [P(-ra + 0.8, b0, z0), P(ra - 0.8, b0, z0), P(ra - 0.8, b1, z1), P(-ra + 0.8, b1, z1)], up);
+    shellB.line(P(-ra, b1, z1), P(ra, b1, z1), 'detail');
   }
   // steel arch ribs spanning across the roof every 6 m
   for (let aRib = -ra; aRib <= ra + 0.1; aRib += 6) {
-    box(aRib - 0.12, aRib + 0.12, -skyW - 0.4, skyW + 0.4, zr + 1.95, zr + 2.22, 'metal', 'metal');
+    boxS(aRib - 0.12, aRib + 0.12, -skyW - 0.4, skyW + 0.4, zr + 1.95, zr + 2.22, 'metal', 'metal');
   }
-  // structural steel columns supporting the roof along both platforms
+  // structural steel columns supporting the roof along both platforms (kept in B)
   for (let a = -hl + 4; a <= hl - 4; a += 12) for (const s of [-1, 1]) {
     const bCol = s * (W - 0.35);
     box(a - 0.18, a + 0.18, bCol - 0.18, bCol + 0.18, zp, zr + 1.2, 'metal', 'metal');
@@ -334,18 +365,18 @@ function station(B: Batch, st: Station, rails: Rail[], city: City) {
     box(a - 0.5, a + 0.5, b - 0.1, b + 0.1, zl, zl + 0.1, 'metal');
     B.window(lamp, [P(a - 0.45, b - 0.08, zl - 0.01), P(a + 0.45, b - 0.08, zl - 0.01), P(a + 0.45, b + 0.08, zl - 0.01), P(a - 0.45, b + 0.08, zl - 0.01)], down);
   }
-  // departure boards hanging over each platform, facing along it both ways (screens: always lit)
+  // departure boards hanging over each platform, facing along it both ways (screens: always lit, kept in B)
   for (const s of [-1, 1]) for (const a of [-hl / 3, hl / 3]) {
     const b = s * (t + 1.6 + pw / 2), z0 = zp + 2.8, z1 = z0 + 0.7;
     box(a - 0.06, a + 0.06, b - 1.2, b + 1.2, z0, z1, 'metal');
     for (const f of [-1, 1]) B.window(board, [P(a + f * 0.07, b - 1.1, z0 + 0.08), P(a + f * 0.07, b + 1.1, z0 + 0.08), P(a + f * 0.07, b + 1.1, z1 - 0.08), P(a + f * 0.07, b - 1.1, z1 - 0.08)], nU(f));
     B.line(P(a, b - 1, z1), P(a, b - 1, zr - 0.2), 'detail'); B.line(P(a, b + 1, z1), P(a, b + 1, zr - 0.2), 'detail');
   }
-  // the name board on each long side, under the roof edge (lit with the station)
+  // the name board on each long side, under the roof edge (routed to shellB)
   for (const s of [-1, 1]) {
     const b = s * (R + 0.42);
-    box(-8, 8, Math.min(b, b + s * 0.15), Math.max(b, b + s * 0.15), zr - 0.8, zr + 0.2, 'metal');
-    B.window(lamp, [P(-7.6, b + s * 0.16, zr - 0.7), P(7.6, b + s * 0.16, zr - 0.7), P(7.6, b + s * 0.16, zr + 0.1), P(-7.6, b + s * 0.16, zr + 0.1)], nV(s));
+    boxS(-8, 8, Math.min(b, b + s * 0.15), Math.max(b, b + s * 0.15), zr - 0.8, zr + 0.2, 'metal');
+    shellB.window(lamp, [P(-7.6, b + s * 0.16, zr - 0.7), P(7.6, b + s * 0.16, zr - 0.7), P(7.6, b + s * 0.16, zr + 0.1), P(-7.6, b + s * 0.16, zr + 0.1)], nV(s));
   }
 
   // ---- 5. Pedestrian Overpass Bridges, Elevator Towers & Covered Escalator/Stair Ramps (như ảnh 1 & 2) ----

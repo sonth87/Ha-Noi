@@ -23,16 +23,16 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import {
-  METRO, metroTracks, trainAt, trainCount, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes,
-  type City, type Lane, type Signals, type Track, type Vehicle, type VehicleKind,
+  METRO, centroid, floorZ, metroTracks, pointInRing, trainAt, trainCount, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes,
+  type City, type Lane, type Signals, type Track, type Vec2, type Vehicle, type VehicleKind,
 } from '@my-city/core';
-import { beaconsOf, buildBase, buildTile, cityFloors, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
+import { beaconsOf, buildBase, buildTile, cityFloors, layerOf, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import type { Surface } from '@render/batch';
+import { Batch, type Surface } from '@render/batch';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
 import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
@@ -92,16 +92,12 @@ const SURFACE_TOKEN: Record<Surface, string> = {
   metal: '--deck', awning: '--deck', plant: '--panel',
 };
 
-const CLIPPED_SURFACES = new Set<Surface>(['wall', 'roof', 'glass', 'metal', 'awning', 'plant']);
-
-const SHELL_VERT = `uniform vec2 res; uniform vec4 cutPlane; varying float vCut;
+const SHELL_VERT = `uniform vec2 res;
   void main() {
     vec4 p4 = vec4(position, 1.0); vec3 n = normal;
     #ifdef USE_INSTANCING
       p4 = instanceMatrix * p4; n = mat3(instanceMatrix) * n;
     #endif
-    vec4 worldPos = modelMatrix * p4;
-    vCut = dot(worldPos.xyz, cutPlane.xyz) + cutPlane.w;
     vec4 p = projectionMatrix * modelViewMatrix * p4;
     vec4 d4 = projectionMatrix * vec4(normalize(normalMatrix * n), 0.0);
     vec2 d = length(d4.xy) > 1e-5 ? normalize(d4.xy) : vec2(0.0);
@@ -109,14 +105,32 @@ const SHELL_VERT = `uniform vec2 res; uniform vec4 cutPlane; varying float vCut;
     gl_Position = p;
   }`;
 
-interface TileState { tile: Tile; layers: Map<Detail, { layer: Layer; group: THREE.Group | null }>; shown: Detail | -1 }
+interface TileState {
+  tile: Tile;
+  layers: Map<Detail, { layer: Layer; group: THREE.Group | null }>;
+  shown: Detail | -1;
+  cutKey: string;
+  cutLayer: Layer | null;
+  cutGroup: THREE.Group | null;
+}
+interface BldgBounds {
+  id: string;
+  tileIdx: number;
+  cx: number;
+  cy: number;
+  r: number;
+  topZ: number;
+  footprint: readonly Vec2[];
+}
 interface CellState { bucket: FurnitureBucket; cell: FurnitureCell | null; groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null; wires: LineSegments2 | null; pulses: LineSegments2 | null; pools: THREE.Mesh | null }
 interface Fleet { model: VehicleModel; meshes: THREE.InstancedMesh[]; list: Vehicle[] }
 interface Train { track: Track; offset: number; cars: THREE.Group[]; doors: THREE.MeshBasicMaterial; stopping: boolean }
 
 export class CityView {
   readonly base: Layer;
+  readonly stationShell: Layer;
   readonly tiles: TileState[];
+  private readonly bldgBounds: BldgBounds[] = [];
   readonly cells: CellState[];
   readonly floors: string[];
   readonly lanes: Lane[];
@@ -127,7 +141,7 @@ export class CityView {
   private readonly streetById = new Map<string, StreetEntry>();
   private readonly panBounds: { x0: number; y0: number; x1: number; y1: number };
   private readonly showcaseCache = new Map<string, BuiltShowcase>();
-  private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial } | null = null;
+  private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial; shellGroup: THREE.Group | null } | null = null;
   private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
   private trains: Train[] = [];
   private vehicles: Vehicle[] = [];
@@ -154,20 +168,18 @@ export class CityView {
   private activePopup: { entry: PlaceEntry; floor?: string } | null = null;
   private hoveredPlaceId: string | null = null;
   private mounted: {
-    host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; showcaseGroup: THREE.Group;
+    host: HTMLElement; renderer: THREE.WebGLRenderer; scene: THREE.Scene; mapGroup: THREE.Group; stationShellGroup: THREE.Group; showcaseGroup: THREE.Group;
     camera: THREE.OrthographicCamera; controls: OrbitControls; composer: EffectComposer | null; bloom: UnrealBloomPass | null;
     beacons: THREE.Mesh[]; fleets: Map<VehicleKind, Fleet>; vehicleLines: LineSegments2; stop: () => void;
   } | null = null;
   private turn: { a0: number; a1: number; e0: number; e1: number; t0: number } | null = null;
   private sim = { t: 0, prev: null as Signals | null, phase: -1, slow: 0 };
-  /** Vertical cutaway plane in front of controls.target when zoomed in (camera --> A --> B) so foreground buildings A don't block B */
-  private readonly cutPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 1e6);
   private readonly mats = {
     surface: new Map<Surface, THREE.MeshBasicMaterial>(),
     shell: new THREE.ShaderMaterial({
-      uniforms: { color: { value: new THREE.Color() }, res: { value: new THREE.Vector2(1, 1) }, cutPlane: { value: new THREE.Vector4(0, 1, 0, 1e6) } },
+      uniforms: { color: { value: new THREE.Color() }, res: { value: new THREE.Vector2(1, 1) } },
       vertexShader: SHELL_VERT,
-      fragmentShader: 'uniform vec3 color; varying float vCut; void main() { if (vCut < 0.0) discard; gl_FragColor = vec4(color, 1.0); }',
+      fragmentShader: 'uniform vec3 color; void main() { gl_FragColor = vec4(color, 1.0); }',
       side: THREE.BackSide, polygonOffset: true, polygonOffsetFactor: 6, polygonOffsetUnits: 24,
     }),
     crease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
@@ -197,7 +209,6 @@ export class CityView {
   private readonly vehicleShell = (() => {
     const m = this.mats.shell.clone();
     m.uniforms.res = this.mats.shell.uniforms.res!;   // one resolution for both
-    m.uniforms.cutPlane = this.mats.shell.uniforms.cutPlane!;
     return m;
   })();
   private farF = 0;
@@ -206,10 +217,23 @@ export class CityView {
   private outline: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
 
   constructor(readonly city: City) {
-    this.base = buildBase(city);
+    const stationShellB = new Batch();
+    this.base = buildBase(city, stationShellB);
+    this.stationShell = layerOf(stationShellB, true, city);
     this.layers.add(this.base);
+    this.layers.add(this.stationShell);
     this.floors = cityFloors(city);
-    this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const }));
+    this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null }));
+    this.tiles.forEach((ts, tileIdx) => {
+      for (const b of ts.tile.buildings) {
+        const c = centroid(b.footprint);
+        let r = 4;
+        for (const p of b.footprint) r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]));
+        let topZ = 4;
+        for (const part of b.parts) topZ = Math.max(topZ, floorZ(part, part.floors.length));
+        this.bldgBounds.push({ id: b.id, tileIdx, cx: c[0], cy: c[1], r, topZ, footprint: b.footprint });
+      }
+    });
     const net = roadNetwork(city);
     this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null }));
     this.lanes = trafficLanes(net);
@@ -227,19 +251,10 @@ export class CityView {
       if (st.at[1] > y1) y1 = st.at[1];
     }
     this.panBounds = { x0, y0, x1, y1 };
-    const clipPlanes = [this.cutPlane];
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
-      if (CLIPPED_SURFACES.has(s)) mat.clippingPlanes = clipPlanes;
       this.mats.surface.set(s, mat);
     }
-    this.mats.windows.clippingPlanes = clipPlanes;
-    this.mats.crease.clippingPlanes = clipPlanes;
-    this.mats.detail.clippingPlanes = clipPlanes;
-    this.mats.wire.clippingPlanes = clipPlanes;
-    this.mats.pulse.clippingPlanes = clipPlanes;
-    this.mats.beaconOn.clippingPlanes = clipPlanes;
-    this.mats.beaconOff.clippingPlanes = clipPlanes;
     // day (the light theme) by default (user, 2026-10-21); night (the dark theme and the lamps) is
     // one switch, remembered
     let theme: Theme = 'light';
@@ -277,7 +292,6 @@ export class CityView {
     if (this.mounted) this.unmount();
     const q = this.snap.quality;
     const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.localClippingEnabled = true;
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
@@ -319,9 +333,15 @@ export class CityView {
     this.place(camera, controls, azOf(this.snap.view), ISO_EL);
 
     const baseGroup = this.group(this.base, true);
-    mapGroup.add(baseGroup);
+    const stationShellGroup = this.group(this.stationShell, false);
+    mapGroup.add(baseGroup, stationShellGroup);
     // a remount starts from fresh meshes; the built layers are kept
-    for (const t of this.tiles) { for (const v of t.layers.values()) v.group = null; t.shown = -1; }
+    for (const t of this.tiles) {
+      for (const v of t.layers.values()) v.group = null;
+      t.shown = -1;
+      t.cutKey = '';
+      t.cutGroup = null;
+    }
     for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const fleets = new Map<VehicleKind, Fleet>();
@@ -339,7 +359,7 @@ export class CityView {
     vehicleLines.userData.tier = 'creases';
     mapGroup.add(vehicleLines);
 
-    // double click / double tap: open popup info if double-clicked on a callout pin, otherwise fly to spot on ground
+    // Helper to raycast against buildings, stations, parks, lakes, and monuments
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
     const flyToClient = (clientX: number, clientY: number) => {
@@ -348,6 +368,36 @@ export class CityView {
       ray.setFromCamera(ndc, camera);
       if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
     };
+    const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
+      const r = renderer.domElement.getBoundingClientRect();
+      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      const pickable: THREE.Object3D[] = [];
+      if (this.snap.showcase) {
+        showcaseGroup.traverse(o => { if (o.userData.surface && o.visible && o.parent?.visible !== false) pickable.push(o); });
+      } else {
+        for (const t of this.tiles) {
+          const g = t.cutGroup?.visible ? t.cutGroup : (t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null);
+          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+        }
+        if (stationShellGroup.visible) for (const o of stationShellGroup.children) if (o.userData.surface) pickable.push(o);
+        for (const o of baseGroup.children) if (o.userData.surface) pickable.push(o);
+      }
+      const hits = ray.intersectObjects(pickable, false);
+      for (const hit of hits) {
+        if (hit.faceIndex == null) continue;
+        const surface = hit.object.userData.surface as Surface;
+        const layer = hit.object.userData.layer as Layer;
+        const owner = layer.ownerOf(surface, hit.faceIndex);
+        if (owner) {
+          const floor = layer.floorAt(owner, hit.point);
+          return { owner, ...(floor ? { floor } : {}), point: hit.point };
+        }
+      }
+      return null;
+    };
+
+    // Double click / double tap: open popup info on callout pins or buildings/places, otherwise fly to spot on ground
     const onDbl = (e: MouseEvent) => {
       const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
       if (pinHit) {
@@ -359,37 +409,17 @@ export class CityView {
         }
         return;
       }
+      if (!this.snap.showcase && this.snap.placeInfo !== 'off') {
+        const picked = pickAtClient(e.clientX, e.clientY);
+        if (picked) {
+          const entry = this.placeCatalog.byId.get(picked.owner);
+          if (entry) {
+            this.openPopup(entry, picked.floor);
+            return;
+          }
+        }
+      }
       flyToClient(e.clientX, e.clientY);
-    };
-
-    // Helper to raycast against buildings, stations, parks, lakes, and monuments
-    const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
-      const r = renderer.domElement.getBoundingClientRect();
-      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
-      const pickable: THREE.Object3D[] = [];
-      if (this.snap.showcase) {
-        showcaseGroup.traverse(o => { if (o.userData.surface) pickable.push(o); });
-      } else {
-        for (const t of this.tiles) {
-          const g = t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null;
-          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
-        }
-        for (const o of baseGroup.children) if (o.userData.surface) pickable.push(o);
-      }
-      const hits = ray.intersectObjects(pickable, false);
-      for (const hit of hits) {
-        if (hit.faceIndex == null) continue;
-        const surface = hit.object.userData.surface as Surface;
-        if (CLIPPED_SURFACES.has(surface) && this.cutPlane.distanceToPoint(hit.point) < 0) continue;
-        const layer = hit.object.userData.layer as Layer;
-        const owner = layer.ownerOf(surface, hit.faceIndex);
-        if (owner) {
-          const floor = layer.floorAt(owner, hit.point);
-          return { owner, ...(floor ? { floor } : {}), point: hit.point };
-        }
-      }
-      return null;
     };
 
     // Mobile two-finger gesture enhancements: allow two-finger twist rotation even when starting in 2D mode,
@@ -457,16 +487,18 @@ export class CityView {
       }
       this.clearHoveredPin();
 
-      if (this.snap.placeInfo === 'off') {
+      // When zoomed out far, buildings are too small to need hover banners
+      const px = this.pxPerMetre();
+      if (this.snap.placeInfo === 'off' || px < 3.2) {
         this.hideHoverBanner();
         renderer.domElement.style.cursor = '';
         return;
       }
       const picked = pickAtClient(e.clientX, e.clientY);
       const entry = picked ? this.placeCatalog.byId.get(picked.owner) : undefined;
-      if (!entry) {
+      if (!entry || (entry.category === 'building' && entry.tier > 1 && px < 5.0)) {
         this.hideHoverBanner();
-        renderer.domElement.style.cursor = '';
+        renderer.domElement.style.cursor = picked?.floor ? 'pointer' : '';
         return;
       }
       renderer.domElement.style.cursor = 'pointer';
@@ -490,9 +522,19 @@ export class CityView {
           if (pinHit) {
             if (pinHit.kind === 'place') this.openPopup(pinHit.entry);
             else this.openStreetPopup(pinHit.street, pinHit.item.world);
-          } else {
-            flyToClient(e.clientX, e.clientY);
+            return;
           }
+          if (!this.snap.showcase && this.snap.placeInfo !== 'off') {
+            const pickedDbl = pickAtClient(e.clientX, e.clientY);
+            if (pickedDbl) {
+              const entry = this.placeCatalog.byId.get(pickedDbl.owner);
+              if (entry) {
+                this.openPopup(entry, pickedDbl.floor);
+                return;
+              }
+            }
+          }
+          flyToClient(e.clientX, e.clientY);
           return;
         }
         lastTap = { t: now, x: e.clientX, y: e.clientY };
@@ -510,14 +552,18 @@ export class CityView {
         if (this.activePopup) this.closePopup();
         return;
       }
-      if (!this.snap.showcase && this.snap.placeInfo !== 'off' && !e.shiftKey) {
-        const entry = this.placeCatalog.byId.get(picked.owner);
-        if (entry) {
-          this.openPopup(entry, picked.floor);
-          return;
-        }
+      // Single click on a building toggles its floor light (double click opens the popup)
+      if (picked.floor) {
+        this.setLamp(picked.floor, !this.lit.has(picked.floor));
+        this.syncPopupBulb();
+        return;
       }
-      if (picked.floor) this.setLamp(picked.floor, !this.lit.has(picked.floor));
+      const st = this.city.stations.find(s => s.id === picked.owner);
+      if (st) {
+        const lid = stationLamp(st);
+        this.setLamp(lid, !this.lit.has(lid));
+        this.syncPopupBulb();
+      }
     };
     renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
     renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: true });
@@ -614,7 +660,7 @@ export class CityView {
     this.popupCard = popupCard;
 
     this.mounted = {
-      host, renderer, scene, mapGroup, showcaseGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, stationShellGroup, showcaseGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         controls.removeEventListener('start', onControlStart);
@@ -725,11 +771,12 @@ export class CityView {
       built = next;
       this.showcaseCache.set(id, built);
       this.layers.add(built.layer);
+      if (built.shellLayer) this.layers.add(built.shellLayer);
     }
     const m = this.mounted;
     const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const beacons: THREE.Mesh[] = [];
-    this.activeShowcase = { built, beacons, doors };
+    this.activeShowcase = { built, beacons, doors, shellGroup: null };
     if (id.startsWith('station:')) {
       for (const st of this.city.stations) this.setLamp(stationLamp(st, 'edge'), true, false);
     }
@@ -738,6 +785,13 @@ export class CityView {
       m.showcaseGroup.clear();
       m.showcaseGroup.visible = true;
       m.showcaseGroup.add(this.group(built.layer));
+      if (built.shellLayer) {
+        const shellGroup = this.group(built.shellLayer);
+        shellGroup.visible = !this.snap.seeThrough;
+        m.showcaseGroup.add(shellGroup);
+        this.activeShowcase.shellGroup = shellGroup;
+        this.paintLayer(built.shellLayer);
+      }
       const poolMesh = new THREE.Mesh(built.pools, this.mats.pool);
       poolMesh.userData.night = 'pool';
       m.showcaseGroup.add(poolMesh);
@@ -1250,7 +1304,7 @@ export class CityView {
       badge.textContent = entry.categoryLabel;
       const hint = document.createElement('span');
       hint.className = 'hover-banner-hint';
-      hint.textContent = 'Click xem chi tiết';
+      hint.textContent = 'Nhấp đúp xem chi tiết';
       top.append(badge, hint);
 
       const title = document.createElement('strong');
@@ -1292,13 +1346,48 @@ export class CityView {
     this.placeInfoStep(true);
   }
 
-  private toggleBuildingLamps(buildingId: string) {
-    const prefix = `${buildingId}#`;
-    const list = this.floors.filter(f => f.startsWith(prefix));
-    if (!list.length) return;
-    const turnOn = !list.some(f => this.lit.has(f));
-    for (const f of list) this.setLamp(f, turnOn, false);
-    this.update({ lit: this.countLit() });
+  private isEntryLit(entry: PlaceEntry): boolean {
+    if (entry.buildingId) {
+      const prefix = `${entry.buildingId}#`;
+      return this.floors.some(f => f.startsWith(prefix) && this.lit.has(f));
+    }
+    if (entry.category === 'station') {
+      const stId = entry.id.startsWith('station:') ? entry.id.slice('station:'.length) : entry.id;
+      const st = this.city.stations.find(s => s.id === stId);
+      if (st) return this.lit.has(stationLamp(st));
+    }
+    return false;
+  }
+
+  private toggleEntryLamps(entry: PlaceEntry) {
+    if (entry.buildingId) {
+      const prefix = `${entry.buildingId}#`;
+      const list = this.floors.filter(f => f.startsWith(prefix));
+      if (!list.length) return;
+      const turnOn = !list.some(f => this.lit.has(f));
+      for (const f of list) this.setLamp(f, turnOn, false);
+      this.update({ lit: this.countLit() });
+      return;
+    }
+    if (entry.category === 'station') {
+      const stId = entry.id.startsWith('station:') ? entry.id.slice('station:'.length) : entry.id;
+      const st = this.city.stations.find(s => s.id === stId);
+      if (st) {
+        const lid = stationLamp(st);
+        this.setLamp(lid, !this.lit.has(lid));
+      }
+    }
+  }
+
+  private syncPopupBulb() {
+    const popupEl = this.popupCard, active = this.activePopup;
+    if (!popupEl || !active) return;
+    const bulbBtn = popupEl.querySelector<HTMLButtonElement>('.popup-bulb');
+    if (!bulbBtn) return;
+    const isLit = this.isEntryLit(active.entry);
+    bulbBtn.classList.toggle('lit', isLit);
+    bulbBtn.setAttribute('aria-pressed', String(isLit));
+    bulbBtn.title = isLit ? 'Tắt đèn công trình' : 'Bật đèn công trình';
   }
 
   private renderPopupContent() {
@@ -1325,13 +1414,30 @@ export class CityView {
         badgeWrap.appendChild(fBadge);
       }
     }
+
+    const headRight = document.createElement('div');
+    headRight.className = 'popup-head-actions';
+
+    if (entry.buildingId || entry.category === 'station') {
+      const bulbBtn = document.createElement('button');
+      bulbBtn.type = 'button';
+      bulbBtn.className = 'popup-bulb';
+      bulbBtn.innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6" fill="none"/><path d="M10 22h4" fill="none"/></svg>';
+      bulbBtn.addEventListener('click', () => {
+        this.toggleEntryLamps(entry);
+        this.syncPopupBulb();
+      });
+      headRight.appendChild(bulbBtn);
+    }
+
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'popup-close';
     closeBtn.title = 'Đóng (Esc)';
     closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
     closeBtn.addEventListener('click', () => this.closePopup());
-    header.append(badgeWrap, closeBtn);
+    headRight.appendChild(closeBtn);
+    header.append(badgeWrap, headRight);
 
     const title = document.createElement('h3');
     title.className = 'popup-title';
@@ -1359,48 +1465,11 @@ export class CityView {
       grid.appendChild(cell);
     }
 
-    const actions = document.createElement('div');
-    actions.className = 'popup-actions';
-
-    const flyBtn = document.createElement('button');
-    flyBtn.type = 'button';
-    flyBtn.className = 'popup-btn primary';
-    flyBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"/></svg><span>Bay tới</span>';
-    flyBtn.addEventListener('click', () => {
-      this.flyTo(entry.ground, false);
-    });
-    actions.appendChild(flyBtn);
-
-    if (floor) {
-      const floorBtn = document.createElement('button');
-      floorBtn.type = 'button';
-      floorBtn.className = 'popup-btn';
-      const updateFloorText = () => {
-        const isLit = this.lit.has(floor);
-        floorBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5"/><path d="M9 18h6"/><path d="M10 22h4"/></svg><span>${isLit ? 'Tắt đèn tầng' : 'Bật đèn tầng'}</span>`;
-      };
-      updateFloorText();
-      floorBtn.addEventListener('click', () => {
-        this.setLamp(floor, !this.lit.has(floor));
-        updateFloorText();
-      });
-      actions.appendChild(floorBtn);
-    }
-
-    if (entry.buildingId) {
-      const bldId = entry.buildingId;
-      const allBtn = document.createElement('button');
-      allBtn.type = 'button';
-      allBtn.className = 'popup-btn';
-      allBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/></svg><span>Đèn cả tòa</span>';
-      allBtn.addEventListener('click', () => {
-        this.toggleBuildingLamps(bldId);
-        if (floor) this.renderPopupContent();
-      });
-      actions.appendChild(allBtn);
-    }
+    popupEl.append(header, title, addr, desc, grid);
 
     if (entry.showcaseId) {
+      const actions = document.createElement('div');
+      actions.className = 'popup-actions';
       const scId = entry.showcaseId;
       const scBtn = document.createElement('button');
       scBtn.type = 'button';
@@ -1410,9 +1479,10 @@ export class CityView {
         this.setShowcase(scId);
       });
       actions.appendChild(scBtn);
+      popupEl.appendChild(actions);
     }
 
-    popupEl.append(header, title, addr, desc, grid, actions);
+    this.syncPopupBulb();
     popupEl.style.display = '';
   }
 
@@ -1455,6 +1525,7 @@ export class CityView {
     const on = lightOn(this.snap.lights.street, this.snap.night);
     this.setLamp(STREET_LAMPS, on, false);
     for (const st of this.city.stations) this.setLamp(stationLamp(st), on, false);
+    this.syncPopupBulb();
   }
 
   private activeFloors() { return this.activeShowcase?.built.floors.length ? this.activeShowcase.built.floors : this.floors; }
@@ -1467,6 +1538,7 @@ export class CityView {
     const on = !list.some(f => this.lit.has(f));
     for (const f of list) this.setLamp(f, on, false);
     this.update({ lit: this.countLit() });
+    this.syncPopupBulb();
   }
 
   /** keys held to move: W A S D or the arrows */
@@ -1688,6 +1760,17 @@ export class CityView {
     }
   }
 
+  private syncTileVisibility(t: TileState, visible: boolean) {
+    const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+    if (t.cutKey && t.cutGroup) {
+      if (v?.group) v.group.visible = false;
+      t.cutGroup.visible = visible;
+    } else {
+      if (t.cutGroup) t.cutGroup.visible = false;
+      if (v?.group) v.group.visible = visible;
+    }
+  }
+
   private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
@@ -1697,8 +1780,7 @@ export class CityView {
     for (const t of this.tiles) {
       const inRange = near(t.tile.center, t.tile.radius, tFar);
       if (!inRange && !hideFar && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
-      const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-      if (v?.group) v.group.visible = hideFar ? inRange : true;
+      this.syncTileVisibility(t, hideFar ? inRange : true);
     }
     const px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
@@ -1762,7 +1844,7 @@ export class CityView {
 
   private show(t: TileState, level: Detail) {
     if (t.shown === level) return;
-    for (const [l, v] of t.layers) if (v.group) v.group.visible = l === level;
+    for (const [l, v] of t.layers) if (v.group) v.group.visible = l === level && !t.cutKey;
     t.shown = level;
   }
 
@@ -1775,13 +1857,11 @@ export class CityView {
       if (!this.nearTile(t)) continue;
       if (t.layers.has(want)) {
         this.show(t, this.ensure(t, want));
-        const v = t.layers.get(want);
-        if (v?.group) v.group.visible = true;
+        this.syncTileVisibility(t, true);
       } else {
         // never leave a visible street bare while panning/flying: put up L0 massing right away
         if (t.shown < 0) this.show(t, this.ensure(t, 0));
-        const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-        if (v?.group) v.group.visible = true;
+        this.syncTileVisibility(t, true);
         waiting.push(t);
       }
     }
@@ -1810,7 +1890,12 @@ export class CityView {
     if (this.activeShowcase) return { ...this.activeShowcase.built.layer.stats };
     const s = { ...this.base.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
+    if (this.mounted?.stationShellGroup.visible !== false) add(this.stationShell);
     for (const t of this.tiles) {
+      if (t.cutKey && t.cutLayer && t.cutGroup?.visible) {
+        add(t.cutLayer);
+        continue;
+      }
       const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
       if (v?.layer && v.group?.visible !== false) add(v.layer);
     }
@@ -2148,48 +2233,109 @@ export class CityView {
     }
   }
 
+  private clearAllTileCuts() {
+    for (const t of this.tiles) {
+      if (!t.cutKey) continue;
+      t.cutKey = '';
+      this.syncTileVisibility(t, this.nearTile(t) || this.snap.quality.level !== 'low');
+    }
+  }
+
   /**
-   * Cut away foreground buildings (camera -> A -> B) ONLY when seeThrough is enabled AND zoomed right up close
-   * against a building, so building A in front of the focus target B does not block the close-up view of B.
+   * See-through mode (`Nhìn xuyên`):
+   * 1. For Metro Stations (`ga tàu`): removes the station's outer shell/roof (`stationShellGroup` / `showcase.shellGroup`)
+   *    so the user looks into the interior of the station (platforms, stopping 4-car train, benches, departure screens, concourse gates).
+   * 2. For Buildings (`tòa nhà`): when zoomed in close (`camera -> A -> B`), hides the entire foreground occluding building `A`
+   *    in the camera's center sightline so the user sees completely through `A` to the buildings/scene `B` behind it.
    */
   private syncForegroundCut() {
     const m = this.mounted;
-    const uCut = this.mats.shell.uniforms.cutPlane?.value as THREE.Vector4 | undefined;
-    if (!m || !this.snap.seeThrough || this.snap.showcase) {
-      this.cutPlane.normal.set(0, 1, 0);
-      this.cutPlane.constant = 1e6;
-      uCut?.set(0, 1, 0, 1e6);
+    if (!m) return;
+    if (this.activeShowcase?.shellGroup) {
+      this.activeShowcase.shellGroup.visible = !this.snap.seeThrough;
+    }
+    if (!this.snap.seeThrough || this.snap.showcase) {
+      m.stationShellGroup.visible = true;
+      this.clearAllTileCuts();
       return;
     }
+
     const zoom = m.camera.zoom;
     const el = Math.max(0.08, this.elevation());
-    const minZoomForCut = el < 0.32 ? 18 : 22;
-    if (zoom < minZoomForCut) {
-      this.cutPlane.normal.set(0, 1, 0);
-      this.cutPlane.constant = 1e6;
-      uCut?.set(0, 1, 0, 1e6);
+    const tx = m.controls.target.x, tz = m.controls.target.z;
+
+    // 1. Metro station interior view when zoomed in near any metro station
+    const nearStation = zoom >= 3.2 && this.city.stations.some(s => Math.hypot(s.at[0] - tx, s.at[1] - tz) < 90);
+    m.stationShellGroup.visible = !nearStation;
+
+    // 2. Full-building see-through when zoomed in close to buildings
+    const minZoomForBldg = el < 0.36 ? 5.5 : 7.5;
+    if (zoom < minZoomForBldg) {
+      this.clearAllTileCuts();
       return;
     }
-    const fx = m.controls.target.x - m.camera.position.x;
-    const fz = m.controls.target.z - m.camera.position.z;
+
+    const fx = tx - m.camera.position.x;
+    const fz = tz - m.camera.position.z;
     const len = Math.hypot(fx, fz);
     if (len < 1e-3) {
-      this.cutPlane.normal.set(0, 1, 0);
-      this.cutPlane.constant = 1e6;
-      uCut?.set(0, 1, 0, 1e6);
+      this.clearAllTileCuts();
       return;
     }
-    const nx = fx / len;
-    const nz = fz / len;
-    const pitchScale = Math.min(1, Math.sin(el) / Math.sin(ISO_EL));
-    const zoomRatio = zoom / minZoomForCut;
-    const frontClearance = Math.max(2.5, (11 / Math.pow(zoomRatio, 1.4)) * pitchScale);
-    const px = m.controls.target.x - nx * frontClearance;
-    const pz = m.controls.target.z - nz * frontClearance;
-    const constant = -(nx * px + nz * pz);
-    this.cutPlane.normal.set(nx, 0, nz);
-    this.cutPlane.constant = constant;
-    uCut?.set(nx, 0, nz, constant);
+    const nx = fx / len, nz = fz / len;
+    const tanEl = Math.tan(el);
+    const corridorW = Math.max(4.5, 22 / zoom);
+    const byTile = new Map<number, string[]>();
+
+    for (const b of this.bldgBounds) {
+      const dx = b.cx - tx, dz = b.cy - tz;
+      const along = dx * nx + dz * nz;
+      if (along < -110 || along > b.r + 8) continue;
+      const cross = Math.abs(-dx * nz + dz * nx);
+      if (cross > b.r + corridorW) continue;
+
+      // Sample point along the view ray closest to this building's depth
+      const sampleAlong = Math.min(4, Math.max(-95, along));
+      const sx = tx + nx * sampleAlong, sz = tz + nz * sampleAlong;
+      const inFootprint = pointInRing([sx, sz], b.footprint) || cross <= b.r * 0.88 + 2.5;
+      if (!inFootprint) continue;
+
+      const isBlockingInFront = along < -1.5 && b.topZ >= Math.max(3.2, (-along - b.r) * tanEl * 0.55);
+      const isRightInFace = Math.abs(along) <= b.r + 5 && (zoom >= 9.5 || (el < 0.36 && zoom >= 6.2));
+      if (isBlockingInFront || isRightInFace) {
+        let list = byTile.get(b.tileIdx);
+        if (!list) {
+          list = [];
+          byTile.set(b.tileIdx, list);
+        }
+        list.push(b.id);
+      }
+    }
+
+    for (let idx = 0; idx < this.tiles.length; idx++) {
+      const t = this.tiles[idx]!;
+      const hidden = byTile.get(idx);
+      if (!hidden || !hidden.length || t.shown < 0) {
+        if (t.cutKey) {
+          t.cutKey = '';
+          this.syncTileVisibility(t, this.nearTile(t) || this.snap.quality.level !== 'low');
+        }
+        continue;
+      }
+      const level = t.shown as Detail;
+      const key = `${level}:${hidden.join(',')}`;
+      if (t.cutKey !== key) {
+        if (t.cutGroup) m.mapGroup.remove(t.cutGroup);
+        if (t.cutLayer) this.layers.delete(t.cutLayer);
+        t.cutLayer = buildTile(this.city, t.tile, level, new Set(hidden));
+        this.layers.add(t.cutLayer);
+        t.cutGroup = this.group(t.cutLayer);
+        m.mapGroup.add(t.cutGroup);
+        this.paintLayer(t.cutLayer);
+        t.cutKey = key;
+      }
+      this.syncTileVisibility(t, true);
+    }
   }
 
   /** held keys move the view over the ground, about half a screen a second, the way it faces */

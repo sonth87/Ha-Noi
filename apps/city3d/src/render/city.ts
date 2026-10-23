@@ -42,13 +42,13 @@ export interface Tile {
 
 export const TILE = 64;
 
-export function buildBase(city: City): Layer {
+export function buildBase(city: City, shellB?: Batch): Layer {
   const B = new Batch();
   buildGround(B, city);
   buildAreas(B, city);
   buildStreets(B, city);
   buildForecourts(B, city);
-  buildMetro(B, city);
+  buildMetro(B, city, shellB ?? B);
   return layerOf(B, true, city);
 }
 
@@ -66,9 +66,10 @@ export function tilesOf(city: City, size = TILE): Tile[] {
   }).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
-export function buildTile(city: City, tile: Tile, level: Detail): Layer {
+export function buildTile(city: City, tile: Tile, level: Detail, skipIds?: ReadonlySet<string>): Layer {
   const B = new Batch();
-  buildBuildings(B, city, tile.buildings, level);
+  const bs = skipIds && skipIds.size ? tile.buildings.filter(b => !skipIds.has(b.id)) : tile.buildings;
+  buildBuildings(B, city, bs, level);
   return layerOf(B, true, city);
 }
 

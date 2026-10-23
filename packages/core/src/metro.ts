@@ -10,8 +10,8 @@ import { hash } from './rng';
 export const METRO = {
   /** cars and their length, with the gap between cars (m) */
   cars: 4, carLen: 19, gap: 0.8,
-  /** line speed (m/s), braking and pulling away (m/s²), the stop (s) and the wait between trains (s) */
-  speed: 13, accel: 1, dwell: 25, between: 70,
+  /** line speed (m/s, 22.2 m/s ≈ 80 km/h max speed; ≥ 35 km/h commercial average including dwell), braking and pulling away (m/s²), the stop (s) and the wait between trains (s) */
+  speed: 22.2, accel: 1.45, dwell: 16, between: 45,
 } as const;
 
 export const TRAIN_LEN = METRO.cars * METRO.carLen + (METRO.cars - 1) * METRO.gap;
@@ -49,15 +49,21 @@ function track(r: Rail, city: City): Track {
     const headS = Math.max(TRAIN_LEN / 2 + 1, Math.min(L + TRAIN_LEN / 2 - 1, s.s + TRAIN_LEN / 2));
     return [{ station: st.id, s: headS }];
   }).sort((a, b) => a.s - b.s);
-  const { speed: v, accel: a, dwell, between } = METRO, dA = (v * v) / (2 * a), tA = v / a;
+  const { speed: v, accel: a, dwell, between } = METRO, dA = (v * v) / (2 * a);
   const plan: Leg[] = [];
   let t = 0, s = 0;
   const run = (to: number) => { if (to > s) { plan.push({ t0: t, t1: t + (to - s) / v, s0: s, s1: to, kind: 'run' }); t += (to - s) / v; s = to; } };
-  for (const st of stops) {
-    run(st.s - dA);
-    plan.push({ t0: t, t1: t + tA, s0: s, s1: st.s, kind: 'brake' }); t += tA; s = st.s;
+  for (let i = 0; i < stops.length; i++) {
+    const st = stops[i]!;
+    const nextStopS = i + 1 < stops.length ? stops[i + 1]!.s : L + TRAIN_LEN;
+    const brakeDist = Math.min(dA, Math.max(10, st.s - s));
+    run(st.s - brakeDist);
+    const tBrake = Math.sqrt((2 * brakeDist) / a);
+    plan.push({ t0: t, t1: t + tBrake, s0: s, s1: st.s, kind: 'brake' }); t += tBrake; s = st.s;
     plan.push({ t0: t, t1: t + dwell, s0: s, s1: s, kind: 'stop' }); t += dwell;
-    plan.push({ t0: t, t1: t + tA, s0: s, s1: s + dA, kind: 'pull' }); t += tA; s += dA;
+    const pullDist = Math.min(dA, Math.max(10, (nextStopS - st.s) * 0.5));
+    const tPull = Math.sqrt((2 * pullDist) / a);
+    plan.push({ t0: t, t1: t + tPull, s0: s, s1: s + pullDist, kind: 'pull' }); t += tPull; s += pullDist;
   }
   run(L + TRAIN_LEN);
   plan.push({ t0: t, t1: t + between, s0: s, s1: s, kind: 'away' }); t += between;

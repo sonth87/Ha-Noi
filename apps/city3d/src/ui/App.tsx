@@ -539,7 +539,7 @@ export function App() {
         )}
       </main>
       <footer>
-        <span className="hint">kéo: di chuyển · nhấp đúp cột ghim: mở thông tin · chạm công trình: xem popup · {s.mode === '3d' ? 'chuột phải / shift + kéo: xoay, nghiêng · ' : ''}cuộn: phóng</span>
+        <span className="hint">kéo: di chuyển · click tầng: bật/tắt đèn · nhấp đúp công trình/ghim: xem thông tin · {s.mode === '3d' ? 'chuột phải / shift + kéo: xoay, nghiêng · ' : ''}cuộn: phóng</span>
         <span className="read">
           {currentShowcase ? `đế mô hình · ${currentShowcase.name}` : 'Đống Đa – Ba Đình'} · {s.mode} · góc {s.mode === '2d' ? s.view : `${s.heading}°`} · L{s.detail} · cửa sáng {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%{s.lit ? ` + ${s.lit} tầng` : ''}{!currentShowcase ? ` · ${s.vehicles} xe · Tây Sơn ${LIGHT[s.signals.x]} ${s.signals.xLeft}s · Thái Hà ${LIGHT[s.signals.y]} ${s.signals.yLeft}s` : ''} · {s.fps} fps
         </span>
