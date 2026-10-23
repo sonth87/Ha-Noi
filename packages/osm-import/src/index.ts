@@ -6,7 +6,7 @@ import { importArea, type AreaConfig, type ImportReport } from './import';
 import { NGA_TU_THAI_HA } from './area-nga-tu-thai-ha';
 
 export { importArea, type AreaConfig, type ImportReport } from './import';
-export { projector, type Frame } from './frame';
+export { projector, unprojector, type Frame } from './frame';
 
 export const AREA_CONFIGS: Readonly<Record<string, AreaConfig>> = { [NGA_TU_THAI_HA.area]: NGA_TU_THAI_HA };
 

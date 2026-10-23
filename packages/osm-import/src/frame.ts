@@ -21,3 +21,12 @@ export function projector(f: Frame): (lat: number, lon: number) => Vec2 {
     return [e * c + n * s, e * s - n * c];
   };
 }
+
+export function unprojector(f: Frame): (x: number, y: number) => [number, number] {
+  const [lat0, lon0] = f.origin, k = M_PER_DEG_LON_EQ * Math.cos((lat0 * Math.PI) / 180);
+  const c = Math.cos((f.bearing * Math.PI) / 180), s = Math.sin((f.bearing * Math.PI) / 180);
+  return (x, y) => {
+    const e = x * c + y * s, n = x * s - y * c;
+    return [lat0 + n / M_PER_DEG_LAT, lon0 + e / k];
+  };
+}

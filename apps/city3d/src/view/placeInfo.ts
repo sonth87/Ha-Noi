@@ -82,12 +82,16 @@ export interface PlaceEntry {
   /** building id if this place has interactive floor lights */
   buildingId?: string;
   levels?: number;
+  /** true for bespoke 3D models, showcase buildings, and primary civic/cultural landmarks */
+  isSignatureLandmark?: boolean;
 }
 
 export interface ProjectedPlaceLabel {
   entry: PlaceEntry;
   x: number;
   y: number;
+  anchorWorld?: [number, number, number];
+  offsetY?: number;
 }
 
 export interface PlaceCatalog {
@@ -147,6 +151,11 @@ const LANDMARK_NOTES: Record<string, string> = {
   'osm:way/184959290': 'Cột cờ Hà Nội (Kỳ đài) trên đường Điện Biên Phủ, quận Ba Đình.',
 };
 
+const SECONDARY_TWIN_SOURCES = new Set([
+  'osm:way/926276852', // Oriental Plaza – Khối B (next to BRG Tower 16 Láng Hạ)
+  'osm:way/841601172', // Sky City Towers – Tháp B (next to Sky City Tháp A 88 Láng Hạ)
+]);
+
 function districtOf(pt: [number, number]): string {
   return pt[0] >= 1680 || (pt[0] >= 650 && pt[1] < -1150) ? 'Quận Ba Đình' : 'Quận Đống Đa';
 }
@@ -198,6 +207,7 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
         { label: 'Khu vực', value: `${distName}, Hà Nội` },
         { label: 'Nguồn dữ liệu', value: f.source },
       ],
+      isSignatureLandmark: true,
     };
     byId.set(f.id, entry);
     labels.push(entry);
@@ -294,6 +304,7 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
         { label: 'Vị trí', value: address },
         { label: 'Đoàn tàu', value: '4 toa chạy hai chiều liên tục' },
       ],
+      isSignatureLandmark: true,
       ...(showcaseId ? { showcaseId } : {}),
     };
     byId.set(st.id, entry);
@@ -316,17 +327,19 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
     const glass = b.parts.some(p => p.facade === 'glass');
     const showcaseId = showcaseIds.has(`bldg:${b.id}`) ? `bldg:${b.id}` : undefined;
     const box = bbox(b.footprint), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
+    const isSignature = Boolean(b.model || showcaseId || LANDMARK_NOTES[b.source]);
+    const isSecondaryTwin = SECONDARY_TWIN_SOURCES.has(b.source);
 
     let tier: 1 | 2 | 3 | 4 = 4;
-    if (b.model || cat === 'heritage' || (lv >= 16 && b.name) || (cat === 'education' && span >= 35) || (cat === 'hospital' && span >= 30)) {
+    if (!isSecondaryTwin && (isSignature || cat === 'heritage' || (lv >= 22 && b.name) || (cat === 'education' && span >= 35) || (cat === 'hospital' && span >= 30))) {
       tier = 1;
-    } else if (b.name && (lv >= 8 || span >= 30 || cat === 'education' || cat === 'hospital')) {
+    } else if (b.name && (isSecondaryTwin || lv >= 8 || span >= 30 || cat === 'education' || cat === 'hospital')) {
       tier = 2;
     } else if (b.name && b.name.length > 2) {
       tier = 3;
     }
 
-    const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? 1.55 : tier === 3 ? 3.2 : 99;
+    const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? (isSecondaryTwin ? 2.4 : 1.55) : tier === 3 ? 3.2 : 99;
     const facadeText = glass ? 'Kính Curtain Wall' : b.house ? 'Kiến trúc nhà phố Hà Nội' : 'Tường xây hoàn thiện';
     const kindLabel = cat === 'heritage'
       ? 'Di tích lịch sử – tôn giáo'
@@ -362,6 +375,7 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
       ],
       buildingId: b.id,
       levels: lv,
+      ...(isSignature ? { isSignatureLandmark: true } : {}),
       ...(showcaseId ? { showcaseId } : {}),
     };
     byId.set(b.id, entry);
@@ -376,7 +390,7 @@ export function buildPlaceCatalog(city: City, showcaseIds: ReadonlySet<string>):
     }
   }
 
-  labels.sort((a, b) => a.tier - b.tier || (b.levels ?? 10) - (a.levels ?? 10) || a.name.localeCompare(b.name, 'vi'));
+  labels.sort((a, b) => a.tier - b.tier || (b.isSignatureLandmark ? 1 : 0) - (a.isSignatureLandmark ? 1 : 0) || (b.levels ?? 10) - (a.levels ?? 10) || a.name.localeCompare(b.name, 'vi'));
   return { labels, byId };
 }
 
@@ -405,38 +419,70 @@ export function selectVisiblePlaceLabels(
       const p = project(e.world);
       if (!p.visible || p.x < 36 || p.x > widthPx - 36 || p.y < 52 || p.y > heightPx - 36) continue;
       if (out.some(o => Math.hypot(p.x - o.x, p.y - o.y) < (isMobile ? 95 : 110))) continue;
-      out.push({ entry: e, x: p.x, y: p.y });
+      out.push({ entry: e, x: p.x, y: p.y, anchorWorld: e.world, offsetY: 0 });
     }
     return out;
   }
 
   // 'label' mode: show Name + Address badge above buildings, landmarks, parks, lakes, monuments, heritage sites, stations
   const maxLabels = isMobile
-    ? (pxPerMetre < 1.5 ? 6 : pxPerMetre < 3.0 ? 9 : 13)
-    : (pxPerMetre < 1.5 ? 10 : pxPerMetre < 3.0 ? 16 : pxPerMetre < 5.5 ? 22 : 28);
-  const padX = isMobile ? 48 : 68;
-  const padTop = isMobile ? 54 : 68;
-  const padBottom = isMobile ? 44 : 42;
-  const minW = isMobile ? 124 : 148;
-  const minH = isMobile ? 42 : 48;
+    ? (pxPerMetre < 1.5 ? 8 : pxPerMetre < 3.0 ? 12 : 16)
+    : (pxPerMetre < 1.5 ? 14 : pxPerMetre < 3.0 ? 20 : pxPerMetre < 5.5 ? 26 : 32);
+  const padX = isMobile ? 42 : 56;
+  const padTop = isMobile ? 50 : 60;
+  const padBottom = isMobile ? 38 : 38;
+  const minW = isMobile ? 108 : 124;
+  const minH = isMobile ? 34 : 38;
+
+  // When zoomed in, tall skyscrapers (e.g., VPBank 100 m, Lotte 272 m) have their rooftop above the top edge of the screen
+  // while their body/podium is right in the middle of the viewport. Dynamically clamp the anchor height so the label stays on-screen.
+  const viewHeightM = heightPx / Math.max(0.4, pxPerMetre);
+  const maxAnchorZ = Math.max(16, viewHeightM * 0.44);
+  const cxScreen = widthPx * 0.5;
+  const cyScreen = heightPx * 0.5;
 
   const candidates: (ProjectedPlaceLabel & { score: number })[] = [];
   for (const e of catalog.labels) {
     if (pxPerMetre < e.minPxPerMetre) continue;
-    const p = project(e.world);
+    let anchorZ = Math.min(e.world[2], maxAnchorZ);
+    let anchorWorld: [number, number, number] = [e.world[0], e.world[1], anchorZ];
+    let p = project(anchorWorld);
+    // If the clamped top still projects above padTop while the building base is on screen, step down toward podium height
+    if (p.visible && p.y < padTop && anchorZ > 12) {
+      anchorZ = Math.min(anchorZ, 12);
+      anchorWorld = [e.world[0], e.world[1], anchorZ];
+      p = project(anchorWorld);
+    }
     if (!p.visible || p.x < padX || p.x > widthPx - padX || p.y < padTop || p.y > heightPx - padBottom) continue;
     const d = Math.hypot(e.ground[0] - targetWorld[0], e.ground[1] - targetWorld[1]);
+    const screenDist = Math.hypot(p.x - cxScreen, p.y - cyScreen);
     const catBonus = e.category === 'monument' || e.category === 'heritage' ? 2200 : e.category === 'landmark' || e.category === 'station' ? 1800 : e.category === 'park' || e.category === 'water' ? 1400 : 0;
-    const score = (5 - e.tier) * 10000 + catBonus + (e.levels ?? 4) * 35 - d * 1.3;
-    candidates.push({ entry: e, x: p.x, y: p.y, score });
+    const sigBonus = e.isSignatureLandmark ? (e.showcaseId ? 5500 : 4200) : 0;
+    const levelBonus = Math.min(25, e.levels ?? 4) * 20;
+    const score = (5 - e.tier) * 10000 + catBonus + sigBonus + levelBonus - screenDist * 2.5 - d * 1.4;
+    candidates.push({ entry: e, x: p.x, y: p.y, anchorWorld, offsetY: 0, score });
   }
 
   candidates.sort((a, b) => b.score - a.score);
   const chosen: ProjectedPlaceLabel[] = [];
   for (const c of candidates) {
     if (chosen.length >= maxLabels) break;
-    const collides = chosen.some(o => Math.abs(c.x - o.x) < minW && Math.abs(c.y - o.y) < minH);
-    if (!collides) chosen.push({ entry: c.entry, x: c.x, y: c.y });
+    const collidesAt = (yTest: number) => chosen.some(o => Math.abs(c.x - o.x) < minW && Math.abs(yTest - o.y) < minH);
+    if (!collidesAt(c.y)) {
+      chosen.push({ entry: c.entry, x: c.x, y: c.y, anchorWorld: c.anchorWorld, offsetY: 0 });
+      continue;
+    }
+    // For signature landmarks (e.g. Rạp Chiếu phim Quốc gia & VPBank Tower across an intersection),
+    // if rotating the camera aligns them vertically on screen, nudge vertically by ±40 px so both stay visible!
+    if (c.entry.isSignatureLandmark) {
+      for (const dy of [40, -40, 76, -76]) {
+        const ny = c.y + dy;
+        if (ny >= padTop && ny <= heightPx - padBottom && !collidesAt(ny)) {
+          chosen.push({ entry: c.entry, x: c.x, y: ny, anchorWorld: c.anchorWorld, offsetY: dy });
+          break;
+        }
+      }
+    }
   }
   return chosen;
 }

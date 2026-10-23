@@ -5,6 +5,7 @@ import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
 import { lightOn } from './lights';
 import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
 import { buildPlaceCatalog, selectVisiblePlaceLabels } from './placeInfo';
+import { formatUrlState, parseUrlState } from './urlState';
 
 describe('quality', () => {
   it('starts with 30 % traffic', () => {
@@ -121,7 +122,81 @@ describe('place info catalog & labels (off, popup, label modes)', () => {
     const topLabels = selectVisiblePlaceLabels(catalog, 'label', 4.5, 1200, 900, [0, 0], project);
     expect(topLabels.length).toBeGreaterThan(0);
     expect(topLabels.every(l => l.entry.name.length > 0 && l.entry.address.length > 0)).toBe(true);
+
+    // Ensure both Trung tâm Chiếu phim Quốc gia (w1115247053) and VPBank Tower (w677190114) remain visible
+    // across all zoom levels and 360° camera rotation angles around the Thái Hà – Láng Hạ intersection
+    const target: [number, number] = [265, -1175];
+    const el = Math.asin(1 / Math.sqrt(3));
+    for (const pxPerM of [1.2, 2.0, 3.5, 5.5, 8.0]) {
+      for (let deg = 0; deg < 360; deg += 45) {
+        const az = (deg * Math.PI) / 180;
+        const projIso = ([wx, wy, wz]: [number, number, number]) => {
+          const dx = wx - target[0], dz = wy - target[1];
+          const rx = -dx * Math.sin(az) + dz * Math.cos(az);
+          const ry = (dx * Math.cos(az) + dz * Math.sin(az)) * Math.sin(el) - wz * Math.cos(el);
+          return {
+            x: 600 + rx * pxPerM,
+            y: 450 + ry * pxPerM,
+            visible: true,
+          };
+        };
+        const vis = selectVisiblePlaceLabels(catalog, 'label', pxPerM, 1200, 900, target, projIso);
+        const ids = new Set(vis.map(v => v.entry.id));
+        expect(ids.has('w1115247053')).toBe(true);
+        expect(ids.has('w677190114')).toBe(true);
+      }
+    }
   });
 });
+
+describe('Google Maps–style URL state (@lat,lon,157m,0h,35.3t,2d)', () => {
+  it('formats and round-trips coordinates, zoom metres, heading, tilt, mode, and query options', () => {
+    const url = formatUrlState({
+      x: 255,
+      z: -1165,
+      zoom: 300 / 157,
+      heading: 135,
+      tilt: 24.5,
+      mode: '3d',
+      night: true,
+      seeThrough: false,
+      streetLabels: 'map',
+      placeInfo: 'label',
+      place: 'w677190114',
+    });
+    expect(url).toMatch(/^\/@21\.\d{7},105\.\d{7},157m,135h,24\.5t,3d\?/);
+    expect(url).toContain('theme=night');
+    expect(url).toContain('xray=0');
+    expect(url).toContain('labels=map');
+    expect(url).toContain('info=label');
+    expect(url).toContain('place=w677190114');
+
+    const [pathname, search] = url.split('?');
+    const parsed = parseUrlState({ pathname: pathname!, search: `?${search!}`, hash: '' });
+    expect(parsed).not.toBeNull();
+    expect(parsed!.x).toBeCloseTo(255, 1);
+    expect(parsed!.z).toBeCloseTo(-1165, 1);
+    expect(parsed!.zoom).toBeCloseTo(300 / 157, 2);
+    expect(parsed!.heading).toBe(135);
+    expect(parsed!.tilt).toBe(24.5);
+    expect(parsed!.mode).toBe('3d');
+    expect(parsed!.night).toBe(true);
+    expect(parsed!.seeThrough).toBe(false);
+    expect(parsed!.streetLabels).toBe('map');
+    expect(parsed!.placeInfo).toBe('label');
+    expect(parsed!.place).toBe('w677190114');
+
+    // Also parses a direct Google Maps path like `/@21.0093489,105.8243039,157m/data=!3m1!1e3`
+    const gmap = parseUrlState({
+      pathname: '/@21.0093489,105.8243039,157m/data=!3m1!1e3!5m1!1e2',
+      search: '?entry=ttu',
+      hash: '',
+    });
+    expect(gmap).not.toBeNull();
+    expect(Math.hypot(gmap!.x!, gmap!.z!)).toBeLessThan(20);
+    expect(gmap!.zoom).toBeCloseTo(300 / 157, 2);
+  });
+});
+
 
 

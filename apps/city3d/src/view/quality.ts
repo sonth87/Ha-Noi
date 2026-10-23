@@ -94,8 +94,8 @@ export function withOption(q: Quality, patch: Partial<QualityOptions>): Quality 
 }
 
 const KEY = 'city3d-quality';
-/** bumped when the defaults change in a way a saved setting should not outlive (6: mobile Safari memory & pure color blocks when zoomed out) */
-const VERSION = 6;
+/** bumped when the defaults change in a way a saved setting should not outlive (7: reset stale autoQuality low-distance settings) */
+const VERSION = 7;
 
 export function isMobileDevice(): boolean {
   try {
