@@ -7,8 +7,8 @@ Vẽ **bất kỳ** mô hình thành phố nào ([city-model](city-model.md)) b�
 | Thư mục | Chứa | Được dùng | Cấm |
 |---|---|---|---|
 | `src/render/` | Mô hình thành phố → geometry three.js (`buildCityGeometry`). Không vật liệu, không DOM | core, three | React, DOM, `view/`, `ui/` |
-| `src/view/` | `CityView`: điều phối renderer, camera, vật liệu, đèn, ngày/đêm; cùng các mô-đun tách biệt: `constants.ts` (hằng số), `i18n.ts` (đa ngôn ngữ `vi`/`en`), `sdk.ts` (Public SDK, Event Bus & Extension API), `seeThrough.ts` (shader nhìn xuyên ga tàu & tòa nhà), `overlayDom.ts` (nhãn 3D, tooltip, popup), `placeInfo.ts` (tra cứu địa điểm/công trình từ `CityModel`), `urlState.ts` (đồng bộ URL), `quality.ts`, `lights.ts` | mọi thứ | — |
-| `src/ui/` | Vỏ React: thanh trên (kèm chuyển ngôn ngữ `VI/EN`), bảng chất lượng, bảng đèn, dòng trạng thái, ghi nguồn | `view/`, `@my-city/*` | three, `render/` |
+| `src/view/` | `CityView`: điều phối renderer, camera, vật liệu, đèn, ngày/đêm; cùng các mô-đun tách biệt: `constants.ts` (hằng số), `i18n.ts` (đa ngôn ngữ `vi`/`en`), `povController.ts` (góc nhìn phối cảnh POV tàu Metro & tự lái ô tô kèm Frustum-Cone Culling), `sdk.ts` (Public SDK, Event Bus & Extension API), `seeThrough.ts` (shader nhìn xuyên ga tàu & tòa nhà), `overlayDom.ts` (nhãn 3D, tooltip, popup), `placeInfo.ts` (tra cứu địa điểm/công trình từ `CityModel`), `urlState.ts` (đồng bộ URL), `quality.ts`, `lights.ts` | mọi thứ | — |
+| `src/ui/` | Vỏ React: thanh trên (kèm chọn POV, chuyển ngôn ngữ `VI/EN`), HUD lái xe/tàu, bảng chất lượng, bảng đèn, dòng trạng thái, ghi nguồn | `view/`, `@my-city/*` | three, `render/` |
 
 Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `CityView` (`useSyncExternalStore`); snapshot đổi khi có sự kiện (chế độ, góc, đèn, chất lượng, ngôn ngữ) và fps tối đa 2 lần/giây, không theo từng frame. `CityView` xuất bản `view.sdk` (và `window.MyCitySDK`) để tích hợp Extension / Plugin bên ngoài (ADR-052).
 
@@ -40,11 +40,12 @@ Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `Ci
 - **Đèn**: mỗi cửa sổ thuộc một tầng (`<id tòa>/<n>`); bật một tầng là ghi lại đúng đoạn màu của các đỉnh thuộc tầng đó trong buffer `color`, **mỗi cửa một sắc độ** (`render/lights.ts`: rất sáng / sáng / mờ / vẫn tắt theo seed, ADR-038).
 - **Click**: tia chiếu trúng tam giác tường/kính/mái → bảng đoạn tam giác theo tòa (tìm nhị phân) → tòa → tầng theo độ cao điểm trúng (`floorAt`).
 
-## 3. Camera (`CityView`)
+## 3. Camera (`CityView` & `PovController`)
 
-Một camera trực giao, hai chế độ (phím `V`):
-- **2D**: isometric thật (góc nâng `asin(1/√3)` ≈ 35,26°), khóa ở 4 góc `45° + 90°·k`, **trùng 4 góc của app SVG cũ**. `Q`/`E` xoay 90° có chuyển động. Chỉ dời và phóng to.
-- **3D**: xoay tự do (OrbitControls), góc nâng 3°–83°. Về 2D thì trôi về góc iso gần nhất.
+Hệ thống camera kép gồm `OrthographicCamera` cho bản đồ và `PerspectiveCamera` cho góc nhìn nhập vai (ADR-053):
+- **2D** (phím `V`): isometric thật (góc nâng `asin(1/√3)` ≈ 35,26°), khóa ở 4 góc `45° + 90°·k`, **trùng 4 góc của app SVG cũ**. `Q`/`E` xoay 90° có chuyển động. Chỉ dời và phóng to.
+- **3D** (phím `V`): xoay tự do (OrbitControls), góc nâng 3°–83°. Về 2D thì trôi về góc iso gần nhất.
+- **POV & Tự lái xe** (phím `P` hoặc menu **Trải nghiệm POV**, ADR-053): chuyển sang `PerspectiveCamera` với 4 chế độ: **Lái tàu Metro** (`metro-cab`), **Ngồi tàu Metro** (`metro-passenger`), **Lái ô tô - Cabin** (`drive-cabin`), và **Lái ô tô - Trên cao** (`drive-top`). Hỗ trợ tự điều khiển xe bằng bàn phím (`W/A/S/D`, mũi tên, `Space`) hoặc nút cảm ứng trên màn hình, tự leo dốc cầu vượt, và cắt tỉa theo hình nón trường nhìn (Frustum-Cone Culling + Distance LOD).
 - **Điều khiển kiểu bản đồ & cảm ứng** (ADR-043, ADR-048, ADR-049): kéo trái (hoặc 1 ngón) di chuyển trên mặt đất, kéo phải / Shift + kéo xoay và nghiêng, cuộn phóng vào con trỏ; trên cảm ứng, 2 ngón ở 2D vừa chụm phóng vừa kéo (`DOLLY_PAN`), ở 3D vừa chụm phóng vừa xoay/nghiêng (`DOLLY_ROTATE`), chạm đúp bay tới chỗ chạm; W A S D / mũi tên, R / F, + / −, H; dropdown **Công trình** để xem riêng từng tòa nhà trên đế hoặc quay về bản đồ toàn khu; dropdown **Khu vực** để bay nhanh tới Ngã tư Thái Hà, Ngã Tư Sở, Chùa Bộc, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hồ Hoàng Cầu, Láng Hạ và các ga Metro; tâm nhìn giữ trong vùng (hoặc trong phạm vi đế mô hình).
 
 ## 4. Mức chi tiết theo zoom (ADR-036, ADR-049)

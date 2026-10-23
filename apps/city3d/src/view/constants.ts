@@ -55,6 +55,46 @@ export const SEE_THROUGH = {
   BUILDING_FACE_MIN_ZOOM_NORMAL: 21.0,
 } as const;
 
+/** Camera viewpoint modes: standard map ('map') or immersive perspective / driving views */
+export type PovMode = 'map' | 'metro-cab' | 'metro-passenger' | 'drive-cabin' | 'drive-top';
+
+export const POV_MODES: readonly PovMode[] = [
+  'map',
+  'metro-cab',
+  'metro-passenger',
+  'drive-cabin',
+  'drive-top',
+] as const;
+
+/** Perspective POV & interactive driving physics / culling constants */
+export const POV_CONFIG = {
+  FOV_CAB: 64,
+  FOV_PASSENGER: 68,
+  FOV_DRIVE_CABIN: 68,
+  FOV_DRIVE_TOP: 52,
+  NEAR: 0.35,
+  FAR: 1400,
+  METRO_CAB_OFFSET_FWD: 8.6,
+  METRO_CAB_HEIGHT: 2.05,
+  METRO_PASSENGER_HEIGHT: 1.85,
+  METRO_PASSENGER_SIDE_OFFSET: 1.08,
+  DRIVE_CABIN_HEIGHT: 1.32,
+  DRIVE_CABIN_FWD: 0.25,
+  DRIVE_TOP_DISTANCE: 19.0,
+  DRIVE_TOP_HEIGHT: 14.0,
+  DRIVE_MAX_SPEED: 18.5,
+  DRIVE_REVERSE_MAX_SPEED: 6.5,
+  DRIVE_ACCEL: 9.8,
+  DRIVE_BRAKE: 18.5,
+  DRIVE_DRAG: 2.4,
+  DRIVE_STEER_RATE: 1.9,
+  CULL_MAX_DIST: 360,
+  CULL_FURN_DIST: 210,
+  CULL_VEHICLE_DIST: 230,
+  LOD_L3_DIST: 95,
+  LOD_L2_DIST: 200,
+} as const;
+
 export const azOf = (k: number): number => Math.PI / 4 - (k * Math.PI) / 2;
 
 export const VEHICLE_KINDS: VehicleKind[] = ['bike', 'sedan', 'hatch', 'taxi', 'van'];

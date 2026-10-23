@@ -4,6 +4,7 @@
    or inject custom action buttons into building/place popups. */
 import type * as THREE from 'three';
 import type { City } from '@my-city/core';
+import type { PovMode } from './constants';
 import type { Locale } from './i18n';
 import type { PlaceEntry } from './placeInfo';
 import type { Mode, Snapshot, Theme } from './CityView';
@@ -16,6 +17,7 @@ export interface CityEventMap {
   'place:hover': { entry: PlaceEntry | null; floor?: string };
   'building:lightToggle': { id: string; on: boolean };
   'mode:change': { mode: Mode };
+  'pov:change': { povMode: PovMode };
   'theme:change': { theme: Theme; night: boolean };
   'showcase:change': { showcase: string | null };
   'locale:change': { locale: Locale };
@@ -87,6 +89,8 @@ export interface CitySDK {
   flyTo(pt: [number, number]): void;
   setZoom(zoom: number): void;
   setMode(mode: Mode): void;
+  getPovMode(): PovMode;
+  setPovMode(mode: PovMode): void;
   setNight(night: boolean): void;
   setSeeThrough(on: boolean): void;
   setShowcase(id: string | null): void;

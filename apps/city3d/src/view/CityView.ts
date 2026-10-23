@@ -24,8 +24,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
-  METRO, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
-  type City, type Lane, type Signals, type Track, type Vehicle, type VehicleKind,
+  METRO, buildingHeight, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
+  type City, type Lane, type Signals, type Track, type TrainPhase, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { Batch, type Surface } from '@render/batch';
 import { beaconsOf, buildBase, buildTile, cityFloors, layerOf, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
@@ -37,7 +37,8 @@ import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from 
 import {
   CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
   HOVER_THROTTLE_MS, ISO_EL, MIN_ZOOM_TO_CURSOR_EL, MOVE_KEYS, ORBIT_RADIUS, PAN_BOUNDS_MARGIN,
-  SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS, azOf,
+  POV_CONFIG, POV_MODES, SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS, azOf,
+  type PovMode,
 } from './constants';
 import { LOCALES, getLocale, setGlobalLocale, t, type Locale } from './i18n';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
@@ -49,6 +50,7 @@ import {
   PLACE_INFO_MODES, buildPlaceCatalog, selectVisiblePlaceLabels,
   type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
 } from './placeInfo';
+import { PovController, type DriveControlKey } from './povController';
 import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { CityEventBus, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
@@ -93,6 +95,18 @@ export interface Snapshot {
   seeThrough: boolean;
   /** current UI and catalog language ('vi' | 'en') */
   locale: Locale;
+  /** active camera viewpoint mode ('map' or immersive perspective / driving views) */
+  povMode: PovMode;
+  /** instantaneous speed (km/h) in POV / driving mode */
+  povSpeedKmh: number;
+  /** 1-based index of the currently boarded Metro train */
+  povTrainIndex: number;
+  /** total Metro trains operating across tracks */
+  povTrainTotal: number;
+  /** current Metro train motion phase */
+  povTrainPhase: TrainPhase;
+  /** passenger window side (1 = right, -1 = left) */
+  povWindowSide: 1 | -1;
 }
 
 interface TileState {
@@ -131,6 +145,7 @@ export class CityView {
   readonly base: Layer;
   readonly stationShell: Layer;
   readonly tiles: TileState[];
+  private readonly landmarkTileSet = new Set<TileState>();
   private readonly bldgBounds: BldgBounds[];
   readonly cells: CellState[];
   readonly floors: string[];
@@ -140,6 +155,7 @@ export class CityView {
   readonly streetCatalog: StreetEntry[];
   placeCatalog: PlaceCatalog;
   readonly sdk: CitySDK;
+  private readonly pov: PovController;
   private readonly events = new CityEventBus();
   private readonly extensions = new Map<string, { ext: CityExtension; cleanup?: () => void }>();
   private readonly popupActions = new Map<string, PopupActionDescriptor>();
@@ -245,6 +261,11 @@ export class CityView {
     this.layers.add(this.stationShell);
     this.floors = cityFloors(city);
     this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null }));
+    for (const t of this.tiles) {
+      if (t.tile.buildings.some(b => b.model != null || buildingHeight(b) >= 28 || (Boolean(b.name) && buildingHeight(b) >= 16))) {
+        this.landmarkTileSet.add(t);
+      }
+    }
     this.bldgBounds = buildBuildingBoundsIndex(this.tiles);
     const net = roadNetwork(city);
     this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null }));
@@ -266,6 +287,7 @@ export class CityView {
       if (st.at[1] > y1) y1 = st.at[1];
     }
     this.panBounds = { x0, y0, x1, y1 };
+    this.pov = new PovController(city, this.panBounds);
     for (const s of Object.keys(SURFACE_TOKEN) as Surface[]) {
       const mat = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1 });
       this.mats.surface.set(s, mat);
@@ -307,10 +329,12 @@ export class CityView {
     const quality = loadQuality();
     this.vehicles = spawnTraffic(this.lanes, quality.traffic);
     const sig = signalsAt(0);
+    const totalTrains = this.tracks.reduce((acc, tr) => acc + trainCount(tr), 0);
     this.snap = {
       mode: initMode, view: initView, heading: Math.round(initHeading), theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
       showcase: validShowcase, streetLabels, placeInfo, seeThrough: initUrl?.seeThrough ?? true, locale: initLocale,
+      povMode: 'map', povSpeedKmh: 0, povTrainIndex: 1, povTrainTotal: Math.max(1, totalTrains), povTrainPhase: 'run', povWindowSide: 1,
     };
 
     this.sdk = this.createSDK();
@@ -331,6 +355,8 @@ export class CityView {
         m.camera.updateProjectionMatrix();
       },
       setMode: mode => this.setMode(mode),
+      getPovMode: () => this.snap.povMode,
+      setPovMode: mode => this.setPovMode(mode),
       setNight: night => {
         this.setNight(night);
         this.setTheme(night ? 'dark' : 'light');
@@ -483,20 +509,22 @@ export class CityView {
     vehicleLines.frustumCulled = false;
     vehicleLines.userData.tier = 'creases';
     mapGroup.add(vehicleLines);
+    this.pov.mountPlayerCar(mapGroup, this.mats.vehicle, this.mats.beam, this.vehicleShell, this.mats.crease);
 
     // Helper to raycast against buildings, stations, parks, lakes, and monuments
     const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
     const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
     const flyToClient = (clientX: number, clientY: number) => {
+      if (this.pov.isActive()) return;
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
+      ray.setFromCamera(ndc, this.activeCamera());
       if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
     };
     const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
       const r = renderer.domElement.getBoundingClientRect();
       ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, camera);
+      ray.setFromCamera(ndc, this.activeCamera());
       const pickable: THREE.Object3D[] = [];
       if (this.snap.showcase) {
         showcaseGroup.traverse(o => { if (o.userData.surface && o.visible && o.parent?.visible !== false) pickable.push(o); });
@@ -527,7 +555,7 @@ export class CityView {
       if (pinHit) {
         if (pinHit.kind === 'place') {
           this.openPopup(pinHit.entry);
-          this.flyTo(pinHit.entry.ground, false);
+          if (!this.pov.isActive()) this.flyTo(pinHit.entry.ground, false);
         } else {
           this.openStreetPopup(pinHit.street, pinHit.item.world);
         }
@@ -547,6 +575,7 @@ export class CityView {
     };
 
     let down: [number, number] | null = null;
+    let povDragPrev: [number, number] | null = null;
     let lastTap: { t: number; x: number; y: number } | null = null;
     let touchGesture: { ang0: number; dist0: number } | null = null;
     const onTouchStart = (e: TouchEvent) => {
@@ -560,6 +589,7 @@ export class CityView {
       }
     };
     const onTouchMove = (e: TouchEvent) => {
+      if (this.pov.isActive()) return;
       if (e.touches.length === 2 && touchGesture && this.snap.mode === '2d') {
         const dx = e.touches[1]!.clientX - e.touches[0]!.clientX;
         const dy = e.touches[1]!.clientY - e.touches[0]!.clientY;
@@ -579,10 +609,20 @@ export class CityView {
     const onDown = (e: PointerEvent) => {
       controls.zoomToCursor = e.pointerType === 'mouse' && this.elevation() >= MIN_ZOOM_TO_CURSOR_EL;
       down = [e.clientX, e.clientY];
+      if (this.pov.isActive()) {
+        povDragPrev = [e.clientX, e.clientY];
+      }
     };
 
     let lastHoverTime = 0;
     const onMove = (e: PointerEvent) => {
+      if (this.pov.isActive() && povDragPrev && (e.buttons !== 0 || e.pointerType === 'touch')) {
+        const dx = e.clientX - povDragPrev[0];
+        const dy = e.clientY - povDragPrev[1];
+        povDragPrev = [e.clientX, e.clientY];
+        this.pov.addLookDelta(dx, dy);
+        return;
+      }
       if (e.pointerType !== 'mouse' || this.interacting || (e.buttons & 7) !== 0) return;
       if (this.snap.showcase) {
         this.hideHoverBanner();
@@ -607,7 +647,7 @@ export class CityView {
       }
       this.clearHoveredPin();
 
-      const px = this.pxPerMetre();
+      const px = this.pov.isActive() ? 8 : this.pxPerMetre();
       if (this.snap.placeInfo === 'off' || px < HOVER_MIN_PX_PER_METRE) {
         this.hideHoverBanner();
         renderer.domElement.style.cursor = '';
@@ -625,12 +665,14 @@ export class CityView {
       this.showHoverBanner(entry, e.clientX - r.left, e.clientY - r.top, picked?.floor);
     };
     const onLeave = () => {
+      povDragPrev = null;
       this.hideHoverBanner();
       this.clearHoveredPin();
       renderer.domElement.style.cursor = '';
     };
 
     const onUp = (e: PointerEvent) => {
+      povDragPrev = null;
       const maxMove = e.pointerType === 'touch' ? 12 : 5;
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
       const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
@@ -661,7 +703,7 @@ export class CityView {
       if (pinHit) {
         if (pinHit.kind === 'place') {
           this.openPopup(pinHit.entry);
-        } else {
+        } else if (!this.pov.isActive()) {
           this.flyTo(pinHit.item.world, false);
         }
         return;
@@ -699,34 +741,57 @@ export class CityView {
       this.mounted?.composer?.setSize(w, h);
       camera.left = (-FRUSTUM * a) / 2; camera.right = (FRUSTUM * a) / 2; camera.top = FRUSTUM / 2; camera.bottom = -FRUSTUM / 2;
       camera.updateProjectionMatrix();
+      this.pov.resize(w, h);
       this.resolution();
     };
     const ro = new ResizeObserver(resize);
     ro.observe(host);
 
-    let raf = 0, frames = 0, t0 = performance.now(), last = t0;
+    let raf = 0, frames = 0, t0 = performance.now(), last = t0, lastPovTelSync = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.1, (now - last) / 1000);
       last = now;
-      this.animate(now);
-      this.keysMove(dt);
-      this.syncLowCamera();
-      controls.update();
-      this.stabilizeCamera();
-      this.keepInside();
+      const povActive = this.pov.isActive();
+      if (!povActive) {
+        this.animate(now);
+        this.keysMove(dt);
+        this.syncLowCamera();
+        controls.update();
+        this.stabilizeCamera();
+        this.keepInside();
+      }
       this.syncForegroundCut();
       this.zoomFade();
       const blink = this.snap.night && Math.floor(now / 700) % 2 === 0;
       if (this.snap.showcase) {
         if (this.activeShowcase) for (const b of this.activeShowcase.beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
       } else {
+        this.trafficStep(dt);
+        if (povActive) {
+          const tel = this.pov.step(dt, this.sim.t, this.trains, this.nightOn('beam'));
+          if (
+            now - lastPovTelSync > 120 &&
+            (tel.speedKmh !== this.snap.povSpeedKmh ||
+              tel.trainIndex !== this.snap.povTrainIndex ||
+              tel.trainPhase !== this.snap.povTrainPhase ||
+              tel.windowSide !== this.snap.povWindowSide)
+          ) {
+            lastPovTelSync = now;
+            this.update({
+              povSpeedKmh: tel.speedKmh,
+              povTrainIndex: tel.trainIndex,
+              povTrainTotal: tel.trainTotal,
+              povTrainPhase: tel.trainPhase,
+              povWindowSide: tel.windowSide,
+            });
+          }
+        }
         this.detailStep();
         if (!this.interacting || now - this.lastDistStep > 120) {
           this.lastDistStep = now;
           this.distanceStep();
         }
-        this.trafficStep(dt);
         for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
         this.mats.pulse.dashOffset -= dt * 9;
       }
@@ -739,7 +804,7 @@ export class CityView {
       this.events.emit('tick', { dt, now });
       if (this.mounted) {
         if (this.mounted.bloom?.enabled && this.mounted.composer) this.mounted.composer.render();
-        else this.mounted.renderer.render(scene, camera);
+        else this.mounted.renderer.render(scene, this.activeCamera());
       }
       frames++;
       if (now - t0 > 500) {
@@ -887,12 +952,95 @@ export class CityView {
   }
 
   // ---------- commands ----------
+  private activeCamera(): THREE.Camera {
+    return this.pov.isActive() ? this.pov.camera : this.mounted!.camera;
+  }
+
   setMode(mode: Mode) {
+    if (this.pov.isActive()) this.setPovMode('map');
     this.update({ mode });
     this.applyMode(mode, true);
     this.events.emit('mode:change', { mode });
   }
   toggleMode() { this.setMode(this.snap.mode === '2d' ? '3d' : '2d'); }
+
+  setPovMode(povMode: PovMode) {
+    if (povMode === this.snap.povMode) return;
+    if (povMode !== 'map' && this.snap.showcase) {
+      this.setShowcase(null);
+    }
+    this.hideHoverBanner();
+    this.closePopup();
+    this.held.clear();
+    const m = this.mounted;
+    const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: this.savedCam.x, z: this.savedCam.z };
+    this.pov.setMode(povMode, this.trains, mapTarget);
+    if (m) {
+      m.controls.enabled = !this.pov.isActive();
+      if (povMode === 'map') {
+        for (const t of this.tiles) this.syncTileVisibility(t, true);
+      } else {
+        this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
+      }
+      this.applyBloom();
+      this.zoomFade(true);
+      this.detailStep();
+      this.distanceStep(true);
+    }
+    const tel = this.pov.getTelemetry();
+    this.update({
+      povMode,
+      povSpeedKmh: tel.speedKmh,
+      povTrainIndex: tel.trainIndex,
+      povTrainTotal: tel.trainTotal,
+      povTrainPhase: tel.trainPhase,
+      povWindowSide: tel.windowSide,
+    });
+    this.streetLabelsStep(true);
+    this.placeInfoStep(true);
+    this.events.emit('pov:change', { povMode });
+  }
+
+  cyclePovMode() {
+    const idx = POV_MODES.indexOf(this.snap.povMode);
+    const next = POV_MODES[(idx + 1) % POV_MODES.length]!;
+    this.setPovMode(next);
+  }
+
+  nextPovTrain() {
+    this.pov.nextTrain(this.trains);
+    const tel = this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
+    this.update({ povTrainIndex: tel.trainIndex, povTrainTotal: tel.trainTotal, povTrainPhase: tel.trainPhase });
+  }
+
+  togglePovWindowSide() {
+    this.pov.toggleWindowSide();
+    const tel = this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
+    this.update({ povWindowSide: tel.windowSide });
+  }
+
+  toggleDriveCamera() {
+    if (!this.pov.isDriving()) return;
+    const m = this.mounted;
+    const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: this.savedCam.x, z: this.savedCam.z };
+    const next = this.pov.toggleDriveCamera(this.trains, mapTarget);
+    this.update({ povMode: next });
+    this.events.emit('pov:change', { povMode: next });
+  }
+
+  resetPovCar() {
+    const m = this.mounted;
+    const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: 0, z: 0 };
+    this.pov.resetCarNear(mapTarget.x, mapTarget.z);
+  }
+
+  centerPovLook() {
+    this.pov.centerLook();
+  }
+
+  setDriveTouchControl(control: DriveControlKey, active: boolean) {
+    this.pov.setTouchControl(control, active);
+  }
 
   setLocale(locale: Locale) {
     if (locale === this.snap.locale) return;
@@ -923,6 +1071,7 @@ export class CityView {
   /** switch between the full city map (id = null) and a standalone diorama showcase on an iso-glow base plate */
   setShowcase(id: string | null) {
     if (id === this.snap.showcase) return;
+    if (id && this.pov.isActive()) this.setPovMode('map');
     this.hideHoverBanner();
     this.closePopup();
     const m = this.mounted;
@@ -1024,7 +1173,7 @@ export class CityView {
 
   /** turn by 90°; in 3D, turn too, keeping the tilt */
   rotate(dir: 1 | -1) {
-    if (!this.mounted) return;
+    if (!this.mounted || this.pov.isActive()) return;
     const az = this.azimuth(), k = Math.round((Math.PI / 4 - az) / (Math.PI / 2)) + dir;
     this.startTurn(azOf(k), this.snap.mode === '2d' ? ISO_EL : this.elevation());
   }
@@ -1107,8 +1256,11 @@ export class CityView {
     }
 
     const w = m.host.clientWidth, h = m.host.clientHeight;
-    const c = m.controls.target, cp = m.camera.position;
-    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
+    const activeCam = this.activeCamera();
+    const povActive = this.pov.isActive();
+    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
+    const cp = activeCam.position;
+    const sig = `${mode}|${this.snap.povMode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}`;
     if (!force && sig === this.labelSig) return;
     this.labelSig = sig;
 
@@ -1123,7 +1275,7 @@ export class CityView {
 
     const tmp = new THREE.Vector3();
     const project = (world: [number, number, number]) => {
-      tmp.set(world[0], world[2], world[1]).project(m.camera);
+      tmp.set(world[0], world[2], world[1]).project(activeCam);
       return {
         x: (tmp.x * 0.5 + 0.5) * w,
         y: (-tmp.y * 0.5 + 0.5) * h,
@@ -1132,11 +1284,13 @@ export class CityView {
     };
 
     const now = performance.now();
-    if (this.interacting && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
+    if ((this.interacting || povActive) && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
       for (const [key, item] of this.labelItems) {
         const node = this.labelNodes.get(key);
         if (!node) continue;
         const scr = project([item.world[0], item.world[1], 0.4]);
+        node.style.display = scr.visible ? '' : 'none';
+        if (!scr.visible) continue;
         item.x = scr.x;
         item.y = scr.y;
         if (mode === 'pin') {
@@ -1152,10 +1306,10 @@ export class CityView {
     const visible = selectVisibleStreetLabels(
       this.streetCatalog,
       mode,
-      this.pxPerMetre(),
+      povActive ? 7.5 : this.pxPerMetre(),
       w,
       h,
-      [c.x, c.z],
+      [focus.x, focus.z],
       project,
     );
 
@@ -1170,6 +1324,7 @@ export class CityView {
         layer.appendChild(btn);
         this.labelNodes.set(key, btn);
       }
+      btn.style.display = '';
 
       if (mode === 'pin') {
         btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0)`;
@@ -1194,9 +1349,12 @@ export class CityView {
     const mode = this.snap.placeInfo;
 
     const w = m.host.clientWidth, h = m.host.clientHeight;
+    const activeCam = this.activeCamera();
+    const povActive = this.pov.isActive();
+    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
     const tmp = new THREE.Vector3();
     const project = (world: [number, number, number]) => {
-      tmp.set(world[0], world[2], world[1]).project(m.camera);
+      tmp.set(world[0], world[2], world[1]).project(activeCam);
       return {
         x: (tmp.x * 0.5 + 0.5) * w,
         y: (-tmp.y * 0.5 + 0.5) * h,
@@ -1229,8 +1387,8 @@ export class CityView {
       return;
     }
 
-    const c = m.controls.target, cp = m.camera.position;
-    const sig = `${mode}|${this.snap.locale}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${c.x.toFixed(1)},${c.y.toFixed(1)},${c.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${this.activePopup?.entry.id ?? ''}`;
+    const cp = activeCam.position;
+    const sig = `${mode}|${this.snap.povMode}|${this.snap.locale}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}|${this.activePopup?.entry.id ?? ''}`;
     if (!force && sig === this.placeSig) return;
     this.placeSig = sig;
 
@@ -1244,11 +1402,13 @@ export class CityView {
     }
 
     const now = performance.now();
-    if (this.interacting && !force && this.placeItems.size > 0 && now - this.lastPlaceSelect < 140) {
+    if ((this.interacting || povActive) && !force && this.placeItems.size > 0 && now - this.lastPlaceSelect < 140) {
       for (const [key, item] of this.placeItems) {
         const node = this.placeNodes.get(key);
         if (!node) continue;
         const scr = project(item.anchorWorld ?? item.entry.world);
+        node.style.display = scr.visible ? '' : 'none';
+        if (!scr.visible) continue;
         item.x = scr.x;
         item.y = scr.y + (item.offsetY ?? 0);
         node.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
@@ -1260,10 +1420,10 @@ export class CityView {
     const visible = selectVisiblePlaceLabels(
       this.placeCatalog,
       mode,
-      this.pxPerMetre(),
+      povActive ? 8.5 : this.pxPerMetre(),
       w,
       h,
-      [c.x, c.z],
+      [focus.x, focus.z],
       project,
     );
 
@@ -1278,6 +1438,7 @@ export class CityView {
         layer.appendChild(btn);
         this.placeNodes.set(key, btn);
       }
+      btn.style.display = '';
 
       btn.classList.toggle('active', this.activePopup?.entry.id === item.entry.id);
       btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
@@ -1521,13 +1682,46 @@ export class CityView {
 
   private held = new Set<string>();
 
-  keyUp(e: KeyboardEvent) { this.held.delete(e.key.toLowerCase()); }
+  keyUp(e: KeyboardEvent) {
+    this.held.delete(e.key.toLowerCase());
+    this.pov.handleKeyUp(e.key);
+  }
 
   key(e: KeyboardEvent): boolean {
     if (e.metaKey || e.ctrlKey || e.altKey) return false;
     const k = e.key.toLowerCase();
-    if (k === 'escape' && this.activePopup) { this.closePopup(); return true; }
-    if (MOVE_KEYS[k]) { this.held.add(k); return true; }
+    if (k === 'escape') {
+      if (this.activePopup) {
+        this.closePopup();
+        return true;
+      }
+      if (this.pov.isActive()) {
+        this.setPovMode('map');
+        return true;
+      }
+    }
+    if (k === 'p') {
+      this.cyclePovMode();
+      return true;
+    }
+    if (this.pov.isActive()) {
+      if (k === 'tab' && this.pov.isMetro()) {
+        e.preventDefault();
+        this.nextPovTrain();
+        return true;
+      }
+      if (k === 'v' && this.pov.isDriving()) {
+        this.toggleDriveCamera();
+        return true;
+      }
+      if (this.pov.handleKeyDown(e.key)) {
+        if (k === ' ' || k.startsWith('arrow')) e.preventDefault();
+        return true;
+      }
+    } else if (MOVE_KEYS[k]) {
+      this.held.add(k);
+      return true;
+    }
     switch (k) {
       case 'r': this.tilt(1); return true;
       case 'f': this.tilt(-1); return true;
@@ -1600,7 +1794,7 @@ export class CityView {
   }
 
   private trainStep() {
-    const hide = this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles;
+    const hide = !this.pov.isActive() && this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles;
     const lit = new Set<string>();
     for (const tr of this.trains) {
       if (hide) { for (const g of tr.cars) g.visible = false; continue; }
@@ -1609,7 +1803,7 @@ export class CityView {
         const s = head === null ? NaN : head - METRO.carLen / 2 - i * (METRO.carLen + METRO.gap);
         if (!(s > -METRO.carLen / 2 && s < L + METRO.carLen / 2)) { g.visible = false; return; }
         const { p, h } = pathAt(tr.track.path, Math.max(0, Math.min(L, s)));
-        g.visible = true;
+        g.visible = !g.userData.hiddenByCabPov;
         g.position.set(p[0], tr.track.height, p[1]);
         g.rotation.y = -h + (g.userData.flip ? Math.PI : 0);
       });
@@ -1651,7 +1845,8 @@ export class CityView {
       }
       this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
     }
-    if (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles) return;
+    const povActive = this.pov.isActive();
+    if (!povActive && this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles) return;
     const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
     const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, e = mat.elements;
@@ -1662,16 +1857,19 @@ export class CityView {
       for (let i = 0; i < f.list.length; i++) {
         const v = f.list[i]!;
         placeVehicle(v, this.lanes[v.lane]!, mat);
-        const out = far > 0 && Math.hypot(e[12]! - c.x, e[14]! - c.z) > far;
+        const vx = e[12]!, vz = e[14]!;
+        const out = povActive
+          ? !this.pov.isPointVisibleInPov(vx, vz, 4, POV_CONFIG.CULL_VEHICLE_DIST)
+          : far > 0 && Math.hypot(vx - c.x, vz - c.z) > far;
         if (out) continue;
         for (const o of f.meshes) o.setMatrixAt(vis, mat);
         vis++;
         if (drawLines) {
           for (let j = 0; j < local.length; j += 3, k += 3) {
             const x = local[j]!, y = local[j + 1]!, z = local[j + 2]!;
-            arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + e[12]!;
+            arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + vx;
             arr[k + 1] = e[1]! * x + e[5]! * y + e[9]! * z + e[13]!;
-            arr[k + 2] = e[2]! * x + e[6]! * y + e[10]! * z + e[14]!;
+            arr[k + 2] = e[2]! * x + e[6]! * y + e[10]! * z + vz;
           }
         }
       }
@@ -1698,6 +1896,9 @@ export class CityView {
   private nearTile(t: TileState) {
     const m = this.mounted;
     if (!m) return true;
+    if (this.pov.isActive()) {
+      return this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
+    }
     const far = this.tileRange(), c = m.controls.target;
     return far <= 0 || Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
   }
@@ -1739,20 +1940,28 @@ export class CityView {
   private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
+    const povActive = this.pov.isActive();
     const q = this.snap.quality, far = q.viewDistance, tFar = this.tileRange(), c = m.controls.target;
     const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
     for (const t of this.tiles) {
+      if (povActive) {
+        const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
+        this.syncTileVisibility(t, vis);
+        continue;
+      }
       const inRange = near(t.tile.center, t.tile.radius, tFar);
       if (!inRange && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
       this.syncTileVisibility(t, true);
     }
-    const px = this.pxPerMetre(), showFurn = !(q.autoDetail && px < FAR.furniture);
+    const px = this.pxPerMetre(), showFurn = povActive || !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
     const maxBuild = initial ? 4 : this.interacting ? 0 : 2;
     for (const s of this.cells) {
-      const on = near(s.bucket.center, CELL_R);
+      const on = povActive
+        ? this.pov.isPointVisibleInPov(s.bucket.center[0], s.bucket.center[1], CELL_R, POV_CONFIG.CULL_FURN_DIST)
+        : near(s.bucket.center, CELL_R);
       if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
         this.ensureCell(s);
         built++;
@@ -1782,6 +1991,7 @@ export class CityView {
 
   // ---------- detail levels and tiles ----------
   private wantedDetail(): Detail {
+    if (this.pov.isActive()) return this.snap.quality.houseDetail;
     const m = this.mounted;
     const px = m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4;
     return detailFor(px, this.snap.quality);
@@ -1812,23 +2022,31 @@ export class CityView {
   private detailStep() {
     const m = this.mounted;
     if (!m) return;
-    const want = this.wantedDetail(), c = m.controls.target, waiting: TileState[] = [], unbuilt: TileState[] = [];
+    const povActive = this.pov.isActive();
+    const want = this.wantedDetail();
+    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
+    const waiting: { t: TileState; level: Detail }[] = [], unbuilt: TileState[] = [];
     for (const t of this.tiles) {
       if (!this.nearTile(t)) {
-        if (t.shown < 0) unbuilt.push(t);
+        if (povActive) {
+          this.syncTileVisibility(t, false);
+        } else if (t.shown < 0) {
+          unbuilt.push(t);
+        }
         continue;
       }
-      if (t.layers.has(want)) {
-        this.show(t, this.ensure(t, want));
+      const tileWant = povActive ? this.pov.tileDetailInPov(t.tile.center, want) : want;
+      if (t.layers.has(tileWant)) {
+        this.show(t, this.ensure(t, tileWant));
         this.syncTileVisibility(t, true);
       } else {
         if (t.shown < 0) this.show(t, this.ensure(t, 0));
         this.syncTileVisibility(t, true);
-        waiting.push(t);
+        waiting.push({ t, level: tileWant });
       }
     }
     if (unbuilt.length) {
-      unbuilt.sort((a, b) => dist2(a.tile.center, c) - dist2(b.tile.center, c));
+      unbuilt.sort((a, b) => dist2XZ(a.tile.center, focus) - dist2XZ(b.tile.center, focus));
       const l0Budget = this.interacting ? 3 : isMobileDevice() ? 5 : 8;
       for (let i = 0; i < Math.min(l0Budget, unbuilt.length); i++) {
         const t = unbuilt[i]!;
@@ -1838,10 +2056,11 @@ export class CityView {
     }
     const busy = this.interacting || performance.now() < this.interactCooldown;
     if (waiting.length && !busy) {
-      waiting.sort((a, b) => dist2(a.tile.center, c) - dist2(b.tile.center, c));
+      waiting.sort((a, b) => dist2XZ(a.t.tile.center, focus) - dist2XZ(b.t.tile.center, focus));
       const budget = want <= 1 ? 3 : 2;
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
-        this.show(waiting[i]!, this.ensure(waiting[i]!, want));
+        const item = waiting[i]!;
+        this.show(item.t, this.ensure(item.t, item.level));
       }
     }
     const pending = busy ? waiting.length : Math.max(0, waiting.length - (want <= 1 ? 3 : 2));
@@ -2043,10 +2262,13 @@ export class CityView {
     if (!m.composer) {
       const target = new THREE.WebGLRenderTarget(1, 1, { samples: this.snap.quality.msaa ? 4 : 0, type: THREE.HalfFloatType });
       m.composer = new EffectComposer(m.renderer, target);
-      m.composer.addPass(new RenderPass(m.scene, m.camera));
+      m.composer.addPass(new RenderPass(m.scene, this.activeCamera()));
       m.composer.addPass(m.bloom);
       m.composer.addPass(new OutputPass());
       m.composer.setSize(m.host.clientWidth, m.host.clientHeight);
+    } else {
+      const renderPass = m.composer.passes[0] as RenderPass | undefined;
+      if (renderPass) renderPass.camera = this.activeCamera();
     }
     m.bloom.enabled = true;
     m.bloom.strength = 0.45 * g;
@@ -2057,14 +2279,18 @@ export class CityView {
   // ---------- zoomed out: less of the small things (ADR-044, ADR-049) ----------
   private far = '';
 
-  private pxPerMetre() { const m = this.mounted; return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4; }
+  private pxPerMetre() {
+    if (this.pov.isActive()) return 10;
+    const m = this.mounted;
+    return m ? (m.host.clientHeight * m.camera.zoom) / FRUSTUM : 4;
+  }
 
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
-    const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase;
+    const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase && !this.pov.isActive();
     const f = !auto ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
-    const key = `${f}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
+    const key = `${f}|${this.snap.povMode}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
@@ -2119,6 +2345,7 @@ export class CityView {
 
   flyTo(p: [number, number], exitShowcase = true) {
     if (exitShowcase && this.snap.showcase) this.setShowcase(null);
+    if (this.pov.isActive()) this.setPovMode('map');
     const m = this.mounted;
     if (!m) return;
     this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], m.controls.target.y, p[1]), t0: performance.now() };
@@ -2126,13 +2353,13 @@ export class CityView {
 
   zoom(k: number) {
     const m = this.mounted;
-    if (!m) return;
+    if (!m || this.pov.isActive()) return;
     m.camera.zoom = Math.max(m.controls.minZoom, Math.min(m.controls.maxZoom, m.camera.zoom * k));
     m.camera.updateProjectionMatrix();
   }
 
   tilt(dir: 1 | -1) {
-    if (!this.mounted) return;
+    if (!this.mounted || this.pov.isActive()) return;
     if (this.snap.mode !== '3d') {
       this.update({ mode: '3d' });
       this.applyMode('3d', false);
@@ -2194,7 +2421,7 @@ export class CityView {
     if (this.activeShowcase?.shellGroup) {
       this.activeShowcase.shellGroup.visible = !(this.snap.seeThrough && m.camera.zoom >= SEE_THROUGH.SHOWCASE_MIN_ZOOM);
     }
-    if (!this.snap.seeThrough || this.snap.showcase) {
+    if (!this.snap.seeThrough || this.snap.showcase || this.pov.isActive()) {
       m.stationShellGroup.visible = true;
       this.clearAllTileCuts();
       return;
@@ -2425,3 +2652,5 @@ export class CityView {
 }
 
 const dist2 = (c: [number, number], v: THREE.Vector3) => (c[0] - v.x) ** 2 + (c[1] - v.z) ** 2;
+const dist2XZ = (c: [number, number], v: { x: number; z: number }) => (c[0] - v.x) ** 2 + (c[1] - v.z) ** 2;
+

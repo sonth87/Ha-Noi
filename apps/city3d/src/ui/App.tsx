@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { loadCity } from '@my-city/osm-import';
 import { CityView } from '@view/CityView';
-import { DEFAULT_AREA_ID } from '@view/constants';
-import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t } from '@view/i18n';
+import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
+import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t, type TranslationKey } from '@view/i18n';
 import { lightOn } from '@view/lights';
 import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
 import { isMobileDevice } from '@view/quality';
@@ -160,13 +160,31 @@ const IconGlobe = () => (
   </svg>
 );
 
+const IconPov = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="10" />
+    <circle cx="12" cy="12" r="3" />
+    <line x1="12" y1="2" x2="12" y2="9" />
+    <line x1="4.93" y1="19.07" x2="9.88" y2="14.12" />
+    <line x1="19.07" y1="19.07" x2="14.12" y2="14.12" />
+  </svg>
+);
+
+const POV_MODE_I18N: Record<PovMode, { label: TranslationKey; sub?: TranslationKey; tag: string }> = {
+  map: { label: 'pov.mode.map', tag: '3D' },
+  'metro-cab': { label: 'pov.mode.metro-cab', sub: 'pov.sub.metro-cab', tag: 'METRO' },
+  'metro-passenger': { label: 'pov.mode.metro-passenger', sub: 'pov.sub.metro-passenger', tag: 'METRO' },
+  'drive-cabin': { label: 'pov.mode.drive-cabin', sub: 'pov.sub.drive-cabin', tag: 'CAR' },
+  'drive-top': { label: 'pov.mode.drive-top', sub: 'pov.sub.drive-top', tag: 'CAR' },
+};
+
 export function App() {
   const v = view();
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
   const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState(() => !isMobileDevice());
-  const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | null>(null);
+  const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | 'pov' | null>(null);
   const [scSearch, setScSearch] = useState('');
   const [scCat, setScCat] = useState<string>('ALL');
   const [plSearch, setPlSearch] = useState('');
@@ -410,6 +428,53 @@ export function App() {
           )}
         </div>
 
+        {/* POV & Interactive Driving Picker */}
+        <div className="popover-wrap">
+          <button
+            type="button"
+            className="picker-trigger"
+            aria-expanded={openMenu === 'pov'}
+            aria-pressed={s.povMode !== 'map'}
+            title={t('pov.button.title', undefined, loc)}
+            onClick={() => setOpenMenu(m => (m === 'pov' ? null : 'pov'))}
+          >
+            <IconPov />
+            <span className="picker-label">
+              {s.povMode === 'map'
+                ? t('pov.button', undefined, loc)
+                : t(POV_MODE_I18N[s.povMode].label, undefined, loc)}
+            </span>
+            <kbd>P</kbd>
+            <IconChevronDown />
+          </button>
+          {openMenu === 'pov' && (
+            <div className="popover-panel" role="dialog" aria-label={t('pov.button', undefined, loc)}>
+              <div className="popover-list">
+                {POV_MODES.map(pm => {
+                  const meta = POV_MODE_I18N[pm];
+                  return (
+                    <button
+                      key={pm}
+                      type="button"
+                      className={`popover-item ${s.povMode === pm ? 'active' : ''}`}
+                      onClick={() => {
+                        v.setPovMode(pm);
+                        setOpenMenu(null);
+                      }}
+                    >
+                      <div className="popover-item-main">
+                        <b>{t(meta.label, undefined, loc)}</b>
+                        {meta.sub && <span>{t(meta.sub, undefined, loc)}</span>}
+                      </div>
+                      <em className="popover-tag">{meta.tag}</em>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
         <label className="pick" title={t('top.streetLabels.title', undefined, loc)}>
           <IconSignpost />
           <span className="pick-title">{t('top.streetLabels', undefined, loc)}</span>
@@ -523,29 +588,168 @@ export function App() {
               <span>{currentShowcase.subtitle}</span>
             </div>
           )}
-          <div className="cam-pad" role="group" aria-label={t('cam.aria', undefined, loc)}>
-            <button type="button" onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'} title={t('top.mode.title', undefined, loc)}>
-              {s.mode === '2d' ? '2D' : '3D'}
-            </button>
-            <button type="button" onClick={() => v.zoom(1.28)} title={t('cam.zoomIn', undefined, loc)} aria-label={t('cam.zoomIn', undefined, loc)}>
-              <IconPlus />
-            </button>
-            <button type="button" onClick={() => v.zoom(1 / 1.28)} title={t('cam.zoomOut', undefined, loc)} aria-label={t('cam.zoomOut', undefined, loc)}>
-              <IconMinus />
-            </button>
-            <button type="button" onClick={() => v.rotate(-1)} title={t('cam.rotLeft', undefined, loc)} aria-label={t('cam.rotLeft', undefined, loc)}>
-              <IconRotateCcw />
-            </button>
-            <button type="button" onClick={() => v.rotate(1)} title={t('cam.rotRight', undefined, loc)} aria-label={t('cam.rotRight', undefined, loc)}>
-              <IconRotateCw />
-            </button>
-            <button type="button" onClick={() => v.tilt(1)} title={t('cam.tiltUp', undefined, loc)} aria-label={t('cam.tiltUp', undefined, loc)}>
-              <IconChevronUp />
-            </button>
-            <button type="button" onClick={() => v.tilt(-1)} title={t('cam.tiltDown', undefined, loc)} aria-label={t('cam.tiltDown', undefined, loc)}>
-              <IconChevronDownPad />
-            </button>
-          </div>
+
+          {s.povMode !== 'map' && (
+            <div className="pov-hud" onPointerDown={e => e.stopPropagation()}>
+              <div className="pov-hud-top">
+                <div className="pov-speed">
+                  <strong>{s.povSpeedKmh}</strong>
+                  <span>km/h</span>
+                </div>
+                <div className="pov-meta">
+                  <b>{t(POV_MODE_I18N[s.povMode].label, undefined, loc)}</b>
+                  {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
+                    <span>
+                      {t(`pov.status.${s.povTrainPhase}` as TranslationKey, undefined, loc)}
+                    </span>
+                  )}
+                  {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
+                    <span>{t(POV_MODE_I18N[s.povMode].sub!, undefined, loc)}</span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="pov-exit-btn"
+                  onClick={() => v.setPovMode('map')}
+                >
+                  {t('pov.hud.exit', undefined, loc)}
+                </button>
+              </div>
+
+              <div className="pov-hud-modes">
+                {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
+                  <button
+                    key={pm}
+                    type="button"
+                    aria-pressed={s.povMode === pm}
+                    onClick={() => v.setPovMode(pm)}
+                  >
+                    {t(POV_MODE_I18N[pm].label, undefined, loc)}
+                  </button>
+                ))}
+              </div>
+
+              <div className="pov-hud-actions">
+                {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
+                  <button
+                    type="button"
+                    onClick={() => v.nextPovTrain()}
+                  >
+                    {t('pov.hud.nextTrain', { index: s.povTrainIndex + 1, total: s.povTrainTotal }, loc)}
+                  </button>
+                )}
+                {s.povMode === 'metro-passenger' && (
+                  <button
+                    type="button"
+                    onClick={() => v.togglePovWindowSide()}
+                  >
+                    {t('pov.hud.windowSide', undefined, loc)}
+                  </button>
+                )}
+                {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => v.toggleDriveCamera()}
+                    >
+                      {t('pov.hud.switchDriveCam', undefined, loc)}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => v.resetPovCar()}
+                    >
+                      {t('pov.hud.resetCar', undefined, loc)}
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => v.centerPovLook()}
+                >
+                  {t('pov.hud.centerLook', undefined, loc)}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
+            <div className="drive-touch-pad" onPointerDown={e => e.stopPropagation()}>
+              <div className="drive-steer-group">
+                <button
+                  type="button"
+                  className="drive-pad-btn"
+                  onPointerDown={() => { v.setDriveTouchControl('left', true); v.setDriveTouchControl('right', false); }}
+                  onPointerUp={() => v.setDriveTouchControl('left', false)}
+                  onPointerCancel={() => v.setDriveTouchControl('left', false)}
+                  onPointerLeave={() => v.setDriveTouchControl('left', false)}
+                  aria-label="Steer Left"
+                >
+                  ◄ A
+                </button>
+                <button
+                  type="button"
+                  className="drive-pad-btn"
+                  onPointerDown={() => { v.setDriveTouchControl('right', true); v.setDriveTouchControl('left', false); }}
+                  onPointerUp={() => v.setDriveTouchControl('right', false)}
+                  onPointerCancel={() => v.setDriveTouchControl('right', false)}
+                  onPointerLeave={() => v.setDriveTouchControl('right', false)}
+                  aria-label="Steer Right"
+                >
+                  D ►
+                </button>
+              </div>
+              <div className="drive-pedal-group">
+                <button
+                  type="button"
+                  className="drive-pad-btn brake"
+                  onPointerDown={() => { v.setDriveTouchControl('brake', true); v.setDriveTouchControl('throttle', false); }}
+                  onPointerUp={() => v.setDriveTouchControl('brake', false)}
+                  onPointerCancel={() => v.setDriveTouchControl('brake', false)}
+                  onPointerLeave={() => v.setDriveTouchControl('brake', false)}
+                  aria-label="Brake / Reverse"
+                >
+                  ▼ S
+                </button>
+                <button
+                  type="button"
+                  className="drive-pad-btn throttle"
+                  onPointerDown={() => { v.setDriveTouchControl('throttle', true); v.setDriveTouchControl('brake', false); }}
+                  onPointerUp={() => v.setDriveTouchControl('throttle', false)}
+                  onPointerCancel={() => v.setDriveTouchControl('throttle', false)}
+                  onPointerLeave={() => v.setDriveTouchControl('throttle', false)}
+                  aria-label="Throttle"
+                >
+                  ▲ W
+                </button>
+              </div>
+            </div>
+          )}
+
+          {s.povMode === 'map' && (
+            <div className="cam-pad" role="group" aria-label={t('cam.aria', undefined, loc)}>
+              <button type="button" onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'} title={t('top.mode.title', undefined, loc)}>
+                {s.mode === '2d' ? '2D' : '3D'}
+              </button>
+              <button type="button" onClick={() => v.zoom(1.28)} title={t('cam.zoomIn', undefined, loc)} aria-label={t('cam.zoomIn', undefined, loc)}>
+                <IconPlus />
+              </button>
+              <button type="button" onClick={() => v.zoom(1 / 1.28)} title={t('cam.zoomOut', undefined, loc)} aria-label={t('cam.zoomOut', undefined, loc)}>
+                <IconMinus />
+              </button>
+              <button type="button" onClick={() => v.rotate(-1)} title={t('cam.rotLeft', undefined, loc)} aria-label={t('cam.rotLeft', undefined, loc)}>
+                <IconRotateCcw />
+              </button>
+              <button type="button" onClick={() => v.rotate(1)} title={t('cam.rotRight', undefined, loc)} aria-label={t('cam.rotRight', undefined, loc)}>
+                <IconRotateCw />
+              </button>
+              <button type="button" onClick={() => v.tilt(1)} title={t('cam.tiltUp', undefined, loc)} aria-label={t('cam.tiltUp', undefined, loc)}>
+                <IconChevronUp />
+              </button>
+              <button type="button" onClick={() => v.tilt(-1)} title={t('cam.tiltDown', undefined, loc)} aria-label={t('cam.tiltDown', undefined, loc)}>
+                <IconChevronDownPad />
+              </button>
+            </div>
+          )}
         </div>
         {panel && (
           <aside className="panel">
@@ -569,12 +773,18 @@ export function App() {
         )}
       </main>
       <footer>
-        <span className="hint">{t(s.mode === '3d' ? 'footer.hint.3d' : 'footer.hint.2d', undefined, loc)}</span>
+        <span className="hint">
+          {s.povMode === 'metro-cab' || s.povMode === 'metro-passenger'
+            ? t('pov.hint.metro', undefined, loc)
+            : s.povMode === 'drive-cabin' || s.povMode === 'drive-top'
+              ? t('pov.hint.drive', undefined, loc)
+              : t(s.mode === '3d' ? 'footer.hint.3d' : 'footer.hint.2d', undefined, loc)}
+        </span>
         <span className="read">
           {currentShowcase
             ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
             : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
-          · {s.mode} · {t('footer.angle', undefined, loc)} {s.mode === '2d' ? s.view : `${s.heading}°`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
+          · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode} · ${t('footer.angle', undefined, loc)} ${s.mode === '2d' ? s.view : `${s.heading}°`}`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
           {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
           {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
           {!currentShowcase

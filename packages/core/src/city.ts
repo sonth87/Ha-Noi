@@ -157,11 +157,40 @@ export interface CityPlace {
   at: [number, number];
 }
 
+/**
+ * Regional/country vernacular architecture profile (distinct from visual/structural Theme).
+ * Controls how generic residential/commercial buildings are procedurally synthesized for a country/region:
+ * - 'vn-tube-shophouse': Vietnamese tube houses (nhà ống), corrugated roofs, cantilevered balconies, Soviet-era tập thể blocks.
+ * - 'jp-machiya-lowrise': Japanese compact urban blocks, corner-cut lots (sumikiri), vertical signboards, pitched kawara roofs.
+ * - 'eu-perimeter-mansard': European courtyard perimeter blocks, mansard roofs with dormers/chimneys, wrought-iron balconies.
+ * - 'us-brownstone-row': North American brownstone rowhouses with front stoops, brick parapets, and exterior fire escapes.
+ */
+export type VernacularProfileId =
+  | 'vn-tube-shophouse'
+  | 'jp-machiya-lowrise'
+  | 'eu-perimeter-mansard'
+  | 'us-brownstone-row'
+  | (string & {});
+
+/**
+ * Visual and structural city theme (independent of country/region).
+ * Controls material palettes, line/edge weights, facade/roof ornament density, and lighting mood.
+ */
+export type CityStyleThemeId =
+  | 'iso-glow'
+  | 'cyberpunk-neon'
+  | 'retro-heritage'
+  | 'blueprint-wire'
+  | 'clay-maquette'
+  | (string & {});
+
 export interface City {
   id: string;
   name: string;
   /** default city/metropolis name for fallback addresses (e.g. 'Hà Nội') */
   cityName?: string;
+  /** regional vernacular architecture profile for procedural buildings in this city (defaults to 'vn-tube-shophouse') */
+  vernacularProfile?: VernacularProfileId;
   /** the part of the world the model covers: the box round it, and the rectangles it is made of */
   bounds: { x0: number; y0: number; x1: number; y1: number };
   region: { x0: number; y0: number; x1: number; y1: number }[];

@@ -97,7 +97,12 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - Gỡ trang thử 3D khỏi app SVG khi `city3d` thay được (ADR-033)
 - Giữ vòng trong (sân trong) của multipolygon thay vì bỏ
 - Làm sạch mặt bằng nhà nhỏ chồng / hở nhau (R5)
-- Tách dữ liệu OSM khỏi bundle chính (tải sau) nếu trang mở chậm
+- Tách dữ liệu OSM khỏi bundle chính (tải sau) nếu trang mở chậm (`loadAreaAsync` / `loadCityAsync` đã sẵn sàng — ADR-052)
+- Góc nhìn nhập vai phối cảnh (`povCamera`: Lái tàu Metro, Ngồi tàu Metro, Tự lái ô tô Cabin & Trên cao) kèm Frustum-Cone Culling & Distance LOD (đã hoàn thành — ADR-053)
+- **Lộ trình mở rộng (ADR-053)**:
+  1. **Xe buýt 2 tầng tham quan tự hành (`tour-bus`)**: Ngồi trên tầng 2 mui trần chạy tự động theo tuyến vòng quanh thành phố, ngắm toàn cảnh 360° (triển khai khi mở rộng thêm bản đồ).
+  2. **Hệ thống Theme phong cách & kết cấu đô thị (`CityStyleThemeId`)**: Thay đổi không chỉ màu sắc mà cả phong cách thị giác, shader kết cấu bề mặt tòa nhà và kiểu nét vẽ (`iso-glow`, `cyberpunk-neon`, `retro-heritage`, `blueprint-wire`, `clay-maquette`).
+  3. **Kiến trúc bản địa đặc thù theo quốc gia / vùng miền (`VernacularProfileId`)**: Tách biệt hoàn toàn với Theme — khi mở rộng sang các thành phố ở quốc gia khác, các nhà cơ bản và tòa nhà tự động mang hình thái kiến trúc đặc trưng của đất nước đó (`vn-tube-shophouse`, `jp-machiya-lowrise`, `eu-perimeter-mansard`, `us-brownstone-row`).
 - Chữ trên biển hiệu, giấy dán, quảng cáo sơn tường (cần texture chữ)
 - Dựng ô ở lúc rảnh (requestIdleCallback) để bớt khựng khi nâng chi tiết
 - Xe rẽ ở nút giao (hiện chỉ đi thẳng theo lộ trình); xe ở ngõ
