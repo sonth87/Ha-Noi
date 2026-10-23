@@ -107,6 +107,8 @@ export interface Snapshot {
   povTrainPhase: TrainPhase;
   /** passenger window side (1 = right, -1 = left) */
   povWindowSide: 1 | -1;
+  /** current street or metro station name for POV HUD / mini-map */
+  povLocationName: string;
 }
 
 interface TileState {
@@ -144,6 +146,7 @@ interface Train {
 export class CityView {
   readonly base: Layer;
   readonly stationShell: Layer;
+  readonly railTracks: Layer;
   readonly tiles: TileState[];
   private readonly landmarkTileSet = new Set<TileState>();
   private readonly bldgBounds: BldgBounds[];
@@ -156,6 +159,7 @@ export class CityView {
   placeCatalog: PlaceCatalog;
   readonly sdk: CitySDK;
   private readonly pov: PovController;
+  private miniMapCanvas: HTMLCanvasElement | null = null;
   private readonly events = new CityEventBus();
   private readonly extensions = new Map<string, { ext: CityExtension; cleanup?: () => void }>();
   private readonly popupActions = new Map<string, PopupActionDescriptor>();
@@ -202,6 +206,7 @@ export class CityView {
     scene: THREE.Scene;
     mapGroup: THREE.Group;
     stationShellGroup: THREE.Group;
+    railTrackGroup: THREE.Group;
     showcaseGroup: THREE.Group;
     extensionGroup: THREE.Group;
     camera: THREE.OrthographicCamera;
@@ -255,10 +260,13 @@ export class CityView {
   constructor(readonly city: City) {
     this.frame = frameForCity(city.id);
     const stationShellB = new Batch();
-    this.base = buildBase(city, stationShellB);
+    const railTracksB = new Batch();
+    this.base = buildBase(city, stationShellB, railTracksB);
     this.stationShell = layerOf(stationShellB, true, city);
+    this.railTracks = layerOf(railTracksB, true, city);
     this.layers.add(this.base);
     this.layers.add(this.stationShell);
+    this.layers.add(this.railTracks);
     this.floors = cityFloors(city);
     this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null }));
     for (const t of this.tiles) {
@@ -334,7 +342,7 @@ export class CityView {
       mode: initMode, view: initView, heading: Math.round(initHeading), theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
       showcase: validShowcase, streetLabels, placeInfo, seeThrough: initUrl?.seeThrough ?? true, locale: initLocale,
-      povMode: 'map', povSpeedKmh: 0, povTrainIndex: 1, povTrainTotal: Math.max(1, totalTrains), povTrainPhase: 'run', povWindowSide: 1,
+      povMode: 'map', povSpeedKmh: 0, povTrainIndex: 1, povTrainTotal: Math.max(1, totalTrains), povTrainPhase: 'run', povWindowSide: 1, povLocationName: '',
     };
 
     this.sdk = this.createSDK();
@@ -486,7 +494,9 @@ export class CityView {
 
     const baseGroup = this.group(this.base, true);
     const stationShellGroup = this.group(this.stationShell, false);
-    mapGroup.add(baseGroup, stationShellGroup);
+    const railTrackGroup = this.group(this.railTracks, false);
+    railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
+    mapGroup.add(baseGroup, stationShellGroup, railTrackGroup);
     for (const t of this.tiles) {
       for (const v of t.layers.values()) v.group = null;
       t.shown = -1;
@@ -770,12 +780,16 @@ export class CityView {
         this.trafficStep(dt);
         if (povActive) {
           const tel = this.pov.step(dt, this.sim.t, this.trains, this.nightOn('beam'));
+          if (this.miniMapCanvas) {
+            this.pov.drawMiniMap(this.miniMapCanvas, this.trains, this.sim.t);
+          }
           if (
             now - lastPovTelSync > 120 &&
             (tel.speedKmh !== this.snap.povSpeedKmh ||
               tel.trainIndex !== this.snap.povTrainIndex ||
               tel.trainPhase !== this.snap.povTrainPhase ||
-              tel.windowSide !== this.snap.povWindowSide)
+              tel.windowSide !== this.snap.povWindowSide ||
+              tel.locationName !== this.snap.povLocationName)
           ) {
             lastPovTelSync = now;
             this.update({
@@ -784,6 +798,7 @@ export class CityView {
               povTrainTotal: tel.trainTotal,
               povTrainPhase: tel.trainPhase,
               povWindowSide: tel.windowSide,
+              povLocationName: tel.locationName,
             });
           }
         }
@@ -853,7 +868,7 @@ export class CityView {
     window.addEventListener('hashchange', onPopState);
 
     this.mounted = {
-      host, renderer, scene, mapGroup, stationShellGroup, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, stationShellGroup, railTrackGroup, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         window.removeEventListener('popstate', onPopState);
@@ -956,6 +971,25 @@ export class CityView {
     return this.pov.isActive() ? this.pov.camera : this.mounted!.camera;
   }
 
+  setMiniMapCanvas(canvas: HTMLCanvasElement | null) {
+    this.miniMapCanvas = canvas;
+    if (canvas && this.pov.isActive()) {
+      this.pov.drawMiniMap(canvas, this.trains, this.sim.t);
+    }
+  }
+
+  /** Immediately build L1 for any unbuilt tiles visible from the POV camera so the city is never empty */
+  private ensurePovVisibleTiles() {
+    if (!this.mounted || !this.pov.isActive()) return;
+    for (const t of this.tiles) {
+      const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
+      if (vis && t.shown < 1) {
+        this.show(t, this.ensure(t, 1));
+      }
+      this.syncTileVisibility(t, vis);
+    }
+  }
+
   setMode(mode: Mode) {
     if (this.pov.isActive()) this.setPovMode('map');
     this.update({ mode });
@@ -974,14 +1008,17 @@ export class CityView {
     this.held.clear();
     const m = this.mounted;
     const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: this.savedCam.x, z: this.savedCam.z };
-    this.pov.setMode(povMode, this.trains, mapTarget);
+    this.pov.setMode(povMode, this.trains, mapTarget, this.sim.t);
     if (m) {
       m.controls.enabled = !this.pov.isActive();
+      m.railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
       if (povMode === 'map') {
         for (const t of this.tiles) this.syncTileVisibility(t, true);
       } else {
         this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
+        this.ensurePovVisibleTiles();
       }
+      this.syncForegroundCut();
       this.applyBloom();
       this.zoomFade(true);
       this.detailStep();
@@ -995,6 +1032,7 @@ export class CityView {
       povTrainTotal: tel.trainTotal,
       povTrainPhase: tel.trainPhase,
       povWindowSide: tel.windowSide,
+      povLocationName: tel.locationName,
     });
     this.streetLabelsStep(true);
     this.placeInfoStep(true);
@@ -1010,7 +1048,14 @@ export class CityView {
   nextPovTrain() {
     this.pov.nextTrain(this.trains);
     const tel = this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
-    this.update({ povTrainIndex: tel.trainIndex, povTrainTotal: tel.trainTotal, povTrainPhase: tel.trainPhase });
+    this.ensurePovVisibleTiles();
+    this.syncForegroundCut();
+    this.update({
+      povTrainIndex: tel.trainIndex,
+      povTrainTotal: tel.trainTotal,
+      povTrainPhase: tel.trainPhase,
+      povLocationName: tel.locationName,
+    });
   }
 
   togglePovWindowSide() {
@@ -1032,6 +1077,9 @@ export class CityView {
     const m = this.mounted;
     const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: 0, z: 0 };
     this.pov.resetCarNear(mapTarget.x, mapTarget.z);
+    const tel = this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
+    this.ensurePovVisibleTiles();
+    this.update({ povLocationName: tel.locationName, povSpeedKmh: 0 });
   }
 
   centerPovLook() {
@@ -1244,7 +1292,8 @@ export class CityView {
     const m = this.mounted, layer = this.labelLayer;
     if (!m || !layer) return;
     const mode = this.snap.streetLabels;
-    if (this.snap.showcase || mode === 'off') {
+    const povActive = this.pov.isActive();
+    if (this.snap.showcase || mode === 'off' || povActive) {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -1257,8 +1306,7 @@ export class CityView {
 
     const w = m.host.clientWidth, h = m.host.clientHeight;
     const activeCam = this.activeCamera();
-    const povActive = this.pov.isActive();
-    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
+    const focus = m.controls.target;
     const cp = activeCam.position;
     const sig = `${mode}|${this.snap.povMode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}`;
     if (!force && sig === this.labelSig) return;
@@ -1284,7 +1332,7 @@ export class CityView {
     };
 
     const now = performance.now();
-    if ((this.interacting || povActive) && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
+    if (this.interacting && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
       for (const [key, item] of this.labelItems) {
         const node = this.labelNodes.get(key);
         if (!node) continue;
@@ -1306,7 +1354,7 @@ export class CityView {
     const visible = selectVisibleStreetLabels(
       this.streetCatalog,
       mode,
-      povActive ? 7.5 : this.pxPerMetre(),
+      this.pxPerMetre(),
       w,
       h,
       [focus.x, focus.z],
@@ -1362,7 +1410,7 @@ export class CityView {
       };
     };
 
-    if (popupEl && this.activePopup && !this.snap.showcase) {
+    if (popupEl && this.activePopup && !this.snap.showcase && !povActive) {
       const entry = this.activePopup.entry;
       const scr = project([entry.world[0], entry.world[1], entry.world[2] + 2.5]);
       if (w <= 640) {
@@ -1376,7 +1424,7 @@ export class CityView {
       }
     }
 
-    if (this.snap.showcase || mode === 'off') {
+    if (this.snap.showcase || mode === 'off' || povActive) {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -1803,7 +1851,7 @@ export class CityView {
         const s = head === null ? NaN : head - METRO.carLen / 2 - i * (METRO.carLen + METRO.gap);
         if (!(s > -METRO.carLen / 2 && s < L + METRO.carLen / 2)) { g.visible = false; return; }
         const { p, h } = pathAt(tr.track.path, Math.max(0, Math.min(L, s)));
-        g.visible = !g.userData.hiddenByCabPov;
+        g.visible = !g.userData.hiddenByPov;
         g.position.set(p[0], tr.track.height, p[1]);
         g.rotation.y = -h + (g.userData.flip ? Math.PI : 0);
       });
@@ -1957,7 +2005,7 @@ export class CityView {
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
-    const maxBuild = initial ? 4 : this.interacting ? 0 : 2;
+    const maxBuild = initial || povActive ? 10 : this.interacting ? 0 : 2;
     for (const s of this.cells) {
       const on = povActive
         ? this.pov.isPointVisibleInPov(s.bucket.center[0], s.bucket.center[1], CELL_R, POV_CONFIG.CULL_FURN_DIST)
@@ -2040,7 +2088,7 @@ export class CityView {
         this.show(t, this.ensure(t, tileWant));
         this.syncTileVisibility(t, true);
       } else {
-        if (t.shown < 0) this.show(t, this.ensure(t, 0));
+        if (t.shown < 0) this.show(t, this.ensure(t, povActive ? 1 : 0));
         this.syncTileVisibility(t, true);
         waiting.push({ t, level: tileWant });
       }
@@ -2054,16 +2102,16 @@ export class CityView {
         this.syncTileVisibility(t, true);
       }
     }
-    const busy = this.interacting || performance.now() < this.interactCooldown;
+    const busy = !povActive && (this.interacting || performance.now() < this.interactCooldown);
     if (waiting.length && !busy) {
       waiting.sort((a, b) => dist2XZ(a.t.tile.center, focus) - dist2XZ(b.t.tile.center, focus));
-      const budget = want <= 1 ? 3 : 2;
+      const budget = povActive ? 4 : want <= 1 ? 3 : 2;
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
         const item = waiting[i]!;
         this.show(item.t, this.ensure(item.t, item.level));
       }
     }
-    const pending = busy ? waiting.length : Math.max(0, waiting.length - (want <= 1 ? 3 : 2));
+    const pending = busy ? waiting.length : Math.max(0, waiting.length - (povActive ? 4 : want <= 1 ? 3 : 2));
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
   }
 
@@ -2072,6 +2120,7 @@ export class CityView {
     const s = { ...this.base.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
     if (this.mounted?.stationShellGroup.visible !== false) add(this.stationShell);
+    if (this.mounted?.railTrackGroup.visible) add(this.railTracks);
     for (const t of this.tiles) {
       if (t.cutKey && t.cutLayer && t.cutGroup?.visible) {
         add(t.cutLayer);
@@ -2223,6 +2272,7 @@ export class CityView {
       m.composer.dispose();
       m.composer = null;
     }
+    m.railTrackGroup.visible = q.houseDetail >= 3 || this.pov.isActive();
     this.tiers(m.scene);
     this.nightThings();
     this.resolution();
@@ -2421,7 +2471,12 @@ export class CityView {
     if (this.activeShowcase?.shellGroup) {
       this.activeShowcase.shellGroup.visible = !(this.snap.seeThrough && m.camera.zoom >= SEE_THROUGH.SHOWCASE_MIN_ZOOM);
     }
-    if (!this.snap.seeThrough || this.snap.showcase || this.pov.isActive()) {
+    if (this.pov.isActive()) {
+      m.stationShellGroup.visible = !(this.snap.seeThrough && this.pov.isMetro() && this.pov.isNearStation(85));
+      this.clearAllTileCuts();
+      return;
+    }
+    if (!this.snap.seeThrough || this.snap.showcase) {
       m.stationShellGroup.visible = true;
       this.clearAllTileCuts();
       return;

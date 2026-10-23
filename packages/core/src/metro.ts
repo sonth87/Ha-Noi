@@ -38,7 +38,7 @@ export type TrainPhase = 'away' | 'run' | 'brake' | 'stop' | 'pull';
 
 /** the elevated metro rails of a city as tracks with their stops and timetables */
 export function metroTracks(city: City): Track[] {
-  return city.rails.filter(r => r.kind === 'metro').map(r => track(r, city)).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return city.rails.filter(r => r.kind === 'metro' && r.elevated).map(r => track(r, city)).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
 
 function track(r: Rail, city: City): Track {

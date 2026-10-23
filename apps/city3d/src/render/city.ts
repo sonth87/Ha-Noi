@@ -42,13 +42,13 @@ export interface Tile {
 
 export const TILE = 64;
 
-export function buildBase(city: City, shellB?: Batch): Layer {
+export function buildBase(city: City, shellB?: Batch, railB?: Batch): Layer {
   const B = new Batch();
   buildGround(B, city);
   buildAreas(B, city);
   buildStreets(B, city);
   buildForecourts(B, city);
-  buildMetro(B, city, shellB ?? B);
+  buildMetro(B, city, shellB ?? B, railB);
   return layerOf(B, true, city);
 }
 
@@ -80,7 +80,7 @@ export function buildCityGeometry(city: City, level: Detail = 1): Layer & { floo
   buildAreas(B, city);
   buildStreets(B, city);
   buildForecourts(B, city);
-  buildMetro(B, city);
+  buildMetro(B, city, B, level >= 3 ? B : undefined);
   buildBuildings(B, city, city.buildings, level);
   return { ...layerOf(B, true, city), floors: cityFloors(city), beacons: beaconsOf(city) };
 }

@@ -31,7 +31,7 @@ function pairOf(rail: Rail, rails: Rail[]): Rail | undefined {
   return rails.find(o => o !== rail && o.kind === rail.kind && o.elevated && rail.path.some(p => nearest(o.path, p).d < 8));
 }
 
-export function buildMetro(B: Batch, city: City, shellB: Batch = B) {
+export function buildMetro(B: Batch, city: City, shellB: Batch = B, railB?: Batch) {
   const rails = city.rails.filter(r => r.kind === 'metro' && r.elevated);
   const stations = city.stations.filter(s => s.kind === 'metro');
   const inStation = (p: Vec2) => stations.some(s => dist(s.at, p) < stationLength(s) / 2 + 8);
@@ -47,10 +47,44 @@ export function buildMetro(B: Batch, city: City, shellB: Batch = B) {
     // the parapet / noise barrier on the outer edge, 1.05 m high with top rail
     B.solid(strip(S, side * 2.02, side * 2.26), h - 0.22, h + 0.92, () => 'wall', 'roof');
     B.flatSolid(strip(S, side * 1.98, side * 2.3), h + 0.92, h + 1.06, 'metal');
-    // the rails, standard gauge
+    // Base lightweight rail guide lines (always present even in Low/Medium quality)
     for (const g of [-0.72, 0.72]) {
       const line = offset(S, g);
       for (let i = 1; i < line.length; i++) B.line(V(line[i - 1]![0], line[i - 1]![1], h), V(line[i]![0], line[i]![1], h), 'detail');
+    }
+
+    // Full 3D railway track assembly (05-metro.js lines 77-83): visible in High/Ultra detail and all POV modes
+    if (railB) {
+      // 1. Dark recessed track bed (`face recess` -> 'road' surface)
+      railB.solid(strip(S, -1.26, 1.26), h - 0.22, h - 0.14, () => 'road', 'road');
+      // 2. Inner cable trough / third-rail conduit along the inner edge of the deck
+      const troughMid = -side * 1.62;
+      railB.solid(strip(S, troughMid - 0.16, troughMid + 0.16), h - 0.22, h - 0.04, () => 'metal', 'roof');
+      // 3. Transverse concrete sleepers (tà vẹt) & sleeper slits every 1.1 m along the track bed
+      const trackLen = polylineLength(r.path);
+      for (let s = 0.6; s < trackLen; s += 1.1) {
+        const { p: sp, h: sh } = at(r.path, s);
+        const ux = Math.cos(sh), uy = Math.sin(sh), vx = -uy, vy = ux;
+        const hw = 1.08, hl = 0.13;
+        const p0: Vec2 = [sp[0] - ux * hl - vx * hw, sp[1] - uy * hl - vy * hw];
+        const p1: Vec2 = [sp[0] + ux * hl - vx * hw, sp[1] + uy * hl - vy * hw];
+        const p2: Vec2 = [sp[0] + ux * hl + vx * hw, sp[1] + uy * hl + vy * hw];
+        const p3: Vec2 = [sp[0] - ux * hl + vx * hw, sp[1] - uy * hl + vy * hw];
+        railB.flatSolid([p0, p1, p2, p3], h - 0.14, h - 0.07, 'wall');
+        railB.line(
+          V(sp[0] - vx * hw, sp[1] - vy * hw, h - 0.065),
+          V(sp[0] + vx * hw, sp[1] + vy * hw, h - 0.065),
+          'crease',
+        );
+      }
+      // 4. Twin raised 3D steel rails (`.rail` at standard gauge ±0.72 m) with crisp crease edges
+      for (const g of [-0.72, 0.72]) {
+        railB.solid(strip(S, g - 0.09, g + 0.09), h - 0.09, h + 0.05, () => 'metal', 'metal');
+        const line = offset(S, g);
+        for (let i = 1; i < line.length; i++) {
+          railB.line(V(line[i - 1]![0], line[i - 1]![1], h + 0.055), V(line[i]![0], line[i]![1], h + 0.055), 'crease');
+        }
+      }
     }
     // piers between the pair (drawn once: from the rail with the smaller id), none in a station
     if (other && r.id < other.id) {

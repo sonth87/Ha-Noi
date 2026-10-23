@@ -421,7 +421,14 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
         }
       }
       const fullPath = cur.map(id => xy.get(id)).filter((p): p is Vec2 => !!p);
-      stitched.push({ id: `rl${seed.w.id}`, name: seed.t.name, path: fullPath, source: src('way', seed.w.id) });
+      const clipped = clipPathTo(fullPath, inside);
+      const bestPiece =
+        clipped.length > 0
+          ? clipped.reduce((a, b) => (polylineLength(b) > polylineLength(a) ? b : a))
+          : fullPath;
+      if (bestPiece.length >= 2) {
+        stitched.push({ id: `rl${seed.w.id}`, name: seed.t.name, path: bestPiece, source: src('way', seed.w.id) });
+      }
     }
     // Ensure paired parallel tracks on the same metro line run in opposite directions (outbound vs inbound)
     const seenLineDir = new Map<string, Vec2>();

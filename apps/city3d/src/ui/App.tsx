@@ -590,86 +590,102 @@ export function App() {
           )}
 
           {s.povMode !== 'map' && (
-            <div className="pov-hud" onPointerDown={e => e.stopPropagation()}>
-              <div className="pov-hud-top">
-                <div className="pov-speed">
-                  <strong>{s.povSpeedKmh}</strong>
-                  <span>km/h</span>
+            <>
+              <div className="pov-hud" onPointerDown={e => e.stopPropagation()}>
+                <div className="pov-hud-top">
+                  <div className="pov-speed">
+                    <strong>{s.povSpeedKmh}</strong>
+                    <span>km/h</span>
+                  </div>
+                  <div className="pov-meta">
+                    <b>{t(POV_MODE_I18N[s.povMode].label, undefined, loc)}</b>
+                    {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
+                      <span>
+                        {t(`pov.status.${s.povTrainPhase}` as TranslationKey, undefined, loc)}
+                        {s.povLocationName ? ` · ${s.povLocationName}` : ''}
+                      </span>
+                    )}
+                    {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
+                      <span>
+                        {s.povLocationName ? `${s.povLocationName} · ` : ''}
+                        {t(POV_MODE_I18N[s.povMode].sub!, undefined, loc)}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="pov-exit-btn"
+                    onClick={() => v.setPovMode('map')}
+                  >
+                    {t('pov.hud.exit', undefined, loc)}
+                  </button>
                 </div>
-                <div className="pov-meta">
-                  <b>{t(POV_MODE_I18N[s.povMode].label, undefined, loc)}</b>
+
+                <div className="pov-hud-modes">
+                  {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
+                    <button
+                      key={pm}
+                      type="button"
+                      aria-pressed={s.povMode === pm}
+                      onClick={() => v.setPovMode(pm)}
+                    >
+                      {t(POV_MODE_I18N[pm].label, undefined, loc)}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pov-hud-actions">
                   {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
-                    <span>
-                      {t(`pov.status.${s.povTrainPhase}` as TranslationKey, undefined, loc)}
-                    </span>
+                    <button
+                      type="button"
+                      onClick={() => v.nextPovTrain()}
+                    >
+                      {t('pov.hud.nextTrain', { index: s.povTrainIndex + 1, total: s.povTrainTotal }, loc)}
+                    </button>
+                  )}
+                  {s.povMode === 'metro-passenger' && (
+                    <button
+                      type="button"
+                      onClick={() => v.togglePovWindowSide()}
+                    >
+                      {t('pov.hud.windowSide', undefined, loc)}
+                    </button>
                   )}
                   {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
-                    <span>{t(POV_MODE_I18N[s.povMode].sub!, undefined, loc)}</span>
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => v.toggleDriveCamera()}
+                      >
+                        {t('pov.hud.switchDriveCam', undefined, loc)}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => v.resetPovCar()}
+                      >
+                        {t('pov.hud.resetCar', undefined, loc)}
+                      </button>
+                    </>
                   )}
+                  <button
+                    type="button"
+                    onClick={() => v.centerPovLook()}
+                  >
+                    {t('pov.hud.centerLook', undefined, loc)}
+                  </button>
                 </div>
-                <button
-                  type="button"
-                  className="pov-exit-btn"
-                  onClick={() => v.setPovMode('map')}
-                >
-                  {t('pov.hud.exit', undefined, loc)}
-                </button>
               </div>
 
-              <div className="pov-hud-modes">
-                {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
-                  <button
-                    key={pm}
-                    type="button"
-                    aria-pressed={s.povMode === pm}
-                    onClick={() => v.setPovMode(pm)}
-                  >
-                    {t(POV_MODE_I18N[pm].label, undefined, loc)}
-                  </button>
-                ))}
+              <div className="pov-minimap-wrap" onPointerDown={e => e.stopPropagation()}>
+                <canvas
+                  ref={el => v.setMiniMapCanvas(el)}
+                  className="pov-minimap-canvas"
+                />
+                {s.povLocationName && (
+                  <div className="pov-minimap-label">{s.povLocationName}</div>
+                )}
               </div>
-
-              <div className="pov-hud-actions">
-                {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
-                  <button
-                    type="button"
-                    onClick={() => v.nextPovTrain()}
-                  >
-                    {t('pov.hud.nextTrain', { index: s.povTrainIndex + 1, total: s.povTrainTotal }, loc)}
-                  </button>
-                )}
-                {s.povMode === 'metro-passenger' && (
-                  <button
-                    type="button"
-                    onClick={() => v.togglePovWindowSide()}
-                  >
-                    {t('pov.hud.windowSide', undefined, loc)}
-                  </button>
-                )}
-                {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => v.toggleDriveCamera()}
-                    >
-                      {t('pov.hud.switchDriveCam', undefined, loc)}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => v.resetPovCar()}
-                    >
-                      {t('pov.hud.resetCar', undefined, loc)}
-                    </button>
-                  </>
-                )}
-                <button
-                  type="button"
-                  onClick={() => v.centerPovLook()}
-                >
-                  {t('pov.hud.centerLook', undefined, loc)}
-                </button>
-              </div>
-            </div>
+            </>
           )}
 
           {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (

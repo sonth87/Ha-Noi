@@ -154,6 +154,11 @@ main { flex:1; display:flex; min-height:0; }
 .pov-hud-actions { display:flex; flex-wrap:wrap; gap:5px; }
 .pov-hud-actions button { flex:1 1 auto; padding:4px 8px; font-size:10.5px; text-transform:none; letter-spacing:.02em; text-align:center; }
 
+/* Circular Mini-Map HUD for POV & Car Driving */
+.pov-minimap-wrap { position:absolute; top:12px; right:12px; z-index:16; display:flex; flex-direction:column; align-items:center; gap:6px; pointer-events:auto; }
+.pov-minimap-canvas { width:148px; height:148px; border-radius:50%; background:color-mix(in srgb, var(--panel) 94%, transparent); box-shadow:0 6px 22px color-mix(in srgb, var(--bg) 80%, transparent); display:block; }
+.pov-minimap-label { max-width:164px; padding:3px 9px; font-size:10.5px; font-weight:600; color:var(--ink-hi); background:color-mix(in srgb, var(--panel) 92%, transparent); border:1px solid var(--accent); border-radius:999px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-transform:none; letter-spacing:.02em; box-shadow:0 3px 12px color-mix(in srgb, var(--bg) 70%, transparent); }
+
 /* On-screen Touch & Mouse Steering / Pedals for Car Driving */
 .drive-touch-pad { position:absolute; left:14px; right:14px; bottom:14px; z-index:16; display:flex; align-items:flex-end; justify-content:space-between; pointer-events:none; }
 .drive-steer-group, .drive-pedal-group { display:flex; gap:8px; pointer-events:auto; background:color-mix(in srgb, var(--panel) 88%, transparent); padding:6px; border:1px solid var(--edge); border-radius:8px; box-shadow:0 4px 14px color-mix(in srgb, var(--bg) 65%, transparent); }
@@ -198,6 +203,9 @@ footer .read { color:var(--ink-hi); margin-left:auto; }
   .cam-pad button { width:36px; height:34px; font-size:12px; }
   .pov-hud { left:8px; right:8px; top:8px; width:auto; max-width:none; padding:8px 10px; }
   .pov-hud-modes { grid-template-columns:repeat(2, 1fr); }
+  .pov-minimap-wrap { top:auto; bottom:68px; right:8px; }
+  .pov-minimap-canvas { width:108px; height:108px; }
+  .pov-minimap-label { max-width:124px; font-size:9.5px; }
   .drive-touch-pad { left:8px; right:8px; bottom:10px; }
   .drive-pad-btn { min-width:54px; height:48px; }
   .place-label-card { max-width:190px; padding:4px 7px 5px; }
