@@ -56,7 +56,19 @@ const src = (type: string, id: number) => `osm:${type}/${id}`;
 const MAIN = new Set(['primary', 'secondary', 'tertiary']);
 const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
-export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: string): { city: City; report: ImportReport } {
+export interface ImportOptions {
+  /** Pre-imported arterial streets from the city skeleton so chunk buildings orient to main roads */
+  extraStreets?: readonly Street[];
+  /** When true, skip overrides.add so synthetic buildings/features are not duplicated per chunk */
+  isChunk?: boolean;
+}
+
+export function importArea(
+  data: OsmExtract,
+  cfg: AreaConfig,
+  attribution: string,
+  options?: ImportOptions,
+): { city: City; report: ImportReport } {
   const P = projector(cfg.frame), region = cfg.region, inside = (p: Vec2) => inRegion(p, region);
   const R: Rect = { x0: Math.min(...region.map(r => r.x0)), y0: Math.min(...region.map(r => r.y0)), x1: Math.max(...region.map(r => r.x1)), y1: Math.max(...region.map(r => r.y1)) };
   const nodes = new Map<number, OsmNode>(), ways = new Map<number, OsmWay>(), relations: OsmRelation[] = [];
@@ -211,7 +223,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     list.push(p);
   }
 
-  const fronts = streets.filter(s => s.kind !== 'footway' && s.kind !== 'steps' && s.layer === 0);
+  const allFrontCandidates = options?.extraStreets ? [...streets, ...options.extraStreets] : streets;
+  const fronts = allFrontCandidates.filter(s => s.kind !== 'footway' && s.kind !== 'steps' && s.layer === 0);
   const FG = 48, frontGrid = new Map<string, Street[]>();
   for (const s of fronts) {
     const pad = s.width / 2 + 42;
@@ -609,7 +622,10 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     ...(cfg.places ? { places: cfg.places } : {}),
     attribution: [attribution],
   };
-  const { city, unused } = applyOverrides(base, cfg.overrides);
+  const effectiveOverrides: Overrides = options?.isChunk
+    ? { buildings: cfg.overrides.buildings, streets: cfg.overrides.streets }
+    : cfg.overrides;
+  const { city, unused } = applyOverrides(base, effectiveOverrides);
   report.unusedOverrides = unused;
   report.counts = {
     streets: city.streets.length, junctions: city.junctions.length, buildings: city.buildings.length,

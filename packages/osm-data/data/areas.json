@@ -69,8 +69,22 @@
         21.006
       ]
     ],
-    "file": "nga-tu-thai-ha.osm.json",
+    "file": "vn/ha-noi/skeleton.osm.json",
     "fetched": "2026-10-24",
-    "note": "Toàn bộ khu vực trung tâm Hà Nội (Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân) + toàn tuyến Metro 2A & Metro 3"
+    "note": "Toàn bộ 12 quận Hà Nội (44 Phường mới 2025) phân tách 2 tầng: skeleton + 55 spatial chunks (1024m × 1024m)"
+  },
+  "vn/ha-noi": {
+    "name": "Hà Nội (12 Quận – 44 Phường mới)",
+    "bboxes": [
+      [
+        105.735,
+        20.945,
+        105.925,
+        21.095
+      ]
+    ],
+    "file": "vn/ha-noi/skeleton.osm.json",
+    "fetched": "2026-10-24",
+    "note": "Dữ liệu phân cấp Quốc gia / Tỉnh-Thành phố (vn/ha-noi): skeleton.osm.json + chunks/chunk_<cx>_<cy>.osm.json"
   }
 }

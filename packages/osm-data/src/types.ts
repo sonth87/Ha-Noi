@@ -25,3 +25,39 @@ export interface OsmArea {
   fetched: string;
   note?: string;
 }
+
+export interface OsmChunkManifest {
+  key: string;
+  cx: number;
+  cy: number;
+  bounds: { x0: number; y0: number; x1: number; y1: number };
+  file: string;
+  elements: number;
+  bytes: number;
+}
+
+export interface OsmCityManifest {
+  id: string;
+  legacyIds?: readonly string[];
+  countryCode: string;
+  name: string;
+  title: string;
+  origin: readonly [number, number];
+  bearing: number;
+  chunkSizeMeters: number;
+  skeleton: string;
+  skeletonElements: number;
+  chunks: readonly OsmChunkManifest[];
+}
+
+export interface OsmCountryManifest {
+  code: string;
+  name: string;
+  cities: Readonly<Record<string, OsmCityManifest>>;
+}
+
+export interface OsmWorldManifest {
+  version: number;
+  countries: Readonly<Record<string, OsmCountryManifest>>;
+}
+

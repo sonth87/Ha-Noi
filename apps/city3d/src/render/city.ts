@@ -177,6 +177,11 @@ function buildingMapOf(city?: City): Map<string, Building> | null {
   if (!m) {
     m = new Map(city.buildings.map(b => [b.id, b]));
     cityBuildingMapCache.set(city, m);
+  } else if (m.size !== city.buildings.length) {
+    for (let i = m.size; i < city.buildings.length; i++) {
+      const b = city.buildings[i];
+      if (b) m.set(b.id, b);
+    }
   }
   return m;
 }

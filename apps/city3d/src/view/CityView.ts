@@ -24,15 +24,15 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
-  METRO, buildingHeight, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
-  type City, type Lane, type Signals, type Track, type TrainPhase, type Vehicle, type VehicleKind,
+  METRO, buildingHeight, centroid, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
+  type Building, type City, type Lane, type Signals, type Street, type Track, type TrainPhase, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { Batch, type Surface } from '@render/batch';
 import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, isFlagVisibleAtSpan, stepSharedWavingFlags, type WavingFlagInstance,
 } from '@render/buildings';
 import {
-  beaconsOf, buildLandmarkOverviewLayer, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
+  TILE, beaconsOf, buildLandmarkOverviewLayer, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
   type Detail, type Layer, type LocalStreetTile, type MapBaseLayers, type Tile,
 } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
@@ -69,7 +69,7 @@ import {
   type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
 } from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
-import { projector } from '@my-city/osm-import';
+import { getCityManifest, loadCityChunkCityAsync, projector } from '@my-city/osm-import';
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
@@ -195,6 +195,16 @@ export class CityView {
   private readonly landmarkTileSet = new Set<TileState>();
   private readonly bldgBounds: BldgBounds[];
   readonly cells: CellState[];
+  private readonly tileById = new Map<string, TileState>();
+  private readonly localTileById = new Map<string, LocalTileState>();
+  private readonly cellByKey = new Map<string, CellState>();
+  private readonly buildingIdSet = new Set<string>();
+  private readonly streetIdSet = new Set<string>();
+  private readonly featureIdSet = new Set<string>();
+  private readonly skeletonStreets: Street[];
+  private readonly availableChunks = new Set<string>();
+  private readonly loadedChunks = new Set<string>();
+  private readonly loadingChunks = new Set<string>();
   private cacheTick = 0;
   private readonly projScreenMatrix = new THREE.Matrix4();
   private readonly camFrustum = new THREE.Frustum();
@@ -323,9 +333,24 @@ export class CityView {
   private colors: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
   private outline: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
 
-  constructor(readonly city: City) {
+  constructor(readonly city: City, initialLoadedChunks?: readonly string[]) {
     this.frame = frameForCity(city.id);
     this.northAz = Math.PI / 2 + (this.frame.bearing * Math.PI) / 180;
+    this.skeletonStreets = [...city.streets];
+    for (const b of city.buildings) this.buildingIdSet.add(b.id);
+    for (const s of city.streets) this.streetIdSet.add(s.id);
+    for (const f of city.features) this.featureIdSet.add(f.id);
+    try {
+      const manifest = getCityManifest(city.id);
+      for (const c of manifest.chunks) this.availableChunks.add(c.key);
+      if (initialLoadedChunks) {
+        for (const k of initialLoadedChunks) this.loadedChunks.add(k);
+      } else {
+        for (const c of manifest.chunks) this.loadedChunks.add(c.key);
+      }
+    } catch {
+      // Custom or synthetic test city without a world-manifest entry
+    }
     const stationShellB = new Batch();
     const railTracksB = new Batch();
     // Skip building global localStreets up-front; local streets/sidewalks/forecourts are streamed in 256m tiles!
@@ -340,7 +365,9 @@ export class CityView {
     this.layers.add(this.railTracks);
     this.floors = cityFloors(city);
     this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null, lastUsed: 0 }));
+    for (const ts of this.tiles) this.tileById.set(ts.tile.id, ts);
     this.localTiles = localStreetTilesOf(city).map(tile => ({ tile, layer: null, group: null, lastUsed: 0 }));
+    for (const lt of this.localTiles) this.localTileById.set(lt.tile.id, lt);
     for (const t of this.tiles) {
       if (t.tile.buildings.some(b => b.model != null || buildingHeight(b) >= 28 || (Boolean(b.name) && buildingHeight(b) >= 16))) {
         this.landmarkTileSet.add(t);
@@ -349,6 +376,9 @@ export class CityView {
     this.bldgBounds = buildBuildingBoundsIndex(this.tiles);
     const net = roadNetwork(city);
     this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 }));
+    for (const c of this.cells) {
+      this.cellByKey.set(`${Math.floor(c.bucket.center[0] / TILE)},${Math.floor(c.bucket.center[1] / TILE)}`, c);
+    }
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
@@ -2705,12 +2735,226 @@ export class CityView {
     }
   }
 
+  hasLoadedChunk(chunkKey: string): boolean {
+    return this.loadedChunks.has(chunkKey);
+  }
+
+  /**
+   * Dynamically ingests a newly streamed 1024m × 1024m spatial chunk (`chunkCity`) into the live CityView:
+   * - Appends new buildings to `this.city.buildings`, `this.tiles` (64m), `this.floors`, and `this.bldgBounds`
+   * - Appends new local streets/alleys to `this.city.streets` and rebuilds `256m` `this.localTiles` for the chunk
+   * - Appends new features and adds `64m` street furniture cells (`this.cells`) for the chunk
+   * - Updates `this.placeCatalog` and `this.streetCatalog` if named buildings/streets were added
+   */
+  ingestCityChunk(chunkKey: string, chunkCity: City) {
+    this.loadedChunks.add(chunkKey);
+    this.loadingChunks.delete(chunkKey);
+    const [cx, cy] = chunkKey.split(',').map(Number) as [number, number];
+    const cx0 = cx * 1024, cx1 = (cx + 1) * 1024;
+    const cy0 = cy * 1024, cy1 = (cy + 1) * 1024;
+
+    const newBuildings: Building[] = [];
+    const dirtyTiles = new Set<TileState>();
+    for (const b of chunkCity.buildings) {
+      if (this.buildingIdSet.has(b.id)) continue;
+      this.buildingIdSet.add(b.id);
+      this.city.buildings.push(b);
+      newBuildings.push(b);
+
+      const c = centroid(b.footprint);
+      const ti = Math.floor(c[0] / TILE), tj = Math.floor(c[1] / TILE);
+      const tk = `${ti},${tj}`;
+      let ts = this.tileById.get(tk);
+      if (!ts) {
+        const center: [number, number] = [(ti + 0.5) * TILE, (tj + 0.5) * TILE];
+        const tile: Tile = { id: tk, buildings: [b], center, radius: 0 };
+        ts = { tile, layers: new Map(), shown: -1, cutKey: '', cutLayer: null, cutGroup: null, lastUsed: 0 };
+        this.tiles.push(ts);
+        this.tileById.set(tk, ts);
+      } else {
+        ts.tile.buildings.push(b);
+        dirtyTiles.add(ts);
+      }
+      for (const p of b.footprint) {
+        const d = Math.hypot(p[0] - ts.tile.center[0], p[1] - ts.tile.center[1]);
+        if (d > ts.tile.radius) ts.tile.radius = d;
+      }
+      if (b.model != null || buildingHeight(b) >= 28 || (Boolean(b.name) && buildingHeight(b) >= 16)) {
+        this.landmarkTileSet.add(ts);
+      }
+    }
+
+    for (const ts of dirtyTiles) {
+      if (ts.layers.size > 0) {
+        for (const v of ts.layers.values()) {
+          if (v.group && this.mounted) this.mounted.tilesGroup.remove(v.group);
+          this.disposeLayerObj(v.layer);
+        }
+        ts.layers.clear();
+        ts.shown = -1;
+      }
+      if (ts.cutGroup && this.mounted) {
+        this.mounted.tilesGroup.remove(ts.cutGroup);
+        ts.cutGroup = null;
+      }
+      if (ts.cutLayer) {
+        this.disposeLayerObj(ts.cutLayer);
+        ts.cutLayer = null;
+      }
+      ts.cutKey = '';
+    }
+
+    if (newBuildings.length > 0) {
+      const addedFloors = cityFloors({ ...this.city, buildings: newBuildings });
+      this.floors.push(...addedFloors);
+      this.bldgBounds.splice(0, this.bldgBounds.length, ...buildBuildingBoundsIndex(this.tiles));
+    }
+
+    const newStreets: Street[] = [];
+    for (const s of chunkCity.streets) {
+      if (this.streetIdSet.has(s.id)) continue;
+      this.streetIdSet.add(s.id);
+      this.city.streets.push(s);
+      newStreets.push(s);
+    }
+
+    let addedFeatures = 0;
+    for (const f of chunkCity.features) {
+      if (this.featureIdSet.has(f.id)) continue;
+      this.featureIdSet.add(f.id);
+      this.city.features.push(f);
+      addedFeatures++;
+    }
+
+    if (newBuildings.length > 0 || newStreets.length > 0 || addedFeatures > 0) {
+      const localStreets = this.city.streets.filter(s =>
+        s.path.some(p => p[0] >= cx0 - 96 && p[0] <= cx1 + 96 && p[1] >= cy0 - 96 && p[1] <= cy1 + 96),
+      );
+      const localBuildings = this.city.buildings.filter(b => {
+        const p = b.footprint[0];
+        return p !== undefined && p[0] >= cx0 - 64 && p[0] <= cx1 + 64 && p[1] >= cy0 - 64 && p[1] <= cy1 + 64;
+      });
+      const localFeatures = this.city.features.filter(
+        f => f.at[0] >= cx0 - 64 && f.at[0] <= cx1 + 64 && f.at[1] >= cy0 - 64 && f.at[1] >= cy1 + 64,
+      );
+      const subCity: City = {
+        ...this.city,
+        streets: localStreets,
+        buildings: localBuildings,
+        features: localFeatures,
+      };
+
+      const chunkLocalTiles = localStreetTilesOf(subCity);
+      for (const lt of chunkLocalTiles) {
+        if (lt.center[0] < cx0 || lt.center[0] >= cx1 || lt.center[1] < cy0 || lt.center[1] >= cy1) continue;
+        const existingLt = this.localTileById.get(lt.id);
+        if (existingLt) {
+          if (existingLt.group && this.mounted) {
+            this.mounted.localStreetsGroup.remove(existingLt.group);
+            existingLt.group = null;
+          }
+          if (existingLt.layer) {
+            this.disposeLayerObj(existingLt.layer);
+            existingLt.layer = null;
+          }
+          existingLt.tile = lt;
+        } else {
+          const state: LocalTileState = { tile: lt, layer: null, group: null, lastUsed: 0 };
+          this.localTiles.push(state);
+          this.localTileById.set(lt.id, state);
+        }
+      }
+
+      const subNet = roadNetwork(subCity);
+      const chunkBuckets = furnitureBuckets(streetFurniture(subCity, subNet));
+      for (const fb of chunkBuckets) {
+        if (fb.center[0] < cx0 || fb.center[0] >= cx1 || fb.center[1] < cy0 || fb.center[1] >= cy1) continue;
+        const ck = `${Math.floor(fb.center[0] / TILE)},${Math.floor(fb.center[1] / TILE)}`;
+        if (!this.cellByKey.has(ck)) {
+          const cs: CellState = { bucket: fb, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 };
+          this.cells.push(cs);
+          this.cellByKey.set(ck, cs);
+        }
+      }
+    }
+
+    if (newStreets.some(s => s.name)) {
+      const sc = buildStreetCatalog(this.city);
+      this.streetCatalog.splice(0, this.streetCatalog.length, ...sc);
+      this.streetById.clear();
+      for (const s of this.streetCatalog) this.streetById.set(s.id, s);
+    }
+    if (newBuildings.some(b => b.name)) {
+      this.placeCatalog = buildPlaceCatalog(this.city, this.showcaseIdSet, this.snap.locale);
+    }
+
+    this.update({ floors: this.floors.length });
+    if (this.mounted) {
+      this.distanceStep();
+    }
+  }
+
+  private streamViewportChunks(centerOverride?: [number, number]) {
+    if (this.availableChunks.size === 0 || this.loadedChunks.size >= this.availableChunks.size) return;
+    if (this.loadingChunks.size >= 2) return;
+    const m = this.mounted;
+    const fx = centerOverride
+      ? centerOverride[0]
+      : this.pov.isActive()
+        ? this.pov.getFocusPoint().x
+        : m
+          ? m.controls.target.x
+          : this.savedCam.x;
+    const fz = centerOverride
+      ? centerOverride[1]
+      : this.pov.isActive()
+        ? this.pov.getFocusPoint().z
+        : m
+          ? m.controls.target.z
+          : this.savedCam.z;
+    const cx = Math.floor(fx / 1024);
+    const cy = Math.floor(fz / 1024);
+    const candidates: { key: string; d2: number }[] = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const key = `${cx + dx},${cy + dy}`;
+        if (!this.availableChunks.has(key) || this.loadedChunks.has(key) || this.loadingChunks.has(key)) continue;
+        const centerX = (cx + dx + 0.5) * 1024;
+        const centerY = (cy + dy + 0.5) * 1024;
+        const d2 = (centerX - fx) ** 2 + (centerY - fz) ** 2;
+        candidates.push({ key, d2 });
+      }
+    }
+    if (!candidates.length) return;
+    candidates.sort((a, b) => a.d2 - b.d2);
+    const slots = Math.max(0, 2 - this.loadingChunks.size);
+    for (let i = 0; i < Math.min(slots, candidates.length); i++) {
+      const key = candidates[i]!.key;
+      this.loadingChunks.add(key);
+      loadCityChunkCityAsync(this.city.id, key, this.skeletonStreets)
+        .then(chunkCity => {
+          if (chunkCity) {
+            this.ingestCityChunk(key, chunkCity);
+          } else {
+            this.loadedChunks.add(key);
+            this.loadingChunks.delete(key);
+          }
+        })
+        .catch(() => {
+          this.loadingChunks.delete(key);
+        });
+    }
+  }
+
   private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
     const povActive = this.pov.isActive();
     const stage = this.currentZoomStage();
     this.syncZoomStageVisibility(stage);
+    if (povActive || stage === 'full' || (stage === 'landmarks' && m.camera.zoom >= 0.45)) {
+      this.streamViewportChunks();
+    }
     if (!povActive && stage !== 'full') return;
 
     this.cacheTick++;
@@ -3210,6 +3454,7 @@ export class CityView {
   flyTo(p: [number, number], exitShowcase = true) {
     if (exitShowcase && this.snap.showcase) this.setShowcase(null);
     if (this.pov.isActive()) this.setPovMode('map');
+    this.streamViewportChunks(p);
     const m = this.mounted;
     if (!m) return;
     this.fly = { from: m.controls.target.clone(), to: new THREE.Vector3(p[0], m.controls.target.y, p[1]), t0: performance.now() };

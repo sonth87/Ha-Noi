@@ -2,7 +2,7 @@
    (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { roadNetwork, streetFurniture } from '@my-city/core';
-import { loadAreaAsync, loadCityAsync } from '@my-city/osm-import';
+import { loadCitySkeletonAsync, loadCityStreamingInitAsync } from '@my-city/osm-import';
 import { CityView, type PegmanDropPreview } from '@view/CityView';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
@@ -10,6 +10,7 @@ import { lightOn } from '@view/lights';
 import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
 import { isMobileDevice } from '@view/quality';
 import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
+import { frameForCity, parseUrlState } from '@view/urlState';
 import { LightsPanel } from './LightsPanel';
 import { LoadingScreen, type LoadingProgress } from './LoadingScreen';
 import { QualityPanel } from './QualityPanel';
@@ -26,6 +27,24 @@ const yieldToBrowser = () =>
     }
   });
 
+function computeInitialViewportChunkKeys(): string[] {
+  const frame = frameForCity(DEFAULT_AREA_ID);
+  const initUrl = typeof window !== 'undefined' ? parseUrlState(window.location, frame) : null;
+  const x = initUrl?.x ?? 0;
+  const z = initUrl?.z ?? 0;
+  const cx = Math.floor(x / 1024);
+  const cy = Math.floor(z / 1024);
+  // Load the 2x2 neighborhood of 1024m × 1024m chunks closest to the initial camera target
+  const dx = x - (cx + 0.5) * 1024 >= 0 ? 1 : -1;
+  const dy = z - (cy + 0.5) * 1024 >= 0 ? 1 : -1;
+  return [
+    `${cx},${cy}`,
+    `${cx + dx},${cy}`,
+    `${cx},${cy + dy}`,
+    `${cx + dx},${cy + dy}`,
+  ];
+}
+
 function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<CityView> {
   if (shared) return Promise.resolve(shared);
   if (sharedPromise) return sharedPromise;
@@ -36,10 +55,10 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
       onProgress({
         step: 1,
         percent: 22,
-        label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu bản đồ Hà Nội...',
+        label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu khung bản đồ Hà Nội...',
       });
       await yieldToBrowser();
-      await loadAreaAsync(DEFAULT_AREA_ID);
+      await loadCitySkeletonAsync(DEFAULT_AREA_ID);
 
       onProgress({
         step: 2,
@@ -47,7 +66,8 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         label: isEn ? '2/5 · Decoding buildings, lakes & terrain...' : '2/5 · Đang giải mã công trình, sông hồ & địa hình...',
       });
       await yieldToBrowser();
-      const { city } = await loadCityAsync(DEFAULT_AREA_ID);
+      const initialChunkKeys = computeInitialViewportChunkKeys();
+      const { city, loadedChunks } = await loadCityStreamingInitAsync(DEFAULT_AREA_ID, initialChunkKeys);
       const counts = {
         buildings: city.buildings.length,
         streets: city.streets.length,
@@ -72,7 +92,7 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         counts,
       });
       await yieldToBrowser();
-      const built = new CityView(city);
+      const built = new CityView(city, loadedChunks);
 
       onProgress({
         step: 5,
@@ -80,7 +100,7 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         label: isEn ? '5/5 · Entering 3D Hanoi Map...' : '5/5 · Đang hoàn tất khung cảnh 3D...',
         counts,
       });
-      await new Promise<void>(resolve => setTimeout(resolve, 220));
+      await new Promise<void>(resolve => setTimeout(resolve, 180));
       shared = built;
       return built;
     } catch (err) {

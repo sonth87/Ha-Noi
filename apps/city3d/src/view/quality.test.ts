@@ -253,7 +253,7 @@ describe('Google Maps–style URL state (@lat,lon,157m,0h,35.3t,2d)', () => {
   });
 });
 
-describe('full 6-district CityView initialization', () => {
+describe('full 12-district CityView initialization & 2-tier spatial chunk streaming', () => {
   it('initializes CityView on the entire unfiltered city without call stack overflow', async () => {
     const { CityView } = await import('./CityView');
     const view = new CityView(city);
@@ -261,7 +261,35 @@ describe('full 6-district CityView initialization', () => {
     expect(view.localTiles.length).toBeGreaterThan(40);
     expect(view.cells.length).toBeGreaterThan(200);
   });
+
+  it('starts fast from Tier-0 skeleton + initial chunks and streams neighborhood chunks on demand', async () => {
+    const { loadCityStreamingInitAsync, loadCityChunkCityAsync } = await import('@my-city/osm-import');
+    const { CityView } = await import('./CityView');
+
+    const { city: initCity, loadedChunks } = await loadCityStreamingInitAsync('vn/ha-noi', ['0,0']);
+    expect(loadedChunks).toEqual(['0,0']);
+    // Skeleton + 1 chunk has far fewer buildings than full city, making initial startup much faster
+    expect(initCity.buildings.length).toBeGreaterThan(1000);
+    expect(initCity.buildings.length).toBeLessThan(city.buildings.length * 0.45);
+
+    const view = new CityView(initCity, loadedChunks);
+    expect(view.hasLoadedChunk('0,0')).toBe(true);
+    expect(view.hasLoadedChunk('2,0')).toBe(false);
+
+    const beforeBuildings = view.city.buildings.length;
+    const beforeTiles = view.tiles.length;
+
+    const chunk20 = await loadCityChunkCityAsync('vn/ha-noi', '2,0', initCity.streets);
+    expect(chunk20).not.toBeNull();
+    expect(chunk20!.buildings.length).toBeGreaterThan(300);
+
+    view.ingestCityChunk('2,0', chunk20!);
+    expect(view.hasLoadedChunk('2,0')).toBe(true);
+    expect(view.city.buildings.length).toBeGreaterThan(beforeBuildings + 300);
+    expect(view.tiles.length).toBeGreaterThan(beforeTiles);
+  });
 });
+
 
 
 
