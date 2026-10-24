@@ -12,6 +12,13 @@ const EXTRACTS: Record<string, OsmExtract> = {
   'nga-tu-thai-ha': ngaTuThaiHa as unknown as OsmExtract,
 };
 
+const ASYNC_EXTRACTS: Record<string, () => Promise<OsmExtract>> = {
+  'nga-tu-thai-ha': async () => {
+    const mod = await import('../data/nga-tu-thai-ha.osm.json', { with: { type: 'json' } });
+    return (mod.default ?? mod) as unknown as OsmExtract;
+  },
+};
+
 export const AREAS: Readonly<Record<string, OsmArea>> = Object.fromEntries(
   Object.entries(areasJson as unknown as Record<string, Omit<OsmArea, 'id'>>).map(([id, a]) => [id, { id, ...a }]),
 );
@@ -23,5 +30,7 @@ export function loadArea(id: string): { area: OsmArea; data: OsmExtract } {
 }
 
 export async function loadAreaAsync(id: string): Promise<{ area: OsmArea; data: OsmExtract }> {
-  return Promise.resolve(loadArea(id));
+  const area = AREAS[id], loader = ASYNC_EXTRACTS[id];
+  if (!area || !loader) throw new Error(`unknown OSM area "${id}"`);
+  return { area, data: await loader() };
 }

@@ -509,7 +509,7 @@ export class CityView {
   mount(host: HTMLElement) {
     if (this.mounted) this.unmount();
     const q = this.snap.quality;
-    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    const renderer = new THREE.WebGLRenderer({ antialias: !isMobileDevice() || q.msaa, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
     host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
@@ -525,7 +525,7 @@ export class CityView {
     for (const obj of this.customLayers.values()) extensionGroup.add(obj);
     scene.add(mapGroup, showcaseGroup, extensionGroup);
 
-    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -5000, 7000);
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, -16000, 18000);
     const target = new THREE.Vector3(this.savedCam.x, 0, this.savedCam.z);
     camera.zoom = this.savedCam.zoom;
     const controls = new OrbitControls(camera, renderer.domElement);
@@ -534,7 +534,7 @@ export class CityView {
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.2;
-    controls.minZoom = 0.075; controls.maxZoom = 60;
+    controls.minZoom = 0.015; controls.maxZoom = 60;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
@@ -561,13 +561,13 @@ export class CityView {
     const railTrackGroup = this.group(this.railTracks, false);
     railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
     const wardBoundaryLines = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments(WARD_BOUNDARIES, 0.6, 26, 16)),
+      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments(WARD_BOUNDARIES, 0.6, 42, 26)),
       this.mats.wardBoundary,
     );
     wardBoundaryLines.frustumCulled = false;
     wardBoundaryLines.visible = false;
     const cityBoundaryLines = new LineSegments2(
-      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments([HANOI_OUTER_BOUNDARY], 0.85, 72, 44)),
+      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments([HANOI_OUTER_BOUNDARY], 0.85, 150, 95)),
       this.mats.cityBoundary,
     );
     cityBoundaryLines.frustumCulled = false;
@@ -1058,17 +1058,18 @@ export class CityView {
     }
     this.events.emit('ready', { city: this.city });
 
-    this.applyMode(this.snap.mode, false);
-    this.applyQuality(this.snap.quality);
-    this.applyTheme(this.snap.theme);
     resize();
+    this.applyMode(this.snap.mode, false);
+    this.applyTheme(this.snap.theme);
+    this.applyQuality(this.snap.quality);
     // Build only the closest visible tiles synchronously so initial mount is instantaneous
     if (this.currentZoomStage() === 'full') {
-      const first = Math.min(1, this.wantedDetail()) as Detail;
+      const mobile = isMobileDevice();
+      const first = (mobile ? 0 : Math.min(1, this.wantedDetail())) as Detail;
       const closestTiles = [...this.tiles]
         .filter(t => this.nearTile(t))
         .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
-        .slice(0, 12);
+        .slice(0, mobile ? 6 : 12);
       for (const t of closestTiles) {
         this.show(t, this.ensure(t, first));
         this.syncTileVisibility(t, true);
@@ -1078,7 +1079,6 @@ export class CityView {
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
     this.distanceStep(true);
-    this.nightThings();
     if (this.snap.showcase) {
       this.savedMapCam = { target: new THREE.Vector3(this.savedCam.x, 0, this.savedCam.z), zoom: this.savedCam.zoom };
       this.mountShowcase(this.snap.showcase);
@@ -1667,10 +1667,10 @@ export class CityView {
   private streetLabelsStep(force = false) {
     const m = this.mounted, layer = this.labelLayer;
     if (!m || !layer) return;
-    const mode = this.snap.streetLabels;
+    const rawMode = this.snap.streetLabels;
     const povActive = this.pov.isActive();
     const stage = this.currentZoomStage();
-    if (this.snap.showcase || mode === 'off' || povActive || stage === 'city') {
+    if (this.snap.showcase || rawMode === 'off' || povActive || stage === 'city') {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -1681,11 +1681,12 @@ export class CityView {
       return;
     }
 
+    const mode: StreetLabelMode = stage === 'streets' && rawMode === 'pin' ? 'map' : rawMode;
     const w = m.host.clientWidth, h = m.host.clientHeight;
     const activeCam = this.activeCamera();
     const focus = m.controls.target;
     const cp = activeCam.position;
-    const sig = `${mode}|${this.snap.povMode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}`;
+    const sig = `${mode}|${stage}|${this.snap.povMode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}`;
     if (!force && sig === this.labelSig) return;
     this.labelSig = sig;
 
@@ -1728,6 +1729,17 @@ export class CityView {
     }
     this.lastLabelSelect = now;
 
+    const adminMode = adminBoundaryModeForZoom(m.camera.zoom, Boolean(this.snap.showcase), povActive);
+    const avoidBoxes: { x: number; y: number; halfW: number; halfH: number }[] = [];
+    if (adminMode === 'ward') {
+      for (const def of WARD_BOUNDARIES) {
+        const p = project([def.center[0], def.center[1], 2.5]);
+        if (p.visible) {
+          avoidBoxes.push({ x: p.x, y: p.y, halfW: stage === 'streets' ? 68 : 88, halfH: stage === 'streets' ? 18 : 26 });
+        }
+      }
+    }
+
     const visible = selectVisibleStreetLabels(
       this.streetCatalog,
       mode,
@@ -1736,6 +1748,7 @@ export class CityView {
       h,
       [focus.x, focus.z],
       project,
+      avoidBoxes,
     );
 
     const keepIds = new Set<string>();
@@ -1897,8 +1910,11 @@ export class CityView {
     btn.addEventListener('click', e => {
       e.stopPropagation();
       this.flyTo([def.center[0], def.center[1]], false);
-      if (this.mounted && mode === 'city' && this.mounted.camera.zoom < 0.45) {
-        this.mounted.camera.zoom = 0.55;
+      if (this.mounted && mode === 'city' && this.mounted.camera.zoom < 0.10) {
+        this.mounted.camera.zoom = 0.12;
+        this.mounted.camera.updateProjectionMatrix();
+      } else if (this.mounted && mode === 'ward' && this.mounted.camera.zoom < 0.35) {
+        this.mounted.camera.zoom = 0.50;
         this.mounted.camera.updateProjectionMatrix();
       } else if (this.mounted && mode === 'ward' && this.mounted.camera.zoom < 1.1) {
         this.mounted.camera.zoom = 1.25;
@@ -1913,6 +1929,7 @@ export class CityView {
     if (!m || !layer) return;
     const povActive = this.pov.isActive();
     const mode = adminBoundaryModeForZoom(m.camera.zoom, Boolean(this.snap.showcase), povActive);
+    const stage = this.currentZoomStage();
     m.wardBoundaryLines.visible = mode === 'ward';
     m.cityBoundaryLines.visible = mode === 'city';
 
@@ -1930,11 +1947,13 @@ export class CityView {
     const activeCam = this.activeCamera();
     const focus = m.controls.target;
     const cp = activeCam.position;
-    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
+    const compact = mode === 'ward' && stage === 'streets' ? '1' : '0';
+    const sig = `${mode}|${compact}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
     if (!force && sig === this.adminSig) return;
     this.adminSig = sig;
 
     if (layer.style.display === 'none') layer.style.display = '';
+    if (layer.dataset.compact !== compact) layer.dataset.compact = compact;
     if (layer.dataset.mode !== mode) {
       layer.dataset.mode = mode;
       layer.replaceChildren();
@@ -1944,15 +1963,36 @@ export class CityView {
     const defs: readonly AdminBoundaryDef[] = mode === 'city' ? [HANOI_OUTER_BOUNDARY] : WARD_BOUNDARIES;
     const tmp = new THREE.Vector3();
     const keepIds = new Set<string>();
-    const padX = mode === 'city' ? 80 : 56;
-    const padY = mode === 'city' ? 60 : 44;
+    const padX = mode === 'city' ? 80 : 48;
+    const padY = mode === 'city' ? 60 : 38;
+    const placed: { x: number; y: number; halfW: number; halfH: number }[] = [];
 
     for (const def of defs) {
       tmp.set(def.center[0], mode === 'city' ? 6 : 2.5, def.center[1]).project(activeCam);
-      const sx = (tmp.x * 0.5 + 0.5) * w;
-      const sy = (-tmp.y * 0.5 + 0.5) * h;
+      let sx = (tmp.x * 0.5 + 0.5) * w;
+      let sy = (-tmp.y * 0.5 + 0.5) * h;
+      if (mode === 'city' && tmp.z >= -1 && tmp.z <= 1) {
+        sx = Math.max(padX, Math.min(w - padX, sx));
+        sy = Math.max(padY, Math.min(h - padY, sy));
+      }
       const inBounds = tmp.z >= -1 && tmp.z <= 1 && sx >= padX && sx <= w - padX && sy >= padY && sy <= h - padY;
       if (!inBounds) continue;
+
+      if (mode === 'ward') {
+        const halfW = Math.max(46, Math.min(92, def.name.length * 3.4 + 14));
+        const halfH = compact === '1' ? 14 : 21;
+        const collides = placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs(sy - o.y) < halfH + o.halfH);
+        if (collides) {
+          if (!placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs((sy + 26) - o.y) < halfH + o.halfH) && sy + 26 <= h - padY) {
+            sy += 26;
+          } else if (!placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs((sy - 26) - o.y) < halfH + o.halfH) && sy - 26 >= padY) {
+            sy -= 26;
+          } else {
+            continue;
+          }
+        }
+        placed.push({ x: sx, y: sy, halfW, halfH });
+      }
 
       keepIds.add(def.id);
       let node = this.adminNodes.get(def.id);
@@ -1996,21 +2036,22 @@ export class CityView {
     }
 
     if (this.snap.streetLabels !== 'off') {
-      const isPin = this.snap.streetLabels === 'pin';
+      const isPin = this.labelLayer?.dataset.mode === 'pin';
       for (const [key, item] of this.labelItems) {
+        const baseId = item.id.replace(/:\d+$/, '');
         if (isPin) {
           const totalH = item.stemHeightPx + 32;
           const halfW = Math.max(36, Math.min(72, item.shortName.length * 4 + 16));
           const hitCard = x >= item.x - halfW && x <= item.x + halfW && y >= item.y - totalH - 6 && y <= item.y - item.stemHeightPx + 8;
           const hitBase = Math.hypot(x - item.x, y - item.y) <= 14;
           if (hitCard || hitBase) {
-            const street = this.streetById.get(item.id);
+            const street = this.streetById.get(baseId);
             if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - totalH };
           }
         } else {
           const halfW = Math.max(36, Math.min(75, item.name.length * 3.8 + 14));
           if (x >= item.x - halfW && x <= item.x + halfW && y >= item.y - 14 && y <= item.y + 14) {
-            const street = this.streetById.get(item.id);
+            const street = this.streetById.get(baseId);
             if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - 14 };
           }
         }
@@ -2427,7 +2468,11 @@ export class CityView {
       this.paintLayer(this.landmarkOverviewLayer);
     }
     if (m.landmarkOverviewGroup.children.length === 0) {
-      m.landmarkOverviewGroup.add(this.group(this.landmarkOverviewLayer));
+      const grp = this.group(this.landmarkOverviewLayer, true);
+      grp.traverse(o => {
+        if (o.userData.tier === 'silhouette') o.userData.landmarkShell = true;
+      });
+      m.landmarkOverviewGroup.add(grp);
     }
   }
 
@@ -2705,7 +2750,7 @@ export class CityView {
         if (tier === 'details' && px < FAR.details) on = false;
         else if (tier === 'creases' && px < FAR.creases) on = false;
         else if (tier === 'streetLines' && px < FAR.streetLines) on = false;
-        else if (tier === 'silhouette' && px < FAR.silhouette) on = false;
+        else if (tier === 'silhouette' && !o.userData.landmarkShell && px < FAR.silhouette) on = false;
         else if (tier === 'windows' && px < 1.8) on = false;
       }
       o.visible = on;
@@ -2888,15 +2933,24 @@ export class CityView {
     const stage = this.currentZoomStage();
     const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase && !this.pov.isActive();
     const f = !auto ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
-    const key = `${stage}|${f}|${this.snap.povMode}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
+    const roadZoomF = this.snap.showcase || this.pov.isActive() ? 0 : Math.round(Math.max(0, Math.min(1, (5.5 - px) / 4.8)) * 20) / 20;
+    const key = `${stage}|${f}|${roadZoomF}|${this.snap.povMode}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
     this.syncZoomStageVisibility(stage);
     const css = getComputedStyle(document.documentElement);
-    this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
+    const tok = (n: string) => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff');
+    this.vehicleColors(tok);
+    const roadMat = this.mats.surface.get('road');
+    if (roadMat) {
+      const roadShadeTarget = this.snap.theme === 'dark' ? tok('--detail') : tok('--line');
+      const roadShadeAmount = (this.snap.theme === 'dark' ? 0.35 : 0.32) * roadZoomF;
+      roadMat.color.copy(tok(SURFACE_TOKEN.road).lerp(roadShadeTarget, roadShadeAmount));
+    }
+    this.mats.baseCrease.color.copy(tok('--line').lerp(tok('--ink'), 0.25 * roadZoomF));
     this.mats.crease.opacity = 1 - 0.85 * f;
-    this.mats.baseCrease.opacity = Math.max(0.24, (1 - 0.72 * f) * 0.75);
+    this.mats.baseCrease.opacity = Math.max(0.55, (1 - 0.45 * f) * 0.85);
     this.mats.detail.opacity = 1 - 0.85 * f;
     this.mats.wire.opacity = 1 - 0.5 * f;
     this.tiers(m.scene);
@@ -2970,7 +3024,8 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     const el = Math.max(0.08, this.elevation());
-    m.controls.panSpeed = Math.max(0.24, Math.min(1, Math.sin(el) / Math.sin(ISO_EL)));
+    const lowBoost = Math.min(2.6, Math.max(1, Math.sin(ISO_EL) / Math.max(0.22, Math.sin(el))));
+    m.controls.panSpeed = lowBoost;
     if (el < MIN_ZOOM_TO_CURSOR_EL) m.controls.zoomToCursor = false;
 
     let wantY = 0;
@@ -3086,8 +3141,10 @@ export class CityView {
     let fx = 0, fy = 0;
     for (const k of this.held) { const d = MOVE_KEYS[k]; if (d) { fx += d[0]; fy += d[1]; } }
     if (!fx && !fy) return;
+    const el = Math.max(0.08, this.elevation());
+    const lowBoost = Math.min(2.6, Math.max(1, Math.sin(ISO_EL) / Math.max(0.22, Math.sin(el))));
     const f = m.controls.target.clone().sub(m.camera.position).setY(0).normalize(), right = new THREE.Vector3(-f.z, 0, f.x);
-    const step = new THREE.Vector3().addScaledVector(f, fy).addScaledVector(right, fx).normalize().multiplyScalar(((FRUSTUM / m.camera.zoom) * 0.5) * dt);
+    const step = new THREE.Vector3().addScaledVector(f, fy).addScaledVector(right, fx).normalize().multiplyScalar(((FRUSTUM / m.camera.zoom) * 0.75 * lowBoost) * dt);
     m.controls.target.add(step); m.camera.position.add(step);
   }
 

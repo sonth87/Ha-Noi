@@ -45,7 +45,11 @@ export interface Furniture { props: Prop[]; wires: Wire[] }
 const WALK_Z = 0.25;
 const MAIN = new Set(['primary', 'secondary', 'tertiary']);
 
+const furnitureCache = new WeakMap<City, Furniture>();
+
 export function streetFurniture(city: City, net: Network = roadNetwork(city)): Furniture {
+  const cached = furnitureCache.get(city);
+  if (cached) return cached;
   const props: Prop[] = [], wires: Wire[] = [];
   const atGrade = net.roads.filter(r => r.layer === 0);
   const roadGrid = new Map<string, typeof atGrade>();
@@ -68,6 +72,8 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
   };
 
   const roadOf = new Map(net.roads.map(r => [r.id, r])), nodeOf = new Map(net.nodes.map(n => [n.id, n]));
+  const metroStations = city.stations.filter(st => st.kind === 'metro');
+  const nearMetroStation = (p: Vec2) => metroStations.some(st => dist(p, st.at) < 48);
   // along whole streets (runs), so poles and wires carry on across the alleys that cut them
   for (const run of net.runs) {
     if (run.layer > 0) continue;
@@ -92,7 +98,6 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     for (const side of [1, -1] as const) {
       const taken: number[] = [];
       const shape = (s: number) => { const h = here(s), w = side > 0 ? h.right : h.left; return { r: h.r, w, kerb: side * (h.r.width / 2 + 0.4), mid: side * (h.r.width / 2 + w / 2) }; };
-      const nearMetroStation = (p: Vec2) => city.stations.some(st => st.kind === 'metro' && dist(p, st.at) < 48);
       // poles and their wires, on one side only
       if (side === poleSide) {
         let prev: Prop | null = null;
@@ -143,8 +148,11 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
   for (const park of parks) {
     let px0 = Infinity, py0 = Infinity, px1 = -Infinity, py1 = -Infinity;
     for (const [x, y] of park.polygon) { if (x < px0) px0 = x; if (y < py0) py0 = y; if (x > px1) px1 = x; if (y > py1) py1 = y; }
-    const parkPaths = paths.filter(b => b.x1 >= px0 && b.x0 <= px1 && b.y1 >= py0 && b.y0 <= py1).map(b => b.fw);
-    const onPath = (p: Vec2) => parkPaths.some(fw => closestOnPath(p, fw.path).d < fw.width / 2 + 1.2);
+    const parkPaths = paths.filter(b => b.x1 >= px0 && b.x0 <= px1 && b.y1 >= py0 && b.y0 <= py1);
+    const onPath = (p: Vec2) => parkPaths.some(b =>
+      p[0] >= b.x0 && p[0] <= b.x1 && p[1] >= b.y0 && p[1] <= b.y1 &&
+      closestOnPath(p, b.fw.path).d < b.fw.width / 2 + 1.2,
+    );
     let n = 0;
     const parkTrees: Vec2[] = [];
     const addParkTree = (id: string, p: Vec2, large: boolean) => {
@@ -153,7 +161,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
       parkTrees.push(p);
       props.push({ id, kind: 'tree', at: p, z0: 0.03, heading: 0, size: large ? 'large' : 'medium', road: park.id });
     };
-    for (const fw of parkPaths) {
+    for (const { fw } of parkPaths) {
       const L = polylineLength(fw.path), at = sampler(fw.path);
       for (let s = 3; s < L - 2; s += 14) {
         const side = n % 2 ? 1 : -1, { p } = at(s, side * (fw.width / 2 + 0.6));
@@ -178,7 +186,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
   // signals: one post per approach, outside the cluster of signalled nodes
   const lit = net.nodes.filter(n => n.signals);
   for (const n of lit) for (const a of n.arms) {
-    const r = net.roads.find(x => x.id === a.road)!;
+    const r = roadOf.get(a.road)!;
     if (r.layer > 0 || a.half < 2.5) continue;
     if (r.oneway && a.dir > 0) continue;   // traffic leaves the node along this arm
     const inside = lit.some(o => o !== n && dist(o.at, n.at) < 40 && ((o.at[0] - n.at[0]) * a.u[0] + (o.at[1] - n.at[1]) * a.u[1]) / (dist(o.at, n.at) || 1) > 0.8);
@@ -191,7 +199,9 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     props.push({ id: `s-${n.id}-${a.road}-${a.dir}`, kind: 'signal', at: p, z0: WALK_Z, heading: Math.atan2(a.u[1], a.u[0]), group: Math.abs(a.u[0]) >= Math.abs(a.u[1]) ? 'x' : 'y', road: r.id });
   }
 
-  return { props: props.sort((a, b) => (a.id < b.id ? -1 : 1)), wires: wires.sort((a, b) => (a.id < b.id ? -1 : 1)) };
+  const res: Furniture = { props: props.sort((a, b) => (a.id < b.id ? -1 : 1)), wires: wires.sort((a, b) => (a.id < b.id ? -1 : 1)) };
+  furnitureCache.set(city, res);
+  return res;
 }
 
 /** point at distance s along a path, `off` metres to its right, and the path's heading there */

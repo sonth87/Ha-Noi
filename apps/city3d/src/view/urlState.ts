@@ -46,7 +46,7 @@ export function formatUrlState(state: UrlViewState, frame: Frame = DEFAULT_FRAME
   const latStr = lat.toFixed(7);
   const lonStr = lon.toFixed(7);
 
-  const metres = Math.max(5, Math.min(2500, FRUSTUM / Math.max(0.14, state.zoom)));
+  const metres = Math.max(5, Math.min(20000, FRUSTUM / Math.max(0.015, state.zoom)));
   const metresStr = metres < 50 ? `${ Number(metres.toFixed(1)) }m` : `${ Math.round(metres) }m`;
 
   const headingNorm = ((((Math.round(state.heading * 10) / 10) % 360) + 360) % 360);
@@ -122,15 +122,15 @@ export function parseUrlState(
       if (!Number.isFinite(num)) continue;
       if (tok.endsWith('m')) {
         // Viewport height in metres (e.g. `157m` -> zoom = 300 / 157)
-        out.zoom = Math.max(0.14, Math.min(60, FRUSTUM / Math.max(1, num)));
+        out.zoom = Math.max(0.015, Math.min(60, FRUSTUM / Math.max(1, num)));
         hasAny = true;
       } else if (tok.endsWith('z')) {
-        // Either Google Maps zoom level (12..22) or direct app zoom
-        if (num >= 12 && num <= 22) {
+        // Either Google Maps zoom level (10..22) or direct app zoom
+        if (num >= 10 && num <= 22) {
           const approxMetres = 156543 * Math.cos((frame.origin[0] * Math.PI) / 180) * 600 / (2 ** num);
-          out.zoom = Math.max(0.14, Math.min(60, FRUSTUM / Math.max(5, approxMetres)));
+          out.zoom = Math.max(0.015, Math.min(60, FRUSTUM / Math.max(5, approxMetres)));
         } else {
-          out.zoom = Math.max(0.14, Math.min(60, num));
+          out.zoom = Math.max(0.015, Math.min(60, num));
         }
         hasAny = true;
       } else if (tok.endsWith('h')) {

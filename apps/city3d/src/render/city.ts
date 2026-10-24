@@ -140,6 +140,18 @@ export function buildCityGeometry(city: City, level: Detail = 1): Layer & { floo
 
 export { beaconsOf, cityFloors, type Detail };
 
+const cityBuildingMapCache = new WeakMap<City, Map<string, Building>>();
+
+function buildingMapOf(city?: City): Map<string, Building> | null {
+  if (!city) return null;
+  let m = cityBuildingMapCache.get(city);
+  if (!m) {
+    m = new Map(city.buildings.map(b => [b.id, b]));
+    cityBuildingMapCache.set(city, m);
+  }
+  return m;
+}
+
 /** a Batch as a layer; without lines, the silhouette and line buffers are left empty */
 export function layerOf(B: Batch, lines = true, city?: City): Layer {
   const geo = (pos: number[]) => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals(); g.computeBoundingSphere(); return g; };
@@ -172,9 +184,9 @@ export function layerOf(B: Batch, lines = true, city?: City): Layer {
     while (lo <= hi) { const m = (lo + hi) >> 1, r = l[m]!; if (face < r.start) hi = m - 1; else if (face >= r.end) lo = m + 1; else return r.owner; }
     return undefined;
   };
-  const byId = new Map<string, Building>((city?.buildings ?? []).map(b => [b.id, b]));
+  const byId = buildingMapOf(city);
   const floorAt = (id: string, p: THREE.Vector3) => {
-    const b = byId.get(id);
+    const b = byId?.get(id);
     if (!b) return undefined;
     const xy: [number, number] = [p.x, p.z], z = p.y;
     const part = b.parts.find(q => pointInRing(xy, q.footprint)) ?? b.parts.reduce((a, q) => (q.floors.length > a.floors.length ? q : a));

@@ -70,7 +70,7 @@ export const FAR = {
   creases: 1.8,
   silhouette: 1.5,
   trees: 1.4,
-  streetLines: 0.45,
+  streetLines: 0.10,
 } as const;
 
 export function farness(pxPerMetre: number, q: Pick<QualityOptions, 'autoDetail'>): number {

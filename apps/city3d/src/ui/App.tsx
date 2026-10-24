@@ -1,23 +1,112 @@
 /* The shell around the scene: top bar, the scene, the quality panel, status line and the data credit
    (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { loadCity } from '@my-city/osm-import';
+import { roadNetwork, streetFurniture } from '@my-city/core';
+import { loadAreaAsync } from '@my-city/osm-data';
+import { loadCityAsync } from '@my-city/osm-import';
 import { CityView, type PegmanDropPreview } from '@view/CityView';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
-import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t, type TranslationKey } from '@view/i18n';
+import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
 import { lightOn } from '@view/lights';
 import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
 import { isMobileDevice } from '@view/quality';
 import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
 import { LightsPanel } from './LightsPanel';
+import { LoadingScreen, type LoadingProgress } from './LoadingScreen';
 import { QualityPanel } from './QualityPanel';
 
 let shared: CityView | null = null;
-const view = () => (shared ??= new CityView(loadCity(DEFAULT_AREA_ID).city));
+let sharedPromise: Promise<CityView> | null = null;
+
+const yieldToBrowser = () =>
+  new Promise<void>(resolve => {
+    if (typeof requestAnimationFrame === 'function') {
+      requestAnimationFrame(() => setTimeout(resolve, 16));
+    } else {
+      setTimeout(resolve, 16);
+    }
+  });
+
+function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<CityView> {
+  if (shared) return Promise.resolve(shared);
+  if (sharedPromise) return sharedPromise;
+
+  const isEn = getLocale() === 'en';
+  sharedPromise = (async () => {
+    try {
+      onProgress({
+        step: 1,
+        percent: 16,
+        label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu bản đồ Hà Nội...',
+        detail: isEn ? 'Downloading urban geometry & map packets' : 'Đang nạp gói dữ liệu không gian 6 khu vực nội đô',
+      });
+      await yieldToBrowser();
+      await loadAreaAsync(DEFAULT_AREA_ID);
+
+      onProgress({
+        step: 2,
+        percent: 42,
+        label: isEn ? '2/5 · Decoding buildings, lakes & terrain...' : '2/5 · Đang giải mã công trình, sông hồ & địa hình...',
+        detail: isEn ? 'Projecting coordinates & architectural footprints' : 'Đang phân tích mặt bằng kiến trúc, di tích & công viên',
+      });
+      await yieldToBrowser();
+      const { city } = await loadCityAsync(DEFAULT_AREA_ID);
+      const counts = {
+        buildings: city.buildings.length,
+        streets: city.streets.length,
+        stations: city.stations.length,
+      };
+
+      onProgress({
+        step: 3,
+        percent: 66,
+        label: isEn ? '3/5 · Building road network, flyovers & Metro...' : '3/5 · Đang dựng mạng lưới giao thông & tuyến Metro...',
+        detail: isEn
+          ? `Joining ${counts.streets.toLocaleString()} road segments & intersections`
+          : `Đang kết nối ${counts.streets.toLocaleString('vi')} đoạn đường, nút giao & đèn tín hiệu`,
+        counts,
+      });
+      await yieldToBrowser();
+      const net = roadNetwork(city);
+      await yieldToBrowser();
+      streetFurniture(city, net);
+
+      onProgress({
+        step: 4,
+        percent: 88,
+        label: isEn ? '4/5 · Initializing 3D landmarks & place catalog...' : '4/5 · Đang khởi tạo công trình biểu tượng & địa danh...',
+        detail: isEn
+          ? `Preparing ${counts.buildings.toLocaleString()} buildings & 3D meshes`
+          : `Đang tạo danh mục địa danh và dựng lớp nền 3D (${counts.buildings.toLocaleString('vi')} công trình)`,
+        counts,
+      });
+      await yieldToBrowser();
+      const built = new CityView(city);
+
+      onProgress({
+        step: 5,
+        percent: 100,
+        label: isEn ? '5/5 · Entering 3D Hanoi Map...' : '5/5 · Đang hoàn tất khung cảnh 3D...',
+        detail: isEn ? 'Ready' : 'Sẵn sàng hiển thị',
+        counts,
+      });
+      await yieldToBrowser();
+      shared = built;
+      return built;
+    } catch (err) {
+      sharedPromise = null;
+      throw err;
+    }
+  })();
+
+  return sharedPromise;
+}
+
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
     shared?.dispose();
     shared = null;
+    sharedPromise = null;
   });
 }
 
@@ -196,7 +285,70 @@ const POV_MODE_I18N: Record<PovMode, { label: TranslationKey; sub?: TranslationK
 };
 
 export function App() {
-  const v = view();
+  const [readyView, setReadyView] = useState<CityView | null>(() => shared);
+  const [attempt, setAttempt] = useState(0);
+  const [progress, setProgress] = useState<LoadingProgress>(() => {
+    const isEn = getLocale() === 'en';
+    return {
+      step: 1,
+      percent: 8,
+      label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu bản đồ Hà Nội...',
+      detail: isEn ? 'Connecting & initializing 3D engine' : 'Đang khởi động trình kết xuất 3D & nạp dữ liệu',
+    };
+  });
+
+  useEffect(() => {
+    try {
+      const savedTheme = localStorage.getItem('city3d-theme');
+      if (savedTheme === 'dark' || savedTheme === 'light') {
+        document.documentElement.dataset.theme = savedTheme;
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    if (readyView) return;
+    let cancelled = false;
+    loadSharedViewAsync(p => {
+      if (!cancelled) setProgress(p);
+    })
+      .then(v => {
+        if (!cancelled) setReadyView(v);
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const msg = err instanceof Error ? err.message : String(err);
+        setProgress(prev => ({
+          ...prev,
+          error:
+            getLocale() === 'en'
+              ? `Failed to load 3D map data (${msg}). Please check your connection and try again.`
+              : `Không thể nạp dữ liệu bản đồ 3D (${msg}). Vui lòng kiểm tra kết nối mạng và thử lại.`,
+        }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [readyView, attempt]);
+
+  if (!readyView) {
+    return (
+      <LoadingScreen
+        progress={progress}
+        onRetry={() => {
+          setProgress(prev => ({ ...prev, error: null, percent: 8, step: 1 }));
+          setAttempt(a => a + 1);
+        }}
+      />
+    );
+  }
+
+  return <AppShell view={readyView} />;
+}
+
+function AppShell({ view: v }: { view: CityView }) {
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
   const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);

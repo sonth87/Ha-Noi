@@ -191,17 +191,17 @@ export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = {
 };
 
 /** Progressive Google Maps-style semantic zoom stages as the user zooms out:
-    - 'full' (zoom >= 0.72): All neighborhood houses, landmarks, alleys, sidewalks, trees, furniture, and traffic in viewport.
-    - 'landmarks' (0.38 <= zoom < 0.72): Normal houses hidden; only major landmarks, iconic buildings, tall towers, Metro, and major streets.
-    - 'streets' (0.20 <= zoom < 0.38): All buildings hidden; only the road network, lakes/parks, and ward boundaries.
-    - 'city' (zoom < 0.20): Streets and buildings hidden; only base geography (ground, lakes, major parks) and Hanoi outer boundary. */
+    - 'full' (zoom >= 0.65): All neighborhood houses, landmarks, alleys, sidewalks, trees, furniture, and traffic in viewport.
+    - 'landmarks' (0.22 <= zoom < 0.65): Normal houses hidden; only major landmarks, iconic buildings, tall towers, Metro, and major streets.
+    - 'streets' (0.048 <= zoom < 0.22): All buildings hidden; only major streets/avenues, lakes/parks, and ward (Phường) boundaries & names.
+    - 'city' (zoom < 0.048, down to minZoom = 0.015): Streets and buildings hidden; only base geography (ground, lakes, major parks) and Hanoi outer boundary & name. */
 export type MapZoomStage = 'full' | 'landmarks' | 'streets' | 'city';
 
 export const ZOOM_STAGE_THRESHOLDS = {
-  FULL_MIN_ZOOM: 0.72,
-  LANDMARKS_MIN_ZOOM: 0.38,
-  STREETS_MIN_ZOOM: 0.20,
-  WARD_BOUNDARY_MAX_ZOOM: 1.45,
+  FULL_MIN_ZOOM: 0.65,
+  LANDMARKS_MIN_ZOOM: 0.22,
+  STREETS_MIN_ZOOM: 0.048,
+  WARD_BOUNDARY_MAX_ZOOM: 1.25,
 } as const;
 
 export function mapZoomStage(zoom: number, isShowcase: boolean, isPov: boolean): MapZoomStage {

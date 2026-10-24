@@ -252,18 +252,22 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(adminBoundaryModeForZoom(2.0, false, false)).toBe('off');
     expect(adminBoundaryModeForZoom(0.8, false, false)).toBe('ward');
     expect(adminBoundaryModeForZoom(0.25, false, false)).toBe('ward');
-    expect(adminBoundaryModeForZoom(0.15, false, false)).toBe('city');
+    expect(adminBoundaryModeForZoom(0.075, false, false)).toBe('ward');
+    expect(adminBoundaryModeForZoom(0.03, false, false)).toBe('city');
+    expect(adminBoundaryModeForZoom(0.015, false, false)).toBe('city');
     expect(adminBoundaryModeForZoom(0.8, true, false)).toBe('off');
     expect(adminBoundaryModeForZoom(0.8, false, true)).toBe('off');
 
     // 4-stage Google Maps-style progressive zoom visibility
     expect(mapZoomStage(1.4, false, false)).toBe('full');
     expect(mapZoomStage(0.75, false, false)).toBe('full');
-    expect(mapZoomStage(0.55, false, false)).toBe('landmarks');
-    expect(mapZoomStage(0.30, false, false)).toBe('streets');
-    expect(mapZoomStage(0.14, false, false)).toBe('city');
-    expect(mapZoomStage(0.14, true, false)).toBe('full');
-    expect(mapZoomStage(0.14, false, true)).toBe('full');
+    expect(mapZoomStage(0.45, false, false)).toBe('landmarks');
+    expect(mapZoomStage(0.15, false, false)).toBe('streets');
+    expect(mapZoomStage(0.075, false, false)).toBe('streets');
+    expect(mapZoomStage(0.03, false, false)).toBe('city');
+    expect(mapZoomStage(0.015, false, false)).toBe('city');
+    expect(mapZoomStage(0.03, true, false)).toBe('full');
+    expect(mapZoomStage(0.03, false, true)).toBe('full');
 
     const normalHouse = city.buildings.find(b => b.house && !b.model)!;
     const landmarkBldg = city.buildings.find(b => b.model === 'khue-van-cac')!;
@@ -273,6 +277,7 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     const baseLayers = buildMapBaseLayers(city);
     expect(baseLayers.terrain.stats.triangles).toBeGreaterThan(0);
     expect(baseLayers.majorStreets.stats.triangles).toBeGreaterThan(0);
+    expect(baseLayers.majorStreets.stats.lines).toBeGreaterThan(0);
     expect(baseLayers.localStreets.stats.triangles).toBeGreaterThan(0);
     expect(baseLayers.metro.stats.triangles).toBeGreaterThan(0);
 

@@ -91,10 +91,14 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     const pieces = clipPathTo(full, inside);
     pieces.forEach((piece, k) => {
       const id = pieces.length > 1 ? `s${w.id}-${k}` : `s${w.id}`;
-      const s0 = along(full, piece[0]!), s1 = s0 + polylineLength(piece);
+      let cutProf: [number, number][] = [];
+      if (prof.length) {
+        const s0 = along(full, piece[0]!), s1 = s0 + polylineLength(piece);
+        cutProf = cutProfile(prof, s0, s1);
+      }
       streets.push({
         id, name: t.name, kind, path: piece, ...shape, oneway, layer: bridge ? 1 : layer,
-        profile: prof.length ? cutProfile(prof, s0, s1) : [], source: src('way', w.id),
+        profile: cutProf, source: src('way', w.id),
       });
       for (const nid of w.nodes) {
         const p = xy.get(nid);
@@ -157,46 +161,94 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
   }
 
   const keep = outlines.filter(b => inside(centroid(b.ring)));
-  const keepWithBox = keep.map(b => ({ b, box: bbox(b.ring), area: ringArea(b.ring) })).sort((a, b) => a.area - b.area);
+  type BoxedOutline = { b: Raw; box: Rect; area: number };
+  const keepWithBox: BoxedOutline[] = keep.map(b => ({ b, box: bbox(b.ring), area: ringArea(b.ring) })).sort((a, b) => a.area - b.area);
+  const OG = 64, outlineGrid = new Map<string, BoxedOutline[]>();
+  const addOutlineToGrid = (entry: BoxedOutline) => {
+    const { x0, y0, x1, y1 } = entry.box;
+    for (let i = Math.floor((x0 - 1) / OG); i <= Math.floor((x1 + 1) / OG); i++) {
+      for (let j = Math.floor((y0 - 1) / OG); j <= Math.floor((y1 + 1) / OG); j++) {
+        const k = `${i},${j}`, l = outlineGrid.get(k);
+        if (l) l.push(entry); else outlineGrid.set(k, [entry]);
+      }
+    }
+  };
+  for (const entry of keepWithBox) addOutlineToGrid(entry);
+
   const partsOf = new Map<string, Raw[]>();
   for (const p of partsRaw) {
     const c = centroid(p.ring);
+    const pBox = bbox(p.ring);
+    const candSet = new Set<BoxedOutline>();
+    for (let i = Math.floor(pBox.x0 / OG); i <= Math.floor(pBox.x1 / OG); i++) {
+      for (let j = Math.floor(pBox.y0 / OG); j <= Math.floor(pBox.y1 / OG); j++) {
+        const cell = outlineGrid.get(`${i},${j}`);
+        if (cell) for (const x of cell) candSet.add(x);
+      }
+    }
+    const cands = candSet.size > 1 ? [...candSet].sort((a, b) => a.area - b.area) : [...candSet];
     // the smallest outline holding the part's centre (or sharing a vertex/edge with it)
     const owner = (
-      keepWithBox.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring)) ??
-      keepWithBox.find(x => p.ring.some(v => (v[0] >= x.box.x0 && v[0] <= x.box.x1 && v[1] >= x.box.y0 && v[1] <= x.box.y1 && pointInRing(v, x.b.ring)) || x.b.ring.some(u => dist(u, v) < 0.5)))
+      cands.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring)) ??
+      cands.find(x => p.ring.some(v =>
+        v[0] >= x.box.x0 - 0.5 && v[0] <= x.box.x1 + 0.5 && v[1] >= x.box.y0 - 0.5 && v[1] <= x.box.y1 + 0.5 &&
+        (pointInRing(v, x.b.ring) || x.b.ring.some(u => dist(u, v) < 0.5)),
+      ))
     )?.b;
     if (!owner) {
       if (inside(c)) {
         const promoted: Raw = { id: `bp_${p.id}`, source: p.source, ring: p.ring, t: { ...p.t, building: p.t.building ?? p.t['building:part'] ?? 'yes' } };
         keep.push(promoted);
-        keepWithBox.push({ b: promoted, box: bbox(promoted.ring), area: ringArea(promoted.ring) });
+        const newEntry: BoxedOutline = { b: promoted, box: pBox, area: ringArea(promoted.ring) };
+        keepWithBox.push(newEntry);
+        addOutlineToGrid(newEntry);
         partsOf.set(promoted.id, [p]);
       }
       continue;
     }
-    partsOf.set(owner.id, [...(partsOf.get(owner.id) ?? []), p]);
+    let list = partsOf.get(owner.id);
+    if (!list) partsOf.set(owner.id, (list = []));
+    list.push(p);
   }
 
   const fronts = streets.filter(s => s.kind !== 'footway' && s.kind !== 'steps' && s.layer === 0);
-  const FG = 64, frontGrid = new Map<string, Street[]>();
+  const FG = 48, frontGrid = new Map<string, Street[]>();
   for (const s of fronts) {
-    const sb = bbox(s.path), pad = s.width / 2 + 45;
-    for (let i = Math.floor((sb.x0 - pad) / FG); i <= Math.floor((sb.x1 + pad) / FG); i++) {
-      for (let j = Math.floor((sb.y0 - pad) / FG); j <= Math.floor((sb.y1 + pad) / FG); j++) {
-        const k = `${i},${j}`, l = frontGrid.get(k);
-        if (l) l.push(s); else frontGrid.set(k, [s]);
+    const pad = s.width / 2 + 42;
+    const seenCells = new Set<string>();
+    for (let k = 1; k < s.path.length; k++) {
+      const a = s.path[k - 1]!, b = s.path[k]!;
+      const x0 = Math.min(a[0], b[0]) - pad, x1 = Math.max(a[0], b[0]) + pad;
+      const y0 = Math.min(a[1], b[1]) - pad, y1 = Math.max(a[1], b[1]) + pad;
+      for (let i = Math.floor(x0 / FG); i <= Math.floor(x1 / FG); i++) {
+        for (let j = Math.floor(y0 / FG); j <= Math.floor(y1 / FG); j++) {
+          const key = `${i},${j}`;
+          if (seenCells.has(key)) continue;
+          seenCells.add(key);
+          const l = frontGrid.get(key);
+          if (l) l.push(s); else frontGrid.set(key, [s]);
+        }
       }
     }
   }
   const nearStreets = (ring: readonly Vec2[]) => {
     const rb = bbox(ring), set = new Set<Street>();
-    for (let i = Math.floor(rb.x0 / FG); i <= Math.floor(rb.x1 / FG); i++) {
-      for (let j = Math.floor(rb.y0 / FG); j <= Math.floor(rb.y1 / FG); j++) {
-        for (const s of frontGrid.get(`${i},${j}`) ?? []) set.add(s);
+    const i0 = Math.floor(rb.x0 / FG), i1 = Math.floor(rb.x1 / FG);
+    const j0 = Math.floor(rb.y0 / FG), j1 = Math.floor(rb.y1 / FG);
+    for (let i = i0; i <= i1; i++) {
+      for (let j = j0; j <= j1; j++) {
+        const cell = frontGrid.get(`${i},${j}`);
+        if (cell) for (const s of cell) set.add(s);
       }
     }
-    return set.size ? [...set] : fronts;
+    if (set.size) return [...set];
+    for (let i = i0 - 2; i <= i1 + 2; i++) {
+      for (let j = j0 - 2; j <= j1 + 2; j++) {
+        const cell = frontGrid.get(`${i},${j}`);
+        if (cell) for (const s of cell) set.add(s);
+      }
+    }
+    return set.size ? [...set] : [];
   };
   const formatOsmAddress = (t: OsmTags, fallbackStreet?: string): string | undefined => {
     const hn = t['addr:housenumber']?.trim();
@@ -241,6 +293,15 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       if (ring.length >= 3) campuses.push({ name: t.name, ring, box: bbox(ring), address: formatOsmAddress(t), subtype: sub });
     }
   }
+  const campusGrid = new Map<string, Campus[]>();
+  for (const cp of campuses) {
+    for (let i = Math.floor(cp.box.x0 / FG); i <= Math.floor(cp.box.x1 / FG); i++) {
+      for (let j = Math.floor(cp.box.y0 / FG); j <= Math.floor(cp.box.y1 / FG); j++) {
+        const k = `${i},${j}`, l = campusGrid.get(k);
+        if (l) l.push(cp); else campusGrid.set(k, [cp]);
+      }
+    }
+  }
 
   const partFloorsOf = (pt: OsmTags, kind: Building['kind'], fallbackLevels: number): number[] => {
     const lv = Number.parseFloat(pt['building:levels'] ?? '');
@@ -259,7 +320,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
 
   const buildings: Building[] = keep.map(b => {
     const c = centroid(b.ring);
-    const campus = campuses.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
+    const campusCell = campusGrid.get(`${Math.floor(c[0] / FG)},${Math.floor(c[1] / FG)}`);
+    const campus = campusCell?.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
     const subtype = inferSubtype(b.t) ?? campus?.subtype;
     const isHeritage = subtype === 'heritage';
     const rawKind = guessKind(b.ring, isHeritage ? 'other' : buildingHint(b.t));
@@ -287,6 +349,8 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       : [{ id: b.id, footprint: b.ring, z0: 0, floors: partFloorsOf(b.t, kind, levels), facade: bFacade, roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
     const localFronts = nearStreets(b.ring);
     const front = frontEdge(b.ring, localFronts);
+    const pFront = b.ring[front]!, qFront = b.ring[(front + 1) % b.ring.length]!, midFront: Vec2 = [(pFront[0] + qFront[0]) / 2, (pFront[1] + qFront[1]) / 2];
+    if (!localFronts.some(s => nearPath(midFront, s.path, s.width / 2 + 40))) report.noStreet.push(b.source);
     const { w, d } = frontage(b.ring, front);
     const fromOsm = own !== undefined || raw.some(p => levelsOf(p.t) !== undefined);
     // on a main street a house is always a shop (rules.houseFor); never generate a modern tube house for a heritage building
@@ -326,11 +390,6 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       source: b.source,
     };
   });
-  for (const b of buildings) {
-    const p = b.footprint[b.front]!, q = b.footprint[(b.front + 1) % b.footprint.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    const localFronts = nearStreets(b.footprint);
-    if (!localFronts.some(s => nearPath(mid, s.path, s.width / 2 + 40))) report.noStreet.push(b.source);
-  }
 
   // ---------- 4. areas ----------
   const areas: Area[] = [];

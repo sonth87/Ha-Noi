@@ -106,6 +106,54 @@ const TIER_1_STREETS = new Set([
   'Đường Hùng Vương',
   'Phố Văn Cao',
   'Đường Bưởi',
+  // Khu vực Hoàn Kiếm main arteries
+  'Phố Tràng Thi',
+  'Phố Tràng Tiền',
+  'Phố Hàng Bài',
+  'Phố Hàng Đào',
+  'Phố Hàng Ngang',
+  'Phố Hàng Đường',
+  'Phố Hai Bà Trưng',
+  'Phố Lý Thường Kiệt',
+  'Phố Trần Hưng Đạo',
+  'Phố Phan Chu Trinh',
+  'Phố Quán Sứ',
+  'Phố Lê Thái Tổ',
+  'Phố Đinh Tiên Hoàng',
+  'Đường Trần Quang Khải',
+  'Đường Trần Nhật Duật',
+  // Khu vực Tây Hồ main arteries
+  'Đường Lạc Long Quân',
+  'Đường Âu Cơ',
+  'Đường Nghi Tàm',
+  'Đường Yên Phụ',
+  'Đường Võ Chí Công',
+  'Đường Thụy Khuê',
+  'Phố Nguyễn Đình Thi',
+  'Phố Trích Sài',
+  'Đường Xuân Diệu',
+  // Khu vực Hai Bà Trưng main arteries
+  'Phố Bà Triệu',
+  'Phố Huế',
+  'Đường Đại Cồ Việt',
+  'Đường Giải Phóng',
+  'Phố Bạch Mai',
+  'Phố Minh Khai',
+  'Phố Đại La',
+  'Đường Trần Khát Chân',
+  'Phố Lò Đúc',
+  'Phố Kim Ngưu',
+  'Phố Lê Duẩn',
+  // Khu vực Thanh Xuân main arteries
+  'Đường Nguyễn Trãi',
+  'Đường Khuất Duy Tiến',
+  'Đường Lê Văn Lương',
+  'Phố Vũ Trọng Phụng',
+  'Phố Nguyễn Tuân',
+  'Đường Hoàng Đạo Thúy',
+  'Phố Quan Nhân',
+  'Phố Khương Trung',
+  'Phố Khương Đình',
 ]);
 
 function stripPrefix(name: string): string {
@@ -172,7 +220,7 @@ export function buildStreetCatalog(city: City): StreetEntry[] {
       tier = 4;
     }
 
-    const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? 1.55 : tier === 3 ? 3.2 : 6.0;
+    const minPxPerMetre = tier === 1 ? 0 : tier === 2 ? 1.25 : tier === 3 ? 3.2 : 6.0;
     const stemHeightPx = tier === 1 ? 42 : tier === 2 ? 34 : 28;
     const kindLabel = bridge ? 'Cầu vượt' : KIND_LABELS[kind];
     const shortName = bridge ? name : stripPrefix(name);
@@ -255,6 +303,7 @@ export function selectVisibleStreetLabels(
   heightPx: number,
   targetWorld: [number, number],
   project: (world: [number, number, number]) => { x: number; y: number; visible: boolean },
+  avoidBoxes?: readonly { x: number; y: number; halfW: number; halfH: number }[],
 ): ProjectedStreetLabel[] {
   if (mode === 'off' || widthPx <= 0 || heightPx <= 0) return [];
 
@@ -263,6 +312,8 @@ export function selectVisibleStreetLabels(
   const padBottom = mode === 'pin' ? 32 : 32;
   const inBounds = (x: number, y: number) =>
     x >= padX && x <= widthPx - padX && y >= padTop && y <= heightPx - padBottom;
+  const hitsAvoidBox = (x: number, y: number, halfW: number, halfH: number) =>
+    avoidBoxes?.some(b => Math.abs(x - b.x) < halfW + b.halfW && Math.abs(y - b.y) < halfH + b.halfH) ?? false;
 
   if (mode === 'pin') {
     const maxPins = pxPerMetre < 1.5 ? 7 : pxPerMetre < 3.0 ? 11 : pxPerMetre < 5.5 ? 15 : 19;
@@ -278,6 +329,7 @@ export function selectVisibleStreetLabels(
       for (const s of e.samples) {
         const p = project(s.at);
         if (!p.visible || !inBounds(p.x, p.y)) continue;
+        if (hitsAvoidBox(p.x, p.y - e.stemHeightPx * 0.5, 56, e.stemHeightPx * 0.5 + 16)) continue;
         const d = Math.hypot(s.at[0] - targetWorld[0], s.at[1] - targetWorld[1]);
         if (d < bestDist) {
           bestDist = d;
@@ -310,7 +362,7 @@ export function selectVisibleStreetLabels(
       if (chosen.length >= maxPins) break;
       const collides = chosen.some(o => {
         const baseClose = Math.hypot(c.x - o.x, c.y - o.y) < minDistPx;
-        const badgeClose = Math.abs(c.x - o.x) < 120 && Math.abs((c.y - c.stemHeightPx) - (o.y - o.stemHeightPx)) < 46;
+        const badgeClose = Math.abs(c.x - o.x) < 116 && Math.abs((c.y - c.stemHeightPx) - (o.y - o.stemHeightPx)) < 44;
         return baseClose || badgeClose;
       });
       if (!collides) chosen.push(c);
@@ -319,11 +371,12 @@ export function selectVisibleStreetLabels(
   }
 
   // 'map' mode (Google Maps / OpenStreetMap style along the street)
-  const maxLabels = pxPerMetre < 1.5 ? 14 : pxPerMetre < 3.2 ? 24 : 36;
+  const maxLabels = pxPerMetre < 0.8 ? 20 : pxPerMetre < 1.5 ? 16 : pxPerMetre < 3.2 ? 26 : 38;
   const chosen: ProjectedStreetLabel[] = [];
 
   for (const e of catalog) {
-    if (pxPerMetre < e.minPxPerMetre) continue;
+    const minPx = e.tier <= 2 ? 0 : e.minPxPerMetre;
+    if (pxPerMetre < minPx) continue;
     let placedForStreet = 0;
     const maxPerStreet = e.tier === 1 && pxPerMetre >= 2.2 ? 2 : 1;
 
@@ -332,13 +385,14 @@ export function selectVisibleStreetLabels(
       const s = e.samples[idx]!;
       const p0 = project(s.at);
       if (!p0.visible || !inBounds(p0.x, p0.y)) continue;
+      if (hitsAvoidBox(p0.x, p0.y, 48, 20)) continue;
 
       const p1 = project([s.at[0] + s.dir[0] * 10, s.at[1] + s.dir[1] * 10, s.at[2]]);
       let angleDeg = (Math.atan2(p1.y - p0.y, p1.x - p0.x) * 180) / Math.PI;
       if (angleDeg > 90) angleDeg -= 180;
       if (angleDeg < -90) angleDeg += 180;
 
-      const minGap = placedForStreet > 0 ? 220 : 105;
+      const minGap = placedForStreet > 0 ? 220 : pxPerMetre < 0.5 ? 86 : 102;
       const collides = chosen.some(o => Math.hypot(p0.x - o.x, p0.y - o.y) < (o.name === e.name ? 220 : minGap));
       if (collides) continue;
 
