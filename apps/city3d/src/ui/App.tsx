@@ -35,18 +35,16 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
     try {
       onProgress({
         step: 1,
-        percent: 16,
+        percent: 22,
         label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu bản đồ Hà Nội...',
-        detail: isEn ? 'Downloading urban geometry & map packets' : 'Đang nạp gói dữ liệu không gian 6 khu vực nội đô',
       });
       await yieldToBrowser();
       await loadAreaAsync(DEFAULT_AREA_ID);
 
       onProgress({
         step: 2,
-        percent: 42,
+        percent: 48,
         label: isEn ? '2/5 · Decoding buildings, lakes & terrain...' : '2/5 · Đang giải mã công trình, sông hồ & địa hình...',
-        detail: isEn ? 'Projecting coordinates & architectural footprints' : 'Đang phân tích mặt bằng kiến trúc, di tích & công viên',
       });
       await yieldToBrowser();
       const { city } = await loadCityAsync(DEFAULT_AREA_ID);
@@ -58,11 +56,8 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
 
       onProgress({
         step: 3,
-        percent: 66,
+        percent: 72,
         label: isEn ? '3/5 · Building road network, flyovers & Metro...' : '3/5 · Đang dựng mạng lưới giao thông & tuyến Metro...',
-        detail: isEn
-          ? `Joining ${counts.streets.toLocaleString()} road segments & intersections`
-          : `Đang kết nối ${counts.streets.toLocaleString('vi')} đoạn đường, nút giao & đèn tín hiệu`,
         counts,
       });
       await yieldToBrowser();
@@ -72,11 +67,8 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
 
       onProgress({
         step: 4,
-        percent: 88,
+        percent: 92,
         label: isEn ? '4/5 · Initializing 3D landmarks & place catalog...' : '4/5 · Đang khởi tạo công trình biểu tượng & địa danh...',
-        detail: isEn
-          ? `Preparing ${counts.buildings.toLocaleString()} buildings & 3D meshes`
-          : `Đang tạo danh mục địa danh và dựng lớp nền 3D (${counts.buildings.toLocaleString('vi')} công trình)`,
         counts,
       });
       await yieldToBrowser();
@@ -86,10 +78,9 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         step: 5,
         percent: 100,
         label: isEn ? '5/5 · Entering 3D Hanoi Map...' : '5/5 · Đang hoàn tất khung cảnh 3D...',
-        detail: isEn ? 'Ready' : 'Sẵn sàng hiển thị',
         counts,
       });
-      await yieldToBrowser();
+      await new Promise<void>(resolve => setTimeout(resolve, 220));
       shared = built;
       return built;
     } catch (err) {
@@ -290,9 +281,8 @@ export function App() {
     const isEn = getLocale() === 'en';
     return {
       step: 1,
-      percent: 8,
+      percent: 0,
       label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu bản đồ Hà Nội...',
-      detail: isEn ? 'Connecting & initializing 3D engine' : 'Đang khởi động trình kết xuất 3D & nạp dữ liệu',
     };
   });
 

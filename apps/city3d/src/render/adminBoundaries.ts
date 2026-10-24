@@ -10,20 +10,20 @@ export type AdminBoundaryMode = 'off' | 'ward' | 'city';
 export interface AdminBoundaryDef {
   id: string;
   name: string;
-  subtitle?: string;
   /** Center point [x, y] in city metres where the label is anchored */
   center: Vec2;
   /** Closed polygon vertices [x, y] in city metres */
   polygon: readonly Vec2[];
 }
 
-/** 15 Phường administrative boundaries covering Hoàn Kiếm, Tây Hồ, Ba Đình, Đống Đa, Hai Bà Trưng, and Thanh Xuân */
+/** 43 Phường administrative boundaries (official 2025 Hanoi ward arrangement) covering:
+    Hoàn Kiếm, Tây Hồ, Ba Đình, Đống Đa, Hai Bà Trưng, Thanh Xuân, Cầu Giấy,
+    Nam Từ Liêm, Bắc Từ Liêm, Hà Đông, Hoàng Mai, and Long Biên */
 export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
-  // ── Khu vực Hoàn Kiếm ──
+  // ── Khu vực Hoàn Kiếm (2 phường) ──
   {
     id: 'ward:hoan-kiem',
     name: 'Phường Hoàn Kiếm',
-    subtitle: 'Hồ Gươm · Phố cổ · Nhà hát Lớn',
     center: [3650, 1650],
     polygon: [
       [2880, 550], [4680, 550], [4680, 2680], [2350, 2680], [2350, 1680], [2880, 1680],
@@ -32,27 +32,32 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:cua-nam',
     name: 'Phường Cửa Nam',
-    subtitle: 'Quán Sứ · Hỏa Lò · Tràng Thi',
     center: [2615, 1115],
     polygon: [
       [2350, 550], [2880, 550], [2880, 1680], [2350, 1680],
     ],
   },
-  // ── Khu vực Tây Hồ ──
+  // ── Khu vực Tây Hồ (2 phường) ──
   {
     id: 'ward:tay-ho',
     name: 'Phường Tây Hồ',
-    subtitle: 'Hồ Tây · Chùa Trấn Quốc · Phủ Tây Hồ',
     center: [4950, -2550],
     polygon: [
       [3550, -4720], [6480, -4720], [6480, -450], [3550, -450],
     ],
   },
-  // ── Khu vực Ba Đình ──
+  {
+    id: 'ward:phu-thuong',
+    name: 'Phường Phú Thượng',
+    center: [5520, -6250],
+    polygon: [
+      [3550, -7800], [7500, -7800], [7500, -4720], [3550, -4720],
+    ],
+  },
+  // ── Khu vực Ba Đình (3 phường) ──
   {
     id: 'ward:ba-dinh',
     name: 'Phường Ba Đình',
-    subtitle: 'Quảng trường Ba Đình · Lăng Bác · Hoàng thành',
     center: [3320, -300],
     polygon: [
       [2550, -1150], [4120, -1150], [4120, 550], [2550, 550],
@@ -61,7 +66,6 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:ngoc-ha',
     name: 'Phường Ngọc Hà',
-    subtitle: 'Ngọc Hà · Đội Cấn · Bách Thảo',
     center: [2820, -1950],
     polygon: [
       [2100, -2800], [3550, -2800], [3550, -1150], [2100, -1150],
@@ -70,17 +74,15 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:giang-vo',
     name: 'Phường Giảng Võ',
-    subtitle: 'Giảng Võ · Kim Mã · Liễu Giai',
     center: [1720, -1650],
     polygon: [
       [1350, -2800], [2100, -2800], [2100, -1150], [2550, -1150], [2550, -650], [1680, -650], [1680, -1150], [1350, -1150],
     ],
   },
-  // ── Khu vực Đống Đa ──
+  // ── Khu vực Đống Đa (5 phường) ──
   {
     id: 'ward:van-mieu',
     name: 'Phường Văn Miếu – Quốc Tử Giám',
-    subtitle: 'Văn Miếu · Khuê Văn Các · Tôn Đức Thắng',
     center: [2100, -50],
     polygon: [
       [1650, -650], [2550, -650], [2550, 550], [1650, 550],
@@ -89,7 +91,6 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:o-cho-dua',
     name: 'Phường Ô Chợ Dừa',
-    subtitle: 'Ô Chợ Dừa · Hoàng Cầu · Hào Nam',
     center: [1085, -270],
     polygon: [
       [520, -720], [1650, -720], [1650, 180], [520, 180],
@@ -98,7 +99,6 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:dong-da',
     name: 'Phường Đống Đa',
-    subtitle: 'Ngã tư Thái Hà – Tây Sơn · Gò Đống Đa',
     center: [-150, -200],
     polygon: [
       [-820, -720], [520, -720], [520, 320], [-820, 320],
@@ -107,7 +107,6 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:kim-lien',
     name: 'Phường Kim Liên',
-    subtitle: 'Chùa Bộc · Phạm Ngọc Thạch · Phương Mai',
     center: [750, 720],
     polygon: [
       [-150, 320], [520, 320], [520, 180], [1650, 180], [1650, 550], [2350, 550], [2350, 1120], [-150, 1120],
@@ -116,17 +115,15 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:lang',
     name: 'Phường Láng',
-    subtitle: 'Láng Hạ · Đường Láng · Nguyễn Chí Thanh',
     center: [250, -1300],
     polygon: [
       [-820, -1860], [1350, -1860], [1350, -1150], [1680, -1150], [1680, -720], [-820, -720],
     ],
   },
-  // ── Khu vực Hai Bà Trưng ──
+  // ── Khu vực Hai Bà Trưng (2 phường) ──
   {
     id: 'ward:hai-ba-trung',
     name: 'Phường Hai Bà Trưng',
-    subtitle: 'Công viên Thống Nhất · Bà Triệu · Đền Hai Bà Trưng',
     center: [1850, 1850],
     polygon: [
       [-150, 1120], [2350, 1120], [2350, 2680], [3080, 2680], [3080, 3620], [1350, 3620], [1350, 1950], [-150, 1950],
@@ -135,17 +132,15 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:bach-mai',
     name: 'Phường Bạch Mai',
-    subtitle: 'Bạch Mai · Đại học Bách Khoa · Giải Phóng',
     center: [600, 2780],
     polygon: [
       [-150, 1950], [1350, 1950], [1350, 3620], [-150, 3620],
     ],
   },
-  // ── Khu vực Thanh Xuân ──
+  // ── Khu vực Thanh Xuân (2 phường) ──
   {
     id: 'ward:thanh-xuan',
     name: 'Phường Thanh Xuân',
-    subtitle: 'Nguyễn Trãi · Ngã Tư Sở · Nhân Chính',
     center: [-1950, -880],
     polygon: [
       [-3080, -1630], [-820, -1630], [-820, -120], [-3080, -120],
@@ -154,39 +149,280 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
   {
     id: 'ward:khuong-dinh',
     name: 'Phường Khương Đình',
-    subtitle: 'Royal City · Khương Trung · Khương Hạ',
     center: [-1650, 415],
     polygon: [
       [-3080, -120], [-820, -120], [-820, 320], [-150, 320], [-150, 930], [-3080, 930],
     ],
   },
+  // ── Khu vực Cầu Giấy (3 phường) ──
+  {
+    id: 'ward:nghia-do',
+    name: 'Phường Nghĩa Đô',
+    center: [2320, -3950],
+    polygon: [
+      [1350, -5200], [3550, -5200], [3550, -2800], [1350, -2800],
+    ],
+  },
+  {
+    id: 'ward:cau-giay',
+    name: 'Phường Cầu Giấy',
+    center: [440, -3550],
+    polygon: [
+      [-450, -5200], [1350, -5200], [1350, -1860], [-450, -1860],
+    ],
+  },
+  {
+    id: 'ward:yen-hoa',
+    name: 'Phường Yên Hòa',
+    center: [-1050, -3050],
+    polygon: [
+      [-1650, -4500], [-450, -4500], [-450, -1630], [-1650, -1630],
+    ],
+  },
+  // ── Khu vực Nam Từ Liêm (4 phường) ──
+  {
+    id: 'ward:tu-liem',
+    name: 'Phường Từ Liêm',
+    center: [-1520, -5650],
+    polygon: [
+      [-2600, -6800], [-450, -6800], [-450, -4500], [-2600, -4500],
+    ],
+  },
+  {
+    id: 'ward:dai-mo',
+    name: 'Phường Đại Mỗ',
+    center: [-3120, -3060],
+    polygon: [
+      [-4600, -4500], [-1650, -4500], [-1650, -1630], [-4600, -1630],
+    ],
+  },
+  {
+    id: 'ward:tay-mo',
+    name: 'Phường Tây Mỗ',
+    center: [-3900, -6050],
+    polygon: [
+      [-5200, -7600], [-2600, -7600], [-2600, -4500], [-5200, -4500],
+    ],
+  },
+  {
+    id: 'ward:xuan-phuong',
+    name: 'Phường Xuân Phương',
+    center: [-1620, -8150],
+    polygon: [
+      [-2800, -9500], [-450, -9500], [-450, -6800], [-2800, -6800],
+    ],
+  },
+  // ── Khu vực Bắc Từ Liêm (5 phường) ──
+  {
+    id: 'ward:xuan-dinh',
+    name: 'Phường Xuân Đỉnh',
+    center: [2700, -6500],
+    polygon: [
+      [1850, -7800], [3550, -7800], [3550, -5200], [1850, -5200],
+    ],
+  },
+  {
+    id: 'ward:phu-dien',
+    name: 'Phường Phú Diễn',
+    center: [700, -6700],
+    polygon: [
+      [-450, -8200], [1850, -8200], [1850, -5200], [-450, -5200],
+    ],
+  },
+  {
+    id: 'ward:dong-ngac',
+    name: 'Phường Đông Ngạc',
+    center: [4020, -9250],
+    polygon: [
+      [1850, -10800], [6200, -10800], [6200, -7800], [1850, -7800],
+    ],
+  },
+  {
+    id: 'ward:tay-tuu',
+    name: 'Phường Tây Tựu',
+    center: [700, -9650],
+    polygon: [
+      [-450, -11200], [1850, -11200], [1850, -8200], [-450, -8200],
+    ],
+  },
+  {
+    id: 'ward:thuong-cat',
+    name: 'Phường Thượng Cát',
+    center: [3320, -11700],
+    polygon: [
+      [1850, -12600], [4800, -12600], [4800, -10800], [1850, -10800],
+    ],
+  },
+  // ── Khu vực Hà Đông (5 phường) ──
+  {
+    id: 'ward:ha-dong',
+    name: 'Phường Hà Đông',
+    center: [-4640, -1020],
+    polygon: [
+      [-6200, -2400], [-3080, -2400], [-3080, 350], [-6200, 350],
+    ],
+  },
+  {
+    id: 'ward:duong-noi',
+    name: 'Phường Dương Nội',
+    center: [-5900, -3950],
+    polygon: [
+      [-7400, -5600], [-4600, -5600], [-4600, -2400], [-7400, -2400],
+    ],
+  },
+  {
+    id: 'ward:yen-nghia',
+    name: 'Phường Yên Nghĩa',
+    center: [-8000, -3700],
+    polygon: [
+      [-9800, -5600], [-7400, -5600], [-7400, -2400], [-6200, -2400], [-6200, -1800], [-9800, -1800],
+    ],
+  },
+  {
+    id: 'ward:kien-hung',
+    name: 'Phường Kiến Hưng',
+    center: [-4940, 1100],
+    polygon: [
+      [-6800, 350], [-3080, 350], [-3080, 1850], [-6800, 1850],
+    ],
+  },
+  {
+    id: 'ward:phu-luong',
+    name: 'Phường Phú Lương',
+    center: [-8300, 25],
+    polygon: [
+      [-9800, -1800], [-6200, -1800], [-6200, 350], [-6800, 350], [-6800, 1850], [-9800, 1850],
+    ],
+  },
+  // ── Khu vực Hoàng Mai (7 phường) ──
+  {
+    id: 'ward:dinh-cong',
+    name: 'Phường Định Công',
+    center: [-1960, 1890],
+    polygon: [
+      [-3080, 930], [-850, 930], [-850, 2850], [-3080, 2850],
+    ],
+  },
+  {
+    id: 'ward:tuong-mai',
+    name: 'Phường Tương Mai',
+    center: [50, 4150],
+    polygon: [
+      [-850, 3620], [950, 3620], [950, 4850], [-850, 4850],
+    ],
+  },
+  {
+    id: 'ward:vinh-hung',
+    name: 'Phường Vĩnh Hưng',
+    center: [2015, 4635],
+    polygon: [
+      [950, 3620], [3080, 3620], [3080, 5650], [950, 5650],
+    ],
+  },
+  {
+    id: 'ward:hoang-mai',
+    name: 'Phường Hoàng Mai',
+    center: [-450, 5500],
+    polygon: [
+      [-1850, 4850], [950, 4850], [950, 6150], [-1850, 6150],
+    ],
+  },
+  {
+    id: 'ward:hoang-liet',
+    name: 'Phường Hoàng Liệt',
+    center: [-3025, 4500],
+    polygon: [
+      [-4200, 2850], [-1850, 2850], [-1850, 6150], [-4200, 6150],
+    ],
+  },
+  {
+    id: 'ward:yen-so',
+    name: 'Phường Yên Sở',
+    center: [-725, 6875],
+    polygon: [
+      [-2400, 6150], [950, 6150], [950, 7600], [-2400, 7600],
+    ],
+  },
+  {
+    id: 'ward:linh-nam',
+    name: 'Phường Lĩnh Nam',
+    center: [2175, 6625],
+    polygon: [
+      [950, 5650], [3400, 5650], [3400, 7600], [950, 7600],
+    ],
+  },
+  // ── Khu vực Long Biên (4 phường) ──
+  {
+    id: 'ward:bo-de',
+    name: 'Phường Bồ Đề',
+    center: [5940, 1100],
+    polygon: [
+      [4680, -1200], [7200, -1200], [7200, 3400], [4680, 3400],
+    ],
+  },
+  {
+    id: 'ward:long-bien',
+    name: 'Phường Long Biên',
+    center: [5650, 5000],
+    polygon: [
+      [4100, 3400], [7200, 3400], [7200, 6600], [4100, 6600],
+    ],
+  },
+  {
+    id: 'ward:viet-hung',
+    name: 'Phường Việt Hưng',
+    center: [8300, 1300],
+    polygon: [
+      [7200, -1200], [9400, -1200], [9400, 3800], [7200, 3800],
+    ],
+  },
+  {
+    id: 'ward:phuc-loi',
+    name: 'Phường Phúc Lợi',
+    center: [8300, 5500],
+    polygon: [
+      [7200, 3800], [9400, 3800], [9400, 7200], [7200, 7200],
+    ],
+  },
 ];
 
-/** Outer boundary of Hanoi enclosing the 6 central districts */
+/** Outer boundary of Hanoi enclosing the 12 urban districts (43 Phường) */
 export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = {
   id: 'city:ha-noi',
   name: 'Hà Nội',
-  subtitle: 'Thủ đô ngàn năm văn hiến · Hoàn Kiếm · Tây Hồ · Ba Đình · Đống Đa · Hai Bà Trưng · Thanh Xuân',
-  center: [1750, -350],
+  center: [500, -1800],
   polygon: [
-    [-3080, -1630],
-    [-820, -1630],
-    [-820, -1860],
-    [1350, -1860],
-    [1350, -2800],
-    [3550, -2800],
-    [3550, -4720],
+    [-9800, -5600],
+    [-7400, -5600],
+    [-5200, -5600],
+    [-5200, -7600],
+    [-2800, -7600],
+    [-2800, -9500],
+    [-450, -9500],
+    [-450, -11200],
+    [1850, -11200],
+    [1850, -12600],
+    [4800, -12600],
+    [4800, -10800],
+    [6200, -10800],
+    [6200, -7800],
+    [7500, -7800],
+    [7500, -4720],
     [6480, -4720],
-    [6480, -450],
-    [4120, -450],
-    [4120, 550],
-    [4680, 550],
-    [4680, 2680],
-    [3080, 2680],
-    [3080, 3620],
-    [-150, 3620],
-    [-150, 930],
-    [-3080, 930],
+    [6480, -1200],
+    [9400, -1200],
+    [9400, 7200],
+    [7200, 7200],
+    [7200, 6600],
+    [4100, 6600],
+    [3400, 7600],
+    [-2400, 7600],
+    [-2400, 6150],
+    [-4200, 6150],
+    [-4200, 2850],
+    [-3080, 2850],
+    [-3080, 1850],
+    [-9800, 1850],
   ],
 };
 

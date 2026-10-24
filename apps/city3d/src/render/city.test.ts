@@ -244,13 +244,22 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
       }
     }
     const naItem = list.find(x => x.name.includes('Nhà Quốc hội'))!;
+    const keangnamItem = list.find(x => x.name.includes('Keangnam'))!;
+    const myDinhItem = list.find(x => x.name.includes('Mỹ Đình'))!;
+    const hanoiMuseumItem = list.find(x => x.name.includes('Bảo tàng Hà Nội'))!;
+    expect(keangnamItem).toBeDefined();
+    expect(myDinhItem).toBeDefined();
+    expect(hanoiMuseumItem).toBeDefined();
     expect(buildShowcase(city, mausoleumItem.id)!.flags).toHaveLength(1);
     expect(buildShowcase(city, naItem.id)!.flags).toHaveLength(1);
+    expect(buildShowcase(city, myDinhItem.id)!.flags).toHaveLength(1);
   });
 
   it('defines dashed administrative boundaries, centered labels, and 4-stage progressive zoom hierarchy', () => {
-    expect(WARD_BOUNDARIES).toHaveLength(15);
+    expect(WARD_BOUNDARIES).toHaveLength(44);
     expect(HANOI_OUTER_BOUNDARY.name).toBe('Hà Nội');
+    expect('subtitle' in HANOI_OUTER_BOUNDARY).toBe(false);
+    expect(WARD_BOUNDARIES.every(w => !('subtitle' in w))).toBe(true);
     expect(adminBoundaryModeForZoom(2.0, false, false)).toBe('off');
     expect(adminBoundaryModeForZoom(0.8, false, false)).toBe('ward');
     expect(adminBoundaryModeForZoom(0.25, false, false)).toBe('ward');

@@ -9,25 +9,78 @@ const rep = (h: number, n: number) => Array.from({ length: n }, () => h);
 
 const LINE_3_STATIONS = new Set(['Cầu Giấy', 'Chùa Hà', 'Đại học Quốc gia', 'Lê Đức Thọ', 'Cầu Diễn', 'Phú Diễn', 'Minh Khai', 'Nhổn']);
 
-/** Resolve city-frame [x, y] into Hanoi's new Phường (ward) administrative units across
-    Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, and Thanh Xuân */
+/** Resolve city-frame [x, y] into Hanoi's 43 official 2025 Phường (ward) administrative units across
+    Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân, Cầu Giấy, Nam Từ Liêm, Bắc Từ Liêm, Hà Đông, Hoàng Mai, and Long Biên */
 export const districtOf = (pt: readonly [number, number]): string => {
   const [x, y] = pt;
-  // 1. Khu vực Tây Hồ (phía Bắc / Đông Bắc Hồ Tây)
-  if (x >= 3550 && y < -450) return 'Phường Tây Hồ';
-  // 2. Khu vực Hoàn Kiếm (Hồ Gươm, Phố cổ, Cửa Nam)
-  if (x >= 2350 && y >= 550) {
+  // 1. Khu vực Long Biên (phía Đông qua Sông Hồng)
+  if (x >= 4680 && y >= -1200) {
+    if (x >= 7200) return y < 3800 ? 'Phường Việt Hưng' : 'Phường Phúc Lợi';
+    return y < 3400 ? 'Phường Bồ Đề' : 'Phường Long Biên';
+  }
+  if (x >= 4100 && y >= 3400) return 'Phường Long Biên';
+
+  // 2. Khu vực Tây Hồ (Hồ Tây & Phú Thượng / Nhật Tân)
+  if (x >= 3550 && y < -450) {
+    if (y < -4720 && x <= 7500) {
+      return y < -7800 ? 'Phường Đông Ngạc' : 'Phường Phú Thượng';
+    }
+    return 'Phường Tây Hồ';
+  }
+
+  // 3. Khu vực Bắc Từ Liêm (Xuân Đỉnh, Phú Diễn, Đông Ngạc, Tây Tựu, Thượng Cát)
+  if (y < -5200 && x >= -450) {
+    if (y < -10800 && x >= 1850) return 'Phường Thượng Cát';
+    if (y < -8200) return x >= 1850 ? 'Phường Đông Ngạc' : 'Phường Tây Tựu';
+    if (y < -7800 && x >= 1850) return 'Phường Đông Ngạc';
+    return x >= 1850 ? 'Phường Xuân Đỉnh' : 'Phường Phú Diễn';
+  }
+
+  // 4. Khu vực Cầu Giấy (Nghĩa Đô, Cầu Giấy, Yên Hòa)
+  if (y < -2800 && x >= 1350 && x < 3550) return 'Phường Nghĩa Đô';
+  if (y < -1860 && x >= -450 && x < 1350) return 'Phường Cầu Giấy';
+  if (y < -1630 && x >= -1650 && x < -450) return 'Phường Yên Hòa';
+
+  // 5. Khu vực Nam Từ Liêm (Từ Liêm / Mỹ Đình, Đại Mỗ / Mễ Trì, Tây Mỗ, Xuân Phương)
+  if (y < -1630 && x < -450 && x >= -5200) {
+    if (y < -6800) return 'Phường Xuân Phương';
+    if (y < -4500) return x < -2600 ? 'Phường Tây Mỗ' : 'Phường Từ Liêm';
+    if (x >= -4600 && y >= -2400 && x < -3080) return 'Phường Hà Đông';
+    return 'Phường Đại Mỗ';
+  }
+
+  // 6. Khu vực Hà Đông (Hà Đông, Dương Nội, Yên Nghĩa, Kiến Hưng, Phú Lương)
+  if (x < -3080 && y < 1850) {
+    if (x < -6200) {
+      if (y < -1800) return x < -7400 ? 'Phường Yên Nghĩa' : 'Phường Dương Nội';
+      return 'Phường Phú Lương';
+    }
+    if (y < -2400) return 'Phường Dương Nội';
+    return y >= 350 ? 'Phường Kiến Hưng' : 'Phường Hà Đông';
+  }
+
+  // 7. Khu vực Hoàng Mai (Định Công, Tương Mai, Vĩnh Hưng, Hoàng Mai, Hoàng Liệt, Yên Sở, Lĩnh Nam)
+  if (y >= 3620 || (y >= 930 && x < -150)) {
+    if (y < 2850 && x < -850) return 'Phường Định Công';
+    if (y >= 2850 && x < -1850) return 'Phường Hoàng Liệt';
+    if (y >= 6150) return x >= 950 ? 'Phường Lĩnh Nam' : 'Phường Yên Sở';
+    if (x >= 950) return y >= 5650 ? 'Phường Lĩnh Nam' : 'Phường Vĩnh Hưng';
+    return y >= 4850 ? 'Phường Hoàng Mai' : 'Phường Tương Mai';
+  }
+
+  // 8. Khu vực Hoàn Kiếm (Hồ Gươm, Phố cổ, Cửa Nam)
+  if (x >= 2350 && y >= 550 && y < 2680) {
     return x < 2880 && y < 1680 ? 'Phường Cửa Nam' : 'Phường Hoàn Kiếm';
   }
-  // 3. Khu vực Hai Bà Trưng (phía Đông Nam: Công viên Thống Nhất, Bà Triệu, Bách Khoa, Bạch Mai)
+  // 9. Khu vực Hai Bà Trưng (Công viên Thống Nhất, Bà Triệu, Bách Khoa, Bạch Mai)
   if (y >= 1120 && x >= -150) {
     return y >= 1950 && x < 1350 ? 'Phường Bạch Mai' : 'Phường Hai Bà Trưng';
   }
-  // 4. Khu vực Thanh Xuân (phía Tây Nam: Ngã Tư Sở, Royal City, Nguyễn Trãi, Khương Đình)
+  // 10. Khu vực Thanh Xuân (Ngã Tư Sở, Royal City, Nguyễn Trãi, Khương Đình)
   if (x < -820 || (x < -350 && y >= 320)) {
     return y >= -120 ? 'Phường Khương Đình' : 'Phường Thanh Xuân';
   }
-  // 5. Khu vực Ba Đình (Lăng Bác, Hoàng Thành, Ngọc Hà, Đội Cấn, Liễu Giai, Giảng Võ)
+  // 11. Khu vực Ba Đình (Lăng Bác, Hoàng Thành, Ngọc Hà, Đội Cấn, Liễu Giai, Giảng Võ)
   if (x >= 1680 && y < 550) {
     if (x >= 2550 && y >= -1150) return 'Phường Ba Đình';
     if (y < -1150 && x >= 2100) return 'Phường Ngọc Hà';
@@ -36,7 +89,7 @@ export const districtOf = (pt: readonly [number, number]): string => {
   if (x >= 650 && y < -1150) {
     return x >= 1350 ? 'Phường Giảng Võ' : 'Phường Láng';
   }
-  // 6. Khu vực Đống Đa (Văn Miếu – Quốc Tử Giám, Ô Chợ Dừa, Đống Đa, Kim Liên, Láng)
+  // 12. Khu vực Đống Đa (Văn Miếu – Quốc Tử Giám, Ô Chợ Dừa, Đống Đa, Kim Liên, Láng)
   if (x >= 1650 && y >= -650 && y < 550) return 'Phường Văn Miếu – Quốc Tử Giám';
   if (y < -720) return 'Phường Láng';
   if (x >= 520 && y < 180) return 'Phường Ô Chợ Dừa';
@@ -46,10 +99,10 @@ export const districtOf = (pt: readonly [number, number]): string => {
 
 export const NGA_TU_THAI_HA: AreaConfig = {
   area: 'nga-tu-thai-ha',
-  name: 'Hà Nội: Đống Đa – Ba Đình – Hoàn Kiếm – Tây Hồ – Hai Bà Trưng – Thanh Xuân',
+  name: 'Hà Nội 12 Quận (43 Phường mới): Đống Đa – Ba Đình – Hoàn Kiếm – Tây Hồ – Hai Bà Trưng – Thanh Xuân – Cầu Giấy – Nam Từ Liêm – Bắc Từ Liêm – Hà Đông – Hoàng Mai – Long Biên',
   cityName: 'Hà Nội',
   frame: { origin: [21.0092471, 105.8243958], bearing: 62.5 },
-  // 6 central Hanoi areas: Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân
+  // 12 Hanoi urban districts (43 official 2025 wards)
   region: [
     // Đống Đa
     { x0: -1060, y0: -1880, x1: 2550, y1: 1120 },
@@ -57,12 +110,24 @@ export const NGA_TU_THAI_HA: AreaConfig = {
     { x0: 650, y0: -2820, x1: 4150, y1: 600 },
     // Hoàn Kiếm (Hồ Gươm, Phố cổ, Nhà hát Lớn, Nhà thờ Lớn, Chợ Đồng Xuân, Cầu Long Biên)
     { x0: 2300, y0: 550, x1: 4700, y1: 2700 },
-    // Tây Hồ (Hồ Tây, Chùa Trấn Quốc, Phủ Tây Hồ, Chùa Kim Liên, Nghi Tàm, Quảng An)
-    { x0: 3400, y0: -4750, x1: 6500, y1: -450 },
+    // Tây Hồ (Phường Tây Hồ & Phường Phú Thượng – Hồ Tây, Chùa Trấn Quốc, Phủ Tây Hồ, Cầu Nhật Tân)
+    { x0: 3400, y0: -7850, x1: 7550, y1: -450 },
     // Hai Bà Trưng (Công viên Thống Nhất, Hồ Bảy Mẫu, Bà Triệu, Đền Hai Bà Trưng, ĐH Bách Khoa, Bạch Mai)
     { x0: -150, y0: 1050, x1: 3100, y1: 3650 },
     // Thanh Xuân (Royal City, Ngã Tư Sở, Nguyễn Trãi, Khuất Duy Tiến, Khương Đình, Khương Hạ)
     { x0: -3100, y0: -1650, x1: -650, y1: 950 },
+    // Cầu Giấy (Phường Nghĩa Đô, Phường Cầu Giấy, Phường Yên Hòa)
+    { x0: -1700, y0: -5250, x1: 3580, y1: -1620 },
+    // Nam Từ Liêm (Phường Từ Liêm, Phường Đại Mỗ, Phường Tây Mỗ, Phường Xuân Phương)
+    { x0: -5250, y0: -9550, x1: -420, y1: -1620 },
+    // Bắc Từ Liêm (Phường Xuân Đỉnh, Phường Phú Diễn, Phường Đông Ngạc, Phường Tây Tựu, Phường Thượng Cát)
+    { x0: -480, y0: -12650, x1: 6250, y1: -5180 },
+    // Hà Đông (Phường Hà Đông, Phường Dương Nội, Phường Yên Nghĩa, Phường Kiến Hưng, Phường Phú Lương)
+    { x0: -9850, y0: -5650, x1: -3050, y1: 1900 },
+    // Hoàng Mai (Phường Định Công, Phường Tương Mai, Phường Vĩnh Hưng, Phường Hoàng Mai, Phường Hoàng Liệt, Phường Yên Sở, Phường Lĩnh Nam)
+    { x0: -4250, y0: 920, x1: 3450, y1: 7650 },
+    // Long Biên (Phường Bồ Đề, Phường Long Biên, Phường Việt Hưng, Phường Phúc Lợi)
+    { x0: 4050, y0: -1250, x1: 9450, y1: 7250 },
   ],
   districtOf,
   areaNameOverrides: {
@@ -120,6 +185,15 @@ export const NGA_TU_THAI_HA: AreaConfig = {
     'Đền Hai Bà Trưng': 'Quần thể Di tích Quốc gia đặc biệt Đền – Chùa – Đình Hai Bà Trưng (Đền Đồng Nhân, lập năm 1142 thời vua Lý Anh Tông) bên hồ Hai Bà Trưng thờ Nhị vị Vua Bà Trưng Trắc – Trưng Nhị.',
     'Công viên Thống Nhất': 'Công viên Thống Nhất và Hồ Bảy Mẫu – lá phổi xanh rộng hơn 50 ha giữa trung tâm Hà Nội.',
     'Đình Khương Hạ': 'Cụm di tích Đình – Chùa Khương Hạ cổ kính bên hồ Khương Hạ tại khu vực Thanh Xuân.',
+    'Bảo tàng Dân tộc học Việt Nam': 'Bảo tàng Dân tộc học Việt Nam tại đường Nguyễn Văn Huyên (Phường Nghĩa Đô) với tòa Trống Đồng và khu vườn kiến trúc dân gian Nhà Rông Tây Nguyên.',
+    'Chùa Hà (Thánh Đức Tự)': 'Chùa Hà (Thánh Đức Tự) cổ kính tại Phường Cầu Giấy – ngôi chùa danh tiếng gắn liền với nét đẹp văn hóa tâm linh của người Hà Nội.',
+    'Sân vận động Quốc gia Mỹ Đình': 'Sân vận động Quốc gia Mỹ Đình sức chứa 40.192 chỗ ngồi tại Phường Từ Liêm với hai mái vòm giàn thép khổng lồ.',
+    'Bảo tàng Hà Nội': 'Bảo tàng Hà Nội trên đường Phạm Hùng (Phường Đại Mỗ) với kiến trúc Kim tự tháp ngược 4 tầng độc đáo lưu giữ hàng vạn cổ vật Thăng Long – Hà Nội.',
+    'Trung tâm Hội nghị Quốc gia': 'Trung tâm Hội nghị Quốc gia tại ngã tư Đại lộ Thăng Long – Phạm Hùng với kiến trúc mái lượn sóng Biển Đông.',
+    'Tượng đài Hòa Bình (Công viên Hòa Bình)': 'Tượng đài Hòa Bình cao 30 m tại Công viên Hòa Bình (Phường Xuân Đỉnh) kỷ niệm 1000 năm Thăng Long – Hà Nội – Thành phố Vì Hòa Bình.',
+    'Cầu Nhật Tân (5 Tháp dây văng)': 'Cầu Nhật Tân bắc qua Sông Hồng tại Phường Phú Thượng với 5 trụ tháp dây văng hình thoi tượng trưng cho 5 cửa ô Hà Nội.',
+    'Cầu Long Biên lịch sử': 'Cầu Long Biên lịch sử (khánh thành năm 1902) bắc qua Sông Hồng nối Hoàn Kiếm và Phường Bồ Đề (Long Biên) – chứng nhân lịch sử hào hùng của Thủ đô.',
+    'Làng lụa Vạn Phúc & Đền Vạn Phúc (Hà Đông)': 'Làng lụa Vạn Phúc hơn 1.000 năm tuổi tại Phường Hà Đông – cái nôi nghề dệt lụa tơ tằm truyền thống nổi tiếng bậc nhất Việt Nam.',
   },
   stationMeta: (rawName, at) => {
     const clean = rawName.replace(/^Ga\s+/i, '').trim() || 'Thái Hà';
@@ -167,6 +241,7 @@ export const NGA_TU_THAI_HA: AreaConfig = {
     // Khu vực Tây Hồ
     { id: 'chua-tran-quoc', name: 'Chùa Trấn Quốc – Đền Quán Thánh – Đường Thanh Niên', group: 'Phường Tây Hồ', at: [4402, -838] },
     { id: 'phu-tay-ho', name: 'Phủ Tây Hồ – Hồ Tây – Chùa Kim Liên', group: 'Phường Tây Hồ', at: [4659, -2636] },
+    { id: 'cau-nhat-tan', name: 'Cầu Nhật Tân – Đình Phú Gia (Phú Thượng)', group: 'Phường Phú Thượng', at: [5950, -6850] },
     // Khu vực Hai Bà Trưng
     { id: 'cong-vien-thong-nhat', name: 'Công viên Thống Nhất – Hồ Bảy Mẫu', group: 'Phường Hai Bà Trưng', at: [1483, 1583] },
     { id: 'vincom-ba-trieu', name: 'Vincom Center Bà Triệu – Tòa nhà Gelex', group: 'Phường Hai Bà Trưng', at: [1437, 2193] },
@@ -176,6 +251,27 @@ export const NGA_TU_THAI_HA: AreaConfig = {
     { id: 'royal-city', name: 'Vinhomes Royal City – Ngã Tư Sở (72A Nguyễn Trãi)', group: 'Phường Thanh Xuân', at: [-1093, -473] },
     { id: 'chua-phuc-khanh', name: 'Tổ đình Phúc Khánh – Đình Khương Hạ', group: 'Phường Khương Đình', at: [-714, -202] },
     { id: 'nut-giao-thanh-xuan', name: 'Nút giao Thanh Xuân – Nguyễn Trãi – Khuất Duy Tiến', group: 'Phường Thanh Xuân', at: [-2450, -950] },
+    // Khu vực Cầu Giấy
+    { id: 'keangnam-landmark72', name: 'Keangnam Hanoi Landmark Tower (72 tầng – Phạm Hùng)', group: 'Phường Yên Hòa', at: [-1480, -2950] },
+    { id: 'bao-tang-dan-toc-hoc', name: 'Bảo tàng Dân tộc học Việt Nam & Công viên Nghĩa Đô', group: 'Phường Nghĩa Đô', at: [2180, -4080] },
+    { id: 'cong-vien-cau-giay', name: 'Công viên Cầu Giấy – Chùa Hà – Discovery Complex', group: 'Phường Cầu Giấy', at: [620, -3520] },
+    // Khu vực Nam Từ Liêm
+    { id: 'svd-my-dinh', name: 'Sân vận động Quốc gia Mỹ Đình (Lê Đức Thọ)', group: 'Phường Từ Liêm', at: [-1580, -5620] },
+    { id: 'bao-tang-ha-noi', name: 'Bảo tàng Hà Nội & Trung tâm Hội nghị Quốc gia', group: 'Phường Đại Mỗ', at: [-2120, -2720] },
+    { id: 'vinhomes-smart-city', name: 'Khu đô thị & Công viên Trung tâm Tây Mỗ', group: 'Phường Tây Mỗ', at: [-3900, -5950] },
+    // Khu vực Bắc Từ Liêm
+    { id: 'cong-vien-hoa-binh', name: 'Công viên Hòa Bình & Tượng đài Hòa Bình', group: 'Phường Xuân Đỉnh', at: [2650, -6480] },
+    { id: 'dinh-dong-ngac', name: 'Đình cổ Đông Ngạc (Đình Vẽ) & Học viện Tài chính', group: 'Phường Đông Ngạc', at: [4120, -9150] },
+    // Khu vực Hà Đông
+    { id: 'lang-lua-van-phuc', name: 'Làng lụa Vạn Phúc & Hồ Văn Quán (Hà Đông)', group: 'Phường Hà Đông', at: [-4850, -1420] },
+    { id: 'cong-vien-thien-van-hoc', name: 'Công viên Thiên văn học Dương Nội & Chùa Bia Bà', group: 'Phường Dương Nội', at: [-5950, -3750] },
+    // Khu vực Hoàng Mai
+    { id: 'times-city', name: 'Vinhomes Times City – Quảng trường Nhạc nước', group: 'Phường Vĩnh Hưng', at: [2180, 4420] },
+    { id: 'ho-linh-dam', name: 'Bán đảo & Hồ Linh Đàm (Hoàng Liệt)', group: 'Phường Hoàng Liệt', at: [-2950, 4450] },
+    { id: 'cong-vien-yen-so', name: 'Công viên & Hồ Yên Sở (Hoàng Mai)', group: 'Phường Yên Sở', at: [-680, 6750] },
+    // Khu vực Long Biên
+    { id: 'cau-long-bien', name: 'Cầu Long Biên lịch sử & Đền Ghềnh (Bồ Đề)', group: 'Phường Bồ Đề', at: [4880, 820] },
+    { id: 'aeon-long-bien', name: 'AEON Mall Long Biên & Khu đô thị Việt Hưng', group: 'Phường Long Biên', at: [5720, 4950] },
   ],
   overrides: {
     buildings: {
@@ -728,6 +824,99 @@ export const NGA_TU_THAI_HA: AreaConfig = {
         description: 'Cụm di tích Đình – Chùa Khương Hạ cổ kính bên sông Tô Lịch thuộc Phường Khương Đình.',
         floors: [4.5],
       },
+      // ── Khu vực Cầu Giấy (Phường Nghĩa Đô, Phường Cầu Giấy, Phường Yên Hòa) ──
+      'osm:way/99000000101': {
+        name: 'Keangnam Hanoi Landmark Tower (72 tầng)', kind: 'office', model: 'keangnam-landmark72', facade: 'glass', isSignatureLandmark: true,
+        description: 'Tòa tháp Keangnam Hanoi Landmark 72 cao 336 m (72 tầng) tại mặt đường Phạm Hùng (Phường Yên Hòa) – tòa nhà cao nhất Hà Nội với đài quan sát Sky72 trên đỉnh.',
+        floors: [...rep(5.0, 5), ...rep(4.5, 67)],
+      },
+      'osm:way/99000000102': {
+        name: 'Bảo tàng Dân tộc học Việt Nam (Nguyễn Văn Huyên)', kind: 'other', model: 'bao-tang-dan-toc-hoc', isSignatureLandmark: true,
+        description: 'Bảo tàng Dân tộc học Việt Nam tại đường Nguyễn Văn Huyên (Phường Nghĩa Đô) với tòa nhà Trống Đồng hình tròn và khu vườn kiến trúc dân gian Nhà Rông Tây Nguyên.',
+        floors: [5.5, 5.0, 4.5],
+      },
+      'osm:way/99000000103': {
+        name: 'Chùa Hà – Thánh Đức Tự (Phường Cầu Giấy)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
+        description: 'Chùa Hà (Thánh Đức Tự) trên phố Chùa Hà (Phường Cầu Giấy) – ngôi cổ tự nổi tiếng linh thiêng của Thủ đô Hà Nội.',
+        floors: [4.6, 3.8],
+      },
+      // ── Khu vực Nam Từ Liêm (Phường Từ Liêm, Phường Đại Mỗ, Phường Tây Mỗ, Phường Xuân Phương) ──
+      'osm:way/99000000104': {
+        name: 'Sân vận động Quốc gia Mỹ Đình (Phường Từ Liêm)', kind: 'other', model: 'svd-my-dinh', isSignatureLandmark: true,
+        description: 'Sân vận động Quốc gia Mỹ Đình sức chứa hơn 40.000 chỗ ngồi tại Phường Từ Liêm với kiến trúc hai mái vòm giàn thép khổng lồ và quảng trường cờ Tổ quốc.',
+        floors: [5.0, 4.5, 4.5, 4.0, 4.0],
+      },
+      'osm:way/99000000105': {
+        name: 'Bảo tàng Hà Nội – Kim tự tháp ngược (Phường Đại Mỗ)', kind: 'other', model: 'bao-tang-ha-noi', isSignatureLandmark: true,
+        description: 'Bảo tàng Hà Nội trên đường Phạm Hùng (Phường Đại Mỗ) với thiết kế Kim tự tháp ngược 4 tầng độc đáo soi bóng xuống hồ nước cảnh quan.',
+        floors: [6.5, 6.5, 6.5, 7.0],
+      },
+      'osm:way/99000000106': {
+        name: 'Trung tâm Hội nghị Quốc gia (Phường Đại Mỗ)', kind: 'other', model: 'tt-hoi-nghi-quoc-gia', isSignatureLandmark: true,
+        description: 'Trung tâm Hội nghị Quốc gia tại ngã tư Đại lộ Thăng Long – Phạm Hùng (Phường Đại Mỗ) với kiến trúc mái lượn sóng Biển Đông.',
+        floors: [5.5, 5.0, 4.8, 4.5, 4.5],
+      },
+      // ── Khu vực Bắc Từ Liêm (Phường Xuân Đỉnh, Phú Diễn, Đông Ngạc, Tây Tựu, Thượng Cát) ──
+      'osm:way/99000000107': {
+        name: 'Tượng đài Hòa Bình – Công viên Hòa Bình (Phường Xuân Đỉnh)', kind: 'other', model: 'tuong-dai-hoa-binh', isSignatureLandmark: true,
+        description: 'Tượng đài Hòa Bình cao 30 m tại trung tâm Công viên Hòa Bình (Phường Xuân Đỉnh) kỷ niệm Đại lễ 1000 năm Thăng Long – Hà Nội.',
+        floors: [10.0, 10.0, 10.0],
+      },
+      'osm:way/99000000108': {
+        name: 'Đình cổ Đông Ngạc – Đình Vẽ (Phường Đông Ngạc)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
+        description: 'Đình Đông Ngạc (Đình Vẽ) cổ kính xây dựng từ thế kỷ XVII bên bờ Sông Hồng tại làng khoa bảng Đông Ngạc.',
+        floors: [4.8, 3.6],
+      },
+      // ── Khu vực Tây Hồ – Phường Phú Thượng ──
+      'osm:way/99000000109': {
+        name: 'Cầu Nhật Tân – 5 Tháp dây văng (Phường Phú Thượng)', kind: 'other', model: 'cau-nhat-tan', isSignatureLandmark: true,
+        description: 'Cầu Nhật Tân bắc qua Sông Hồng tại Phường Phú Thượng với 5 trụ tháp dây văng hình thoi rực rỡ tượng trưng cho 5 cửa ô Thăng Long – Hà Nội.',
+        floors: [...rep(13.5, 8)],
+      },
+      'osm:way/99000000110': {
+        name: 'Đình Phú Gia (Di tích lịch sử Phường Phú Thượng)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
+        description: 'Cụm di tích Đình Phú Gia – Chùa Bà Già cổ kính bên bờ Nam Sông Hồng thuộc Phường Phú Thượng.',
+        floors: [4.6, 3.6],
+      },
+      // ── Khu vực Long Biên (Phường Bồ Đề, Phường Long Biên, Phường Việt Hưng, Phường Phúc Lợi) ──
+      'osm:way/99000000111': {
+        name: 'Cầu Long Biên lịch sử (Phường Bồ Đề – Hoàn Kiếm)', kind: 'other', model: 'cau-long-bien', isSignatureLandmark: true,
+        description: 'Cầu Long Biên lịch sử (1899–1902) bắc qua Sông Hồng với kết cấu dầm thép hình rồng lượn – chứng nhân lịch sử hào hùng của Thủ đô Hà Nội.',
+        floors: [7.5, 7.5, 7.5],
+      },
+      'osm:way/99000000112': {
+        name: 'Đền Ghềnh – Chùa Bồ Đề (Phường Bồ Đề)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
+        description: 'Di tích lịch sử Đền Ghềnh và Chùa Bồ Đề cổ kính bên bờ Bắc Sông Hồng thuộc Phường Bồ Đề (Long Biên).',
+        floors: [4.6, 3.6],
+      },
+      // ── Khu vực Hà Đông (Phường Hà Đông, Dương Nội, Yên Nghĩa, Kiến Hưng, Phú Lương) ──
+      'osm:way/99000000113': {
+        name: 'Làng lụa Vạn Phúc & Đền Vạn Phúc (Phường Hà Đông)', kind: 'other', model: 'lang-lua-van-phuc', isSignatureLandmark: true,
+        description: 'Cổng Tam quan Làng lụa Vạn Phúc và Đền thờ Tổ nghề dệt lụa hơn 1.000 năm tuổi tại Phường Hà Đông.',
+        floors: [5.0, 4.2],
+      },
+      'osm:way/99000000114': {
+        name: 'Cụm di tích Chùa Bia Bà – Đình La Khê (Phường Dương Nội)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
+        description: 'Cụm di tích lịch sử văn hóa Chùa Bia Bà – Đình La Khê nổi tiếng tại Phường Dương Nội (Hà Đông).',
+        floors: [4.6, 3.8],
+      },
+      // ── Khu vực Hoàng Mai (Phường Vĩnh Hưng, Tương Mai, Hoàng Mai, Hoàng Liệt, Định Công, Yên Sở, Lĩnh Nam) ──
+      'osm:way/99000000115': {
+        name: 'Vinhomes Times City – Quảng trường Nhạc nước (Phường Vĩnh Hưng)', kind: 'apartment', model: 'times-city', isSignatureLandmark: true,
+        description: 'Khu đô thị phức hợp Vinhomes Times City (458 Minh Khai, Phường Vĩnh Hưng) nổi bật với cổng vòm tân cổ điển và Quảng trường Nhạc nước.',
+        floors: [...rep(4.5, 4), ...rep(3.3, 31)],
+      },
+      'osm:way/99000000116': {
+        name: 'Đền Lừ (Di tích lịch sử Phường Tương Mai)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
+        description: 'Di tích lịch sử Đền Lừ trên gò đảo xanh giữa Hồ Đền Lừ (Phường Tương Mai, Hoàng Mai).',
+        floors: [4.6, 3.6],
+      },
+      'osm:way/99000000117': {
+        name: 'Chùa Sét – Đền Trương Định (Phường Hoàng Mai)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
+        description: 'Di tích lịch sử văn hóa Chùa Sét (Đại Bi Tự) và Đền thờ Bình Tây Đại Nguyên Soái Trương Định tại Phường Hoàng Mai.',
+        floors: [4.6, 3.8],
+      },
     },
   },
 };
+

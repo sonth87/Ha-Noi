@@ -56,6 +56,14 @@ export const CUSTOM_MASSING_MODELS = new Set<string>([
   'traditional-temple',
   'church-hall',
   'traditional-mausoleum',
+  'bao-tang-dan-toc-hoc',
+  'svd-my-dinh',
+  'bao-tang-ha-noi',
+  'tt-hoi-nghi-quoc-gia',
+  'tuong-dai-hoa-binh',
+  'cau-nhat-tan',
+  'cau-long-bien',
+  'lang-lua-van-phuc',
 ]);
 
 interface OrientedBox {
@@ -273,7 +281,8 @@ export function landmarkFlagsOf(b: Building): WavingFlagSpec[] {
     case 'den-ngoc-son':
     case 'phu-tay-ho':
     case 'den-quan-thanh':
-    case 'den-hai-ba-trung': {
+    case 'den-hai-ba-trung':
+    case 'lang-lua-van-phuc': {
       const ob = orientedBoxOf(b.footprint, b.front);
       const flagPos = localPt(ob, -ob.hw - 2.2, -ob.hd - 2.2);
       return [
@@ -289,6 +298,38 @@ export function landmarkFlagsOf(b: Building): WavingFlagSpec[] {
         },
       ];
     }
+    case 'svd-my-dinh': {
+      const ob = orientedBoxOf(b.footprint, b.front);
+      const flagPos = localPt(ob, 0, -ob.hd - 10);
+      return [
+        {
+          id: `${b.id}:flag:my-dinh`,
+          polePos: flagPos,
+          z0: 18.0,
+          z1: 22.0,
+          width: 6.0,
+          dir: ob.u,
+          phase: 0.7,
+          country: 'vn',
+        },
+      ];
+    }
+    case 'tt-hoi-nghi-quoc-gia': {
+      const ob = orientedBoxOf(b.footprint, b.front);
+      const flagPos = localPt(ob, 0, -ob.hd - 8.5);
+      return [
+        {
+          id: `${b.id}:flag:ncc`,
+          polePos: flagPos,
+          z0: 15.0,
+          z1: 18.8,
+          width: 5.4,
+          dir: ob.u,
+          phase: 1.5,
+          country: 'vn',
+        },
+      ];
+    }
     default:
       return [];
   }
@@ -298,6 +339,11 @@ export function landmarkFlagsOf(b: Building): WavingFlagSpec[] {
 export function landmarkBeaconsOf(b: Building): THREE.Vector3[] {
   const c = centroid(b.footprint);
   switch (b.model) {
+    case 'keangnam-landmark72': {
+      const tower = b.parts.reduce((a, p) => (partTop(p) > partTop(a) ? p : a));
+      const tc = centroid(tower.footprint), top = Math.max(328, partTop(tower));
+      return [V(tc[0] - 9, tc[1], top + 14.5), V(tc[0] + 9, tc[1], top + 14.5)];
+    }
     case 'lotte-center': {
       const tower = b.parts.reduce((a, p) => (partTop(p) > partTop(a) ? p : a));
       const tc = centroid(tower.footprint), top = partTop(tower);
@@ -307,13 +353,21 @@ export function landmarkBeaconsOf(b: Building): THREE.Vector3[] {
     case 'capital-place':
     case 'vincom-nct':
     case 'vincom-ba-trieu':
-    case 'royal-city': {
+    case 'royal-city':
+    case 'times-city': {
       return b.parts
         .filter(p => p.floors.length >= 20)
         .map(p => {
           const pc = centroid(p.footprint);
           return V(pc[0], pc[1], partTop(p) + 6.5);
         });
+    }
+    case 'cau-nhat-tan': {
+      const ob = orientedBoxOf(b.footprint, b.front);
+      return [-1.5, -0.5, 0.5, 1.5].map(k => {
+        const pt = localPt(ob, k * (ob.hw * 0.52), 0);
+        return V(pt[0], pt[1], 109.5);
+      });
     }
     case 'daewoo-hotel': {
       const tallest = b.parts.reduce((a, p) => (partTop(p) > partTop(a) ? p : a));
@@ -359,6 +413,16 @@ export function landmarkExtraBoundsPts(b: Building): Vec2[] {
     case 'den-ngoc-son':
       return [[c[0] - 28, c[1] - 28], [c[0] + 28, c[1] + 28]];
     case 'chua-tran-quoc':
+      return [[c[0] - 22, c[1] - 22], [c[0] + 22, c[1] + 22]];
+    case 'bao-tang-dan-toc-hoc':
+      return [[c[0] - 28, c[1] - 28], [c[0] + 28, c[1] + 28]];
+    case 'svd-my-dinh':
+      return [[c[0] - 42, c[1] - 34], [c[0] + 42, c[1] + 34]];
+    case 'bao-tang-ha-noi':
+      return [[c[0] - 28, c[1] - 28], [c[0] + 28, c[1] + 28]];
+    case 'tt-hoi-nghi-quoc-gia':
+      return [[c[0] - 32, c[1] - 28], [c[0] + 32, c[1] + 28]];
+    case 'tuong-dai-hoa-binh':
       return [[c[0] - 22, c[1] - 22], [c[0] + 22, c[1] + 22]];
     default:
       return [];
@@ -479,6 +543,36 @@ export function drawLandmarkBuilding(B: Batch, b: Building, level: Detail): bool
       return true;
     case 'traditional-mausoleum':
       drawTraditionalMausoleum(B, b, level);
+      return true;
+    case 'keangnam-landmark72':
+      drawKeangnamLandmark72(B, b, level);
+      return true;
+    case 'bao-tang-dan-toc-hoc':
+      drawEthnologyMuseum(B, b, level);
+      return true;
+    case 'svd-my-dinh':
+      drawMyDinhStadium(B, b, level);
+      return true;
+    case 'bao-tang-ha-noi':
+      drawHanoiMuseum(B, b, level);
+      return true;
+    case 'tt-hoi-nghi-quoc-gia':
+      drawNationalConventionCenter(B, b, level);
+      return true;
+    case 'tuong-dai-hoa-binh':
+      drawHoaBinhMonument(B, b, level);
+      return true;
+    case 'cau-nhat-tan':
+      drawNhatTanBridge(B, b, level);
+      return true;
+    case 'cau-long-bien':
+      drawLongBienBridge(B, b, level);
+      return true;
+    case 'lang-lua-van-phuc':
+      drawVanPhucSilkGate(B, b, level);
+      return true;
+    case 'times-city':
+      drawTimesCity(B, b, level);
       return true;
     default:
       return false;
@@ -2176,5 +2270,371 @@ export function drawMonumentFeature(B: Batch, f: Feature) {
   B.solid(box(-1.9, -0.95, 1.9, 0.95), 3.6, 4.35, () => 'roof', 'roof', f.id);
 }
 
+// ============================================================================
+// 37. KEANGNAM HANOI LANDMARK TOWER 72 TẦNG (Phạm Hùng – Phường Yên Hòa / Cầu Giấy)
+// ============================================================================
+function drawKeangnamLandmark72(B: Batch, b: Building, level: Detail) {
+  const tower = b.parts.reduce((a, p) => (partTop(p) > partTop(a) ? p : a));
+  const ob = orientedBoxOf(tower.footprint, b.front);
+  const top = Math.max(328.0, partTop(tower));
+  const topLamp = floorId(b, tower.floors.length);
+
+  // 1. Mechanical sky-belts, stepped glass setback crown, and Sky72 Observatory gallery
+  for (const zBelt of [24, 96, 176, 256, top - 12]) {
+    if (zBelt < top) {
+      B.solid(scaleRing(tower.footprint, ob.c, 1.035), zBelt, zBelt + 1.2, () => 'metal', 'metal', b.id);
+    }
+  }
+  const crown1 = scaleRing(tower.footprint, ob.c, 0.88);
+  const crown2 = scaleRing(tower.footprint, ob.c, 0.72);
+  B.solid(crown1, top, top + 6.5, () => 'glass', 'roof', b.id);
+  B.solid(crown2, top + 6.5, top + 11.8, () => 'metal', 'roof', b.id);
+  // Helipad & twin structural spires at the summit
+  B.solid(regPoly(ob.c, Math.min(ob.hw, ob.hd) * 0.42, 12), top + 11.8, top + 12.6, () => 'metal', 'metal', b.id);
+  for (const su of [-1, 1] as const) {
+    const sp = localPt(ob, su * Math.min(9.0, ob.hw * 0.45), 0);
+    B.solid(regPoly(sp, 0.55, 8), top + 11.8, top + 14.5, () => 'metal', 'metal', b.id);
+  }
+  if (level >= 1) {
+    addBandWindows(B, crown1, top + 0.8, top + 5.8, topLamp, 2.8);
+  }
+}
+
+// ============================================================================
+// 38. BẢO TÀNG DÂN TỘC HỌC VIỆT NAM & NHÀ RÔNG TÂY NGUYÊN (Nguyễn Văn Huyên – Phường Nghĩa Đô)
+// ============================================================================
+function drawEthnologyMuseum(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(18.0, ob.hw), hd = Math.max(16.0, ob.hd);
+  const lamp1 = floorId(b, 1), lamp2 = floorId(b, 2);
+
+  // 1. Main Trống Đồng (Bronze Drum) circular museum rotunda & radial colonnade
+  const drumCenter = localPt(ob, -hw * 0.22, 0);
+  const rBase = Math.min(hw * 0.65, hd * 0.78);
+  B.solid(regPoly(drumCenter, rBase + 2.4, 20), 0, 0.75, () => 'wall', 'walk', b.id);
+  const tier1 = regPoly(drumCenter, rBase, 20);
+  const tier2 = regPoly(drumCenter, rBase * 0.82, 20);
+  B.solid(tier1, 0.75, 6.2, () => 'wall', 'roof', b.id);
+  B.solid(tier2, 6.2, 11.4, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(drumCenter, rBase * 1.06, 20), 11.4, 12.4, () => 'metal', 'roof', b.id);
+  // Conical Bronze-Drum skylight dome
+  B.solid(regPoly(drumCenter, rBase * 0.46, 16), 12.4, 14.8, () => 'glass', 'roof', b.id);
+  B.solid(regPoly(drumCenter, rBase * 0.18, 12), 14.8, 16.5, () => 'metal', 'metal', b.id);
+  if (level >= 1) {
+    addBandWindows(B, tier1, 1.5, 5.4, lamp1, 2.6);
+    addBandWindows(B, tier2, 6.9, 10.6, lamp2, 2.6);
+  }
+
+  // 2. Iconic towering Nhà Rông Tây Nguyên (Central Highlands communal stilt house) in the Architectural Garden
+  const rongCenter = localPt(ob, hw * 0.52, -hd * 0.15);
+  const rongOb: OrientedBox = { c: rongCenter, u: ob.u, v: ob.v, hw: 5.2, hd: 3.4 };
+  // Timber stilts
+  for (const su of [-3.8, -1.3, 1.3, 3.8] as const) {
+    for (const sv of [-2.2, 2.2] as const) {
+      B.solid(regPoly(localPt(rongOb, su, sv), 0.24, 6), 0, 2.8, () => 'roof', 'roof', b.id);
+    }
+  }
+  // Raised bamboo/wood platform & cabin
+  B.solid(localRect(rongOb, -5.2, 5.2, -3.2, 3.2), 2.8, 3.25, () => 'wall', 'walk', b.id);
+  B.solid(localRect(rongOb, -4.5, 4.5, -2.5, 2.5), 3.25, 5.6, () => 'wall', 'roof', b.id);
+  // Soaring axe-blade thatched roof (Mái nhà Rông vươn cao 19 m)
+  const slices = 7;
+  for (let s = 0; s < slices; s++) {
+    const t0 = s / slices, t1 = (s + 1) / slices;
+    const z0 = 5.6 + t0 * 13.4, z1 = 5.6 + t1 * 13.4;
+    const wSlice = 4.8 + t0 * 1.1; // flares slightly outward like a traditional axe blade
+    const dSlice = Math.max(0.28, 2.6 * (1 - t0 * 0.88));
+    B.solid(localRect(rongOb, -wSlice, wSlice, -dSlice, dSlice), z0, z1, () => 'roof', 'roof', b.id);
+  }
+}
+
+// ============================================================================
+// 39. SÂN VẬN ĐỘNG QUỐC GIA MỸ ĐÌNH (Lê Đức Thọ – Phường Từ Liêm / Nam Từ Liêm)
+// ============================================================================
+function drawMyDinhStadium(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(46.0, ob.hw), hd = Math.max(34.0, ob.hd);
+  const lamp1 = floorId(b, 1), lamp2 = floorId(b, 2);
+
+  // 1. Outer elliptical stadium bowl & tiered grandstands
+  const nSeg = 24;
+  const ellipseRing = (rx: number, ry: number): Vec2[] =>
+    Array.from({ length: nSeg }, (_, i) => {
+      const a = (i * 2 * Math.PI) / nSeg;
+      return localPt(ob, Math.cos(a) * rx, Math.sin(a) * ry);
+    });
+  B.solid(ellipseRing(hw + 4.0, hd + 4.0), 0, 0.65, () => 'wall', 'walk', b.id);
+  const outerBowl = ellipseRing(hw, hd);
+  B.solid(outerBowl, 0.65, 16.5, () => 'wall', 'roof', b.id);
+  if (level >= 1) {
+    addBandWindows(B, outerBowl, 2.2, 7.5, lamp1, 3.8);
+    addBandWindows(B, outerBowl, 9.0, 14.8, lamp2, 3.8);
+  }
+
+  // 2. Recessed central green football pitch & running track
+  B.flat('walk', ellipseRing(hw * 0.68, hd * 0.66), 0.72, 'detail', b.id);
+  const pitchW = hw * 0.52, pitchD = hd * 0.46;
+  B.flat('grass', localRect(ob, -pitchW, pitchW, -pitchD, pitchD), 0.78, 'detail', b.id);
+  // Center circle & halfway line on the football pitch
+  B.loop(regPoly(ob.c, Math.min(pitchW, pitchD) * 0.28, 16).map(([x, y]) => V(x, y, 0.82)), 'detail');
+
+  // 3. Twin curved steel-truss grandstand roofs (Khán đài A & B) witharching tubular steel trusses
+  for (const sv of [-1, 1] as const) {
+    const vInner = sv * hd * 0.46;
+    const vOuter = sv * hd * 1.04;
+    const v0 = Math.min(vInner, vOuter), v1 = Math.max(vInner, vOuter);
+    const roofRing = localRect(ob, -hw * 0.78, hw * 0.78, v0, v1);
+    B.solid(roofRing, 16.5, 20.2, () => 'metal', 'metal', b.id);
+    // Iconic arching steel mega-truss spanning the full length of each main stand
+    const archV = sv * hd * 0.76;
+    for (let k = -6; k <= 6; k++) {
+      const u0 = (k / 6) * (hw * 0.88);
+      const u1 = ((k + 1) / 6) * (hw * 0.88);
+      const z0 = 20.2 + (1 - (k / 6) ** 2) * 11.5;
+      const z1 = 20.2 + (1 - ((k + 1) / 6) ** 2) * 11.5;
+      const p0 = localPt(ob, u0, archV), p1 = localPt(ob, u1, archV);
+      if (k < 6) {
+        B.line(V(p0[0], p0[1], z0), V(p1[0], p1[1], z1), 'crease');
+      }
+      B.solid(regPoly(p0, 0.55, 6), 16.5, z0, () => 'metal', 'metal', b.id);
+    }
+  }
+
+  // 4. Front Olympic flagpole mast
+  const flagPos = localPt(ob, 0, -hd - 10);
+  B.solid(regPoly(flagPos, 1.4, 8), 0, 1.2, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(flagPos, 0.28, 8), 1.2, 22.2, () => 'metal', 'metal', b.id);
+}
+
+// ============================================================================
+// 40. BẢO TÀNG HÀ NỘI – KIẾN TRÚC KIM TỰ THÁP NGƯỢC (Phạm Hùng – Phường Đại Mỗ)
+// ============================================================================
+function drawHanoiMuseum(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(18.0, ob.hw), hd = Math.max(18.0, ob.hd);
+  const s = Math.min(hw, hd);
+  const lamp1 = floorId(b, 1), lamp2 = floorId(b, 2);
+
+  // 1. Reflecting water basin & landscaped circular plaza around the base
+  B.flat('water', regPoly(ob.c, s * 1.18, 20), 0.08, 'detail', b.id);
+  B.solid(localRect(ob, -s * 0.92, s * 0.92, -s * 0.92, s * 0.92), 0, 0.85, () => 'wall', 'walk', b.id);
+
+  // 2. 4 cantilevered inverted-pyramid tiers (Kim tự tháp ngược 4 tầng vươn rộng dần lên cao)
+  const tiers: [number, number, number][] = [
+    [0.54, 0.85, 6.8],
+    [0.70, 6.8, 13.2],
+    [0.86, 13.2, 19.8],
+    [1.04, 19.8, 27.2],
+  ];
+  for (const [idx, [scale, z0, z1]] of tiers.entries()) {
+    const rW = s * scale;
+    const ring = localRect(ob, -rW, rW, -rW, rW);
+    B.solid(ring, z0, z1, () => (idx % 2 === 0 ? 'wall' : 'glass'), 'roof', b.id);
+    B.solid(localRect(ob, -rW * 1.02, rW * 1.02, -rW * 1.02, rW * 1.02), z1 - 0.55, z1 + 0.25, () => 'metal', 'metal', b.id);
+    if (level >= 1) {
+      addBandWindows(B, ring, z0 + 1.0, z1 - 1.0, idx < 2 ? lamp1 : lamp2, 2.8);
+    }
+  }
+  // Central circular atrium skylight dome on the roof
+  B.solid(regPoly(ob.c, s * 0.36, 16), 27.2, 29.8, () => 'glass', 'roof', b.id);
+}
+
+// ============================================================================
+// 41. TRUNG TÂM HỘI NGHỊ QUỐC GIA – LƯỢN SÓNG BIỂN ĐÔNG (Đại lộ Thăng Long – Phường Đại Mỗ)
+// ============================================================================
+function drawNationalConventionCenter(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(28.0, ob.hw), hd = Math.max(18.0, ob.hd);
+  const lamp1 = floorId(b, 1), lamp2 = floorId(b, 2);
+
+  // 1. Forecourt water fountain plaza & grand stepped podium
+  B.flat('water', localRect(ob, -hw * 0.65, hw * 0.65, -hd - 12.0, -hd - 3.0), 0.08, 'detail', b.id);
+  B.solid(localRect(ob, -hw - 3.0, hw + 3.0, -hd - 3.0, hd + 3.0), 0, 1.2, () => 'wall', 'walk', b.id);
+
+  // 2. Main glass convention hall & front colonnade portico
+  const bodyRing = localRect(ob, -hw * 0.92, hw * 0.92, -hd * 0.85, hd * 0.85);
+  B.solid(bodyRing, 1.2, 18.5, () => 'glass', 'roof', b.id);
+  for (let k = -5; k <= 5; k++) {
+    const cu = (k / 5) * (hw * 0.84);
+    B.solid(regPoly(localPt(ob, cu, -hd * 0.92), 0.58, 10), 1.2, 18.8, () => 'metal', 'metal', b.id);
+  }
+  if (level >= 1) {
+    addBandWindows(B, bodyRing, 2.5, 9.5, lamp1, 3.2);
+    addBandWindows(B, bodyRing, 10.8, 17.2, lamp2, 3.2);
+  }
+
+  // 3. Iconic 5-wave sculptural roof ("Lượn sóng Biển Đông")
+  const waves = 5;
+  const spanU = (hw * 1.92) / waves;
+  for (let w = 0; w < waves; w++) {
+    const u0 = -hw * 0.96 + w * spanU;
+    const u1 = u0 + spanU;
+    const uMid = (u0 + u1) * 0.5;
+    B.solid(localRect(ob, u0 + 0.3, u1 - 0.3, -hd * 0.95, hd * 0.95), 18.5, 22.0, () => 'metal', 'roof', b.id);
+    B.solid(localRect(ob, uMid - spanU * 0.28, uMid + spanU * 0.28, -hd * 0.88, hd * 0.88), 22.0, 25.4, () => 'metal', 'metal', b.id);
+  }
+
+  // 4. Front national flagpole
+  const flagPos = localPt(ob, 0, -hd - 8.5);
+  B.solid(regPoly(flagPos, 0.26, 8), 0, 19.0, () => 'metal', 'metal', b.id);
+}
+
+// ============================================================================
+// 42. TƯỢNG ĐÀI HÒA BÌNH – CÔNG VIÊN HÒA BÌNH (Phạm Văn Đồng – Phường Xuân Đỉnh / Bắc Từ Liêm)
+// ============================================================================
+function drawHoaBinhMonument(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  void level;
+
+  // 1. Stepped circular granite peace plaza & reflecting pool
+  B.flat('water', regPoly(ob.c, 16.5, 20), 0.08, 'detail', b.id);
+  B.solid(regPoly(ob.c, 12.0, 16), 0, 0.75, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, 8.2, 16), 0.75, 1.65, () => 'wall', 'walk', b.id);
+
+  // 2. Semi-circular colonnade of 6 peace pillars behind the main spire
+  for (let k = -3; k <= 3; k++) {
+    if (k === 0) continue;
+    const ang = Math.PI * 0.5 + k * 0.28;
+    const pCol = localPt(ob, Math.cos(ang) * 9.2, Math.sin(ang) * 9.2);
+    B.solid(regPoly(pCol, 0.65, 8), 0.75, 10.5 - Math.abs(k) * 0.8, () => 'wall', 'roof', b.id);
+  }
+
+  // 3. Central 30-metre sculptural Peace Spire & bronze Dove/Phoenix wings at the summit
+  B.solid(regPoly(ob.c, 2.8, 8), 1.65, 8.5, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(ob.c, 1.85, 8), 8.5, 21.0, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(ob.c, 1.2, 8), 21.0, 27.5, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -3.4, 3.4, -0.8, 0.8), 25.5, 29.8, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(ob.c, 0.75, 8), 29.8, 32.0, () => 'metal', 'metal', b.id);
+}
+
+// ============================================================================
+// 43. CẦU NHẬT TÂN – 5 THÁP DÂY VĂNG HÌNH THOI (Phường Phú Thượng / Tây Hồ)
+// ============================================================================
+function drawNhatTanBridge(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(48.0, ob.hw), hd = Math.max(11.0, ob.hd);
+  void level;
+
+  // 1. Elevated 6-lane highway bridge deck across Sông Hồng
+  B.solid(localRect(ob, -hw, hw, -hd, hd), 12.0, 15.2, () => 'wall', 'walk', b.id);
+  B.solid(localRect(ob, -hw, hw, -hd, -hd + 0.6), 15.2, 16.4, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -hw, hw, hd - 0.6, hd), 15.2, 16.4, () => 'metal', 'metal', b.id);
+
+  // 2. Iconic diamond-shaped (hình thoi) cable-stayed pylons & fan stay-cables
+  for (const k of [-1.5, -0.5, 0.5, 1.5]) {
+    const uPylon = k * (hw * 0.52);
+    const pCenter = localPt(ob, uPylon, 0);
+    // River pier below deck
+    B.solid(localRect(ob, uPylon - 2.6, uPylon + 2.6, -hd * 0.85, hd * 0.85), 0, 12.0, () => 'wall', 'roof', b.id);
+    // Diamond pylon legs rising from deck (z = 15.2 m) to mid-spread (z = 58 m) then converging at apex (z = 108 m)
+    for (const sv of [-1, 1] as const) {
+      B.solid(localRect(ob, uPylon - 1.5, uPylon + 1.5, sv * (hd * 0.72) - 1.2, sv * (hd * 0.72) + 1.2), 15.2, 62.0, () => 'wall', 'roof', b.id);
+      B.solid(localRect(ob, uPylon - 1.3, uPylon + 1.3, sv * (hd * 0.36) - 1.0, sv * (hd * 0.36) + 1.0), 62.0, 92.0, () => 'wall', 'roof', b.id);
+    }
+    // Cross-beams & upper converged diamond apex
+    B.solid(localRect(ob, uPylon - 1.6, uPylon + 1.6, -hd * 0.75, hd * 0.75), 58.0, 62.5, () => 'metal', 'metal', b.id);
+    B.solid(regPoly(pCenter, 2.2, 8), 92.0, 109.0, () => 'metal', 'metal', b.id);
+
+    // Radiating fan stay-cables on both sides of the pylon
+    for (const sSpan of [-1, 1] as const) {
+      for (let cIdx = 1; cIdx <= 4; cIdx++) {
+        const uDeck = uPylon + sSpan * cIdx * (hw * 0.055);
+        const zTower = 72.0 + cIdx * 8.2;
+        const pDeck = localPt(ob, uDeck, 0);
+        B.line(V(pCenter[0], pCenter[1], zTower), V(pDeck[0], pDeck[1], 16.0), 'crease');
+      }
+    }
+  }
+}
+
+// ============================================================================
+// 44. CẦU LONG BIÊN LỊCH SỬ (Chứng nhân lịch sử qua Sông Hồng – Phường Hoàn Kiếm / Phường Bồ Đề)
+// ============================================================================
+function drawLongBienBridge(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(42.0, ob.hw), hd = Math.max(5.5, ob.hd);
+  void level;
+
+  // 1. Stone masonry river piers & historic French steel deck (z = 9.5 .. 11.4 m)
+  for (let k = -2; k <= 2; k++) {
+    const uPier = k * (hw * 0.42);
+    B.solid(localRect(ob, uPier - 1.8, uPier + 1.8, -hd * 1.05, hd * 1.05), 0, 9.6, () => 'wall', 'walk', b.id);
+  }
+  B.solid(localRect(ob, -hw, hw, -hd, hd), 9.6, 11.2, () => 'metal', 'metal', b.id);
+
+  // 2. Cantilevered steel lattice truss peaks ("nhịp dầm thép hình rồng lượn")
+  const spans = 4;
+  const spanW = (hw * 1.9) / spans;
+  for (let s = 0; s < spans; s++) {
+    const u0 = -hw * 0.95 + s * spanW;
+    const uMid = u0 + spanW * 0.5;
+    const u1 = u0 + spanW;
+    for (const sv of [-1, 1] as const) {
+      const vTruss = sv * (hd * 0.68);
+      const p0 = localPt(ob, u0, vTruss);
+      const pMid = localPt(ob, uMid, vTruss);
+      const p1 = localPt(ob, u1, vTruss);
+      B.solid(regPoly(pMid, 0.55, 6), 11.2, 22.5, () => 'metal', 'metal', b.id);
+      B.line(V(p0[0], p0[1], 13.5), V(pMid[0], pMid[1], 22.5), 'crease');
+      B.line(V(pMid[0], pMid[1], 22.5), V(p1[0], p1[1], 13.5), 'crease');
+      B.line(V(p0[0], p0[1], 11.2), V(p0[0], p0[1], 13.5), 'crease');
+    }
+    // Overhead lateral steel sway bracing at each peak
+    const pPeakL = localPt(ob, uMid, -hd * 0.68);
+    const pPeakR = localPt(ob, uMid, hd * 0.68);
+    B.line(V(pPeakL[0], pPeakL[1], 22.2), V(pPeakR[0], pPeakR[1], 22.2), 'crease');
+  }
+}
+
+// ============================================================================
+// 45. CỔNG LÀNG LỤA VẠN PHÚC & ĐỀN VẠN PHÚC (Phường Hà Đông)
+// ============================================================================
+function drawVanPhucSilkGate(B: Batch, b: Building, level: Detail) {
+  const ob = orientedBoxOf(b.footprint, b.front);
+  const hw = Math.max(7.5, ob.hw), hd = Math.max(5.5, ob.hd);
+  const lamp1 = floorId(b, 1);
+
+  // 1. Grand 3-arch traditional brick Tam Quan village gate (Cổng Làng lụa Vạn Phúc)
+  for (const [u0, u1] of [[-hw, -hw * 0.58], [-hw * 0.28, -hw * 0.14], [hw * 0.14, hw * 0.28], [hw * 0.58, hw]] as const) {
+    B.solid(localRect(ob, u0, u1, -hd, -hd + 2.8), 0, 5.2, () => 'wall', 'roof', b.id);
+  }
+  B.solid(localRect(ob, -hw, hw, -hd - 0.2, -hd + 3.0), 4.0, 5.4, () => 'wall', 'roof', b.id);
+  const gateOb: OrientedBox = { c: localPt(ob, 0, -hd + 1.4), u: ob.u, v: ob.v, hw: hw * 0.55, hd: 1.8 };
+  B.solid(localRect(gateOb, -gateOb.hw, gateOb.hw, -gateOb.hd, gateOb.hd), 5.4, 8.2, () => 'wall', 'roof', b.id);
+  drawTraditionalCurvedRoof(B, gateOb, gateOb.hw + 0.5, gateOb.hd + 0.4, 8.1, 2.2, b.id, true);
+
+  // 2. Main Vạn Phúc Silk Ancestor Temple hall behind the gate
+  const hallOb: OrientedBox = { c: localPt(ob, 0, hd * 0.28), u: ob.u, v: ob.v, hw: hw * 0.82, hd: hd * 0.52 };
+  B.solid(localRect(hallOb, -hallOb.hw - 0.8, hallOb.hw + 0.8, -hallOb.hd - 0.8, hallOb.hd + 0.8), 0, 0.55, () => 'wall', 'walk', b.id);
+  const hallRing = localRect(hallOb, -hallOb.hw, hallOb.hw, -hallOb.hd, hallOb.hd);
+  B.solid(hallRing, 0.55, 4.6, () => 'wall', 'roof', b.id);
+  if (level >= 1) addBandWindows(B, hallRing, 1.3, 4.0, lamp1, 2.2);
+  drawTraditionalCurvedRoof(B, hallOb, hallOb.hw + 0.4, hallOb.hd + 0.4, 4.5, 2.1, b.id, true);
+
+  // Festive flagpole
+  const fPos = localPt(ob, -hw - 2.2, -hd - 2.2);
+  B.solid(regPoly(fPos, 0.55, 8), 0, 0.75, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(fPos, 0.15, 8), 0.75, 9.2, () => 'metal', 'metal', b.id);
+}
+
+// ============================================================================
+// 46. VINHOMES TIMES CITY (458 Minh Khai – Phường Vĩnh Hưng / Hoàng Mai)
+// ============================================================================
+function drawTimesCity(B: Batch, b: Building, level: Detail) {
+  for (const p of b.parts) {
+    const ob = orientedBoxOf(p.footprint, 0);
+    const top = partTop(p);
+    const topLamp = floorId(b, p.floors.length);
+    for (const zBelt of [16, 48, 80, top - 0.6]) {
+      if (zBelt <= top) B.solid(scaleRing(p.footprint, ob.c, 1.028), zBelt, zBelt + 0.75, () => 'metal', 'metal', b.id);
+    }
+    const crown = scaleRing(p.footprint, ob.c, 0.82);
+    B.solid(crown, top + 0.15, top + 4.5, () => 'wall', 'roof', b.id);
+    B.solid(scaleRing(crown, ob.c, 1.04), top + 4.5, top + 5.3, () => 'metal', 'metal', b.id);
+    if (level >= 1) addBandWindows(B, crown, top + 0.75, top + 4.0, topLamp, 2.4);
+  }
+}
+
 export type { Surface };
+
 

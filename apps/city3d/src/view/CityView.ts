@@ -549,7 +549,7 @@ export class CityView {
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.2;
-    controls.minZoom = 0.015; controls.maxZoom = 60;
+    controls.minZoom = 0.009; controls.maxZoom = 60;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
@@ -1949,12 +1949,6 @@ export class CityView {
     title.className = 'admin-boundary-title';
     title.textContent = def.name;
     btn.appendChild(title);
-    if (def.subtitle) {
-      const sub = document.createElement('span');
-      sub.className = 'admin-boundary-sub';
-      sub.textContent = def.subtitle;
-      btn.appendChild(sub);
-    }
     btn.addEventListener('pointerdown', e => e.stopPropagation());
     btn.addEventListener('click', e => {
       e.stopPropagation();
