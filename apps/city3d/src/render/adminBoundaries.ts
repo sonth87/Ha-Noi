@@ -190,10 +190,31 @@ export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = {
   ],
 };
 
+/** Progressive Google Maps-style semantic zoom stages as the user zooms out:
+    - 'full' (zoom >= 0.72): All neighborhood houses, landmarks, alleys, sidewalks, trees, furniture, and traffic in viewport.
+    - 'landmarks' (0.38 <= zoom < 0.72): Normal houses hidden; only major landmarks, iconic buildings, tall towers, Metro, and major streets.
+    - 'streets' (0.20 <= zoom < 0.38): All buildings hidden; only the road network, lakes/parks, and ward boundaries.
+    - 'city' (zoom < 0.20): Streets and buildings hidden; only base geography (ground, lakes, major parks) and Hanoi outer boundary. */
+export type MapZoomStage = 'full' | 'landmarks' | 'streets' | 'city';
+
+export const ZOOM_STAGE_THRESHOLDS = {
+  FULL_MIN_ZOOM: 0.72,
+  LANDMARKS_MIN_ZOOM: 0.38,
+  STREETS_MIN_ZOOM: 0.20,
+  WARD_BOUNDARY_MAX_ZOOM: 1.45,
+} as const;
+
+export function mapZoomStage(zoom: number, isShowcase: boolean, isPov: boolean): MapZoomStage {
+  if (isShowcase || isPov || zoom >= ZOOM_STAGE_THRESHOLDS.FULL_MIN_ZOOM) return 'full';
+  if (zoom >= ZOOM_STAGE_THRESHOLDS.LANDMARKS_MIN_ZOOM) return 'landmarks';
+  if (zoom >= ZOOM_STAGE_THRESHOLDS.STREETS_MIN_ZOOM) return 'streets';
+  return 'city';
+}
+
 /** Determine which administrative boundary layer should be active at a given camera zoom */
 export function adminBoundaryModeForZoom(zoom: number, isShowcase: boolean, isPov: boolean): AdminBoundaryMode {
-  if (isShowcase || isPov || zoom > 1.45) return 'off';
-  if (zoom >= 0.26) return 'ward';
+  if (isShowcase || isPov || zoom > ZOOM_STAGE_THRESHOLDS.WARD_BOUNDARY_MAX_ZOOM) return 'off';
+  if (zoom >= ZOOM_STAGE_THRESHOLDS.STREETS_MIN_ZOOM) return 'ward';
   return 'city';
 }
 

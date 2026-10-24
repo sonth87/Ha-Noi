@@ -8,10 +8,10 @@
    and a floor. Pure. */
 import * as THREE from 'three';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
-import { centroid, floorId, floorZ, pointInRing, type Building, type City } from '@my-city/core';
+import { buildingHeight, centroid, floorId, floorZ, pointInRing, type Building, type City } from '@my-city/core';
 import { Batch, type LampRange, type Surface } from './batch';
 import { beaconsOf, buildBuildings, cityFloors, type Detail } from './buildings';
-import { buildAreas, buildForecourts, buildGround, buildStreets } from './streets';
+import { buildAreas, buildForecourts, buildGround, buildMonumentFeatures, buildStreets } from './streets';
 import { buildMetro } from './metro';
 
 export interface Layer {
@@ -32,6 +32,17 @@ export interface Layer {
   stats: { triangles: number; lines: number; windows: number };
 }
 
+export interface MapBaseLayers {
+  /** Flat ground, lakes, rivers, parks, and plazas — visible at all zoom levels including city overview */
+  terrain: Layer;
+  /** Named/major street carriageways and road bridges — visible when zoom >= 0.20, hidden in city overview */
+  majorStreets: Layer;
+  /** Minor alleys, sidewalks, lane markings, and building forecourts — visible only in close street view (zoom >= 0.72) */
+  localStreets: Layer;
+  /** Metro viaducts, station platforms, and monument statues — visible when zoom >= 0.38 */
+  metro: Layer;
+}
+
 export interface Tile {
   id: string;
   buildings: Building[];
@@ -42,6 +53,15 @@ export interface Tile {
 
 export const TILE = 64;
 
+/** True for iconic/bespoke landmarks, historic temples/pagodas/monuments, tall towers, and major named buildings */
+export function isMajorLandmarkBuilding(b: Building): boolean {
+  if (b.model != null) return true;
+  const h = buildingHeight(b);
+  if (h >= 38) return true;
+  if (b.name && h >= 22) return true;
+  return false;
+}
+
 export function buildBase(city: City, shellB?: Batch, railB?: Batch): Layer {
   const B = new Batch();
   buildGround(B, city);
@@ -49,6 +69,39 @@ export function buildBase(city: City, shellB?: Batch, railB?: Batch): Layer {
   buildStreets(B, city);
   buildForecourts(B, city);
   buildMetro(B, city, shellB ?? B, railB);
+  return layerOf(B, true, city);
+}
+
+/** Build separated semantic base layers so zoomed-out stages can hide local alleys/sidewalks/forecourts or all streets */
+export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch): MapBaseLayers {
+  const terrainB = new Batch();
+  buildGround(terrainB, city);
+  buildAreas(terrainB, city, false);
+
+  const majorB = new Batch();
+  buildStreets(majorB, city, 'major');
+
+  const localB = new Batch();
+  buildStreets(localB, city, 'local');
+  buildForecourts(localB, city);
+
+  const metroB = new Batch();
+  buildMonumentFeatures(metroB, city);
+  buildMetro(metroB, city, shellB ?? metroB, railB);
+
+  return {
+    terrain: layerOf(terrainB, true, city),
+    majorStreets: layerOf(majorB, true, city),
+    localStreets: layerOf(localB, true, city),
+    metro: layerOf(metroB, true, city),
+  };
+}
+
+/** Single merged Layer containing only major landmarks and tall buildings across the city (for mid-range zoom 0.38 <= zoom < 0.72) */
+export function buildLandmarkOverviewLayer(city: City, level: Detail = 1): Layer {
+  const B = new Batch();
+  const landmarks = city.buildings.filter(isMajorLandmarkBuilding);
+  buildBuildings(B, city, landmarks, level);
   return layerOf(B, true, city);
 }
 

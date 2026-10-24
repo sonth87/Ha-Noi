@@ -31,14 +31,18 @@ import { Batch, type Surface } from '@render/batch';
 import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, isFlagVisibleAtSpan, stepSharedWavingFlags, type WavingFlagInstance,
 } from '@render/buildings';
-import { beaconsOf, buildBase, buildTile, cityFloors, layerOf, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
+import {
+  beaconsOf, buildLandmarkOverviewLayer, buildMapBaseLayers, buildTile, cityFloors, layerOf, tilesOf,
+  type Detail, type Layer, type MapBaseLayers, type Tile,
+} from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
 import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import {
-  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments, type AdminBoundaryDef,
+  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments, mapZoomStage,
+  type AdminBoundaryDef, type MapZoomStage,
 } from '@render/adminBoundaries';
 import {
   CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
@@ -159,10 +163,24 @@ interface Train {
   stopping: boolean;
 }
 
+const MAX_ACTIVE_VEHICLES = 900;
+function spawnBoundedTraffic(lanes: readonly Lane[], density: number): Vehicle[] {
+  const all = spawnTraffic(lanes, density);
+  if (all.length <= MAX_ACTIVE_VEHICLES) return all;
+  const stride = all.length / MAX_ACTIVE_VEHICLES;
+  const out: Vehicle[] = [];
+  for (let i = 0; i < MAX_ACTIVE_VEHICLES; i++) {
+    out.push(all[Math.min(all.length - 1, Math.floor(i * stride))]!);
+  }
+  return out;
+}
+
 export class CityView {
+  readonly baseLayers: MapBaseLayers;
   readonly base: Layer;
   readonly stationShell: Layer;
   readonly railTracks: Layer;
+  private landmarkOverviewLayer: Layer | null = null;
   readonly tiles: TileState[];
   private readonly landmarkTileSet = new Set<TileState>();
   private readonly bldgBounds: BldgBounds[];
@@ -227,6 +245,13 @@ export class CityView {
     renderer: THREE.WebGLRenderer;
     scene: THREE.Scene;
     mapGroup: THREE.Group;
+    terrainGroup: THREE.Group;
+    majorStreetsGroup: THREE.Group;
+    localStreetsGroup: THREE.Group;
+    metroBaseGroup: THREE.Group;
+    tilesGroup: THREE.Group;
+    furnitureGroup: THREE.Group;
+    landmarkOverviewGroup: THREE.Group;
     stationShellGroup: THREE.Group;
     railTrackGroup: THREE.Group;
     wardBoundaryLines: LineSegments2;
@@ -289,10 +314,14 @@ export class CityView {
     this.northAz = Math.PI / 2 + (this.frame.bearing * Math.PI) / 180;
     const stationShellB = new Batch();
     const railTracksB = new Batch();
-    this.base = buildBase(city, stationShellB, railTracksB);
+    this.baseLayers = buildMapBaseLayers(city, stationShellB, railTracksB);
+    this.base = this.baseLayers.terrain;
     this.stationShell = layerOf(stationShellB, true, city);
     this.railTracks = layerOf(railTracksB, true, city);
-    this.layers.add(this.base);
+    this.layers.add(this.baseLayers.terrain);
+    this.layers.add(this.baseLayers.majorStreets);
+    this.layers.add(this.baseLayers.localStreets);
+    this.layers.add(this.baseLayers.metro);
     this.layers.add(this.stationShell);
     this.layers.add(this.railTracks);
     this.floors = cityFloors(city);
@@ -363,7 +392,7 @@ export class CityView {
     };
 
     const quality = loadQuality();
-    this.vehicles = spawnTraffic(this.lanes, quality.traffic);
+    this.vehicles = spawnBoundedTraffic(this.lanes, quality.traffic);
     const sig = signalsAt(0);
     const totalTrains = this.tracks.reduce((acc, tr) => acc + trainCount(tr), 0);
     this.snap = {
@@ -520,7 +549,14 @@ export class CityView {
     controls.addEventListener('end', onControlEnd);
     this.place(camera, controls, this.savedCam.az, this.savedCam.el);
 
-    const baseGroup = this.group(this.base, true);
+    const terrainGroup = this.group(this.baseLayers.terrain, true);
+    const majorStreetsGroup = this.group(this.baseLayers.majorStreets, true);
+    const localStreetsGroup = this.group(this.baseLayers.localStreets, true);
+    const metroBaseGroup = this.group(this.baseLayers.metro, true);
+    const tilesGroup = new THREE.Group();
+    const furnitureGroup = new THREE.Group();
+    const landmarkOverviewGroup = new THREE.Group();
+    landmarkOverviewGroup.visible = false;
     const stationShellGroup = this.group(this.stationShell, false);
     const railTrackGroup = this.group(this.railTracks, false);
     railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
@@ -536,7 +572,19 @@ export class CityView {
     );
     cityBoundaryLines.frustumCulled = false;
     cityBoundaryLines.visible = false;
-    mapGroup.add(baseGroup, stationShellGroup, railTrackGroup, wardBoundaryLines, cityBoundaryLines);
+    mapGroup.add(
+      terrainGroup,
+      majorStreetsGroup,
+      localStreetsGroup,
+      metroBaseGroup,
+      tilesGroup,
+      furnitureGroup,
+      landmarkOverviewGroup,
+      stationShellGroup,
+      railTrackGroup,
+      wardBoundaryLines,
+      cityBoundaryLines,
+    );
     for (const t of this.tiles) {
       for (const v of t.layers.values()) v.group = null;
       t.shown = -1;
@@ -584,12 +632,19 @@ export class CityView {
       if (this.snap.showcase) {
         showcaseGroup.traverse(o => { if (o.userData.surface && o.visible && o.parent?.visible !== false) pickable.push(o); });
       } else {
-        for (const t of this.tiles) {
-          const g = t.cutGroup?.visible ? t.cutGroup : (t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null);
-          if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+        if (tilesGroup.visible) {
+          for (const t of this.tiles) {
+            const g = t.cutGroup?.visible ? t.cutGroup : (t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null);
+            if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
+          }
+        }
+        if (landmarkOverviewGroup.visible) {
+          landmarkOverviewGroup.traverse(o => { if (o.userData.surface && o.visible) pickable.push(o); });
         }
         if (stationShellGroup.visible) for (const o of stationShellGroup.children) if (o.userData.surface) pickable.push(o);
-        for (const o of baseGroup.children) if (o.userData.surface) pickable.push(o);
+        for (const grp of [metroBaseGroup, terrainGroup, majorStreetsGroup, localStreetsGroup]) {
+          if (grp.visible) for (const o of grp.children) if (o.userData.surface) pickable.push(o);
+        }
       }
       const hits = ray.intersectObjects(pickable, false);
       for (const hit of hits) {
@@ -950,7 +1005,31 @@ export class CityView {
     window.addEventListener('hashchange', onPopState);
 
     this.mounted = {
-      host, renderer, scene, mapGroup, stationShellGroup, railTrackGroup, wardBoundaryLines, cityBoundaryLines, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, flags, fleets, vehicleLines,
+      host,
+      renderer,
+      scene,
+      mapGroup,
+      terrainGroup,
+      majorStreetsGroup,
+      localStreetsGroup,
+      metroBaseGroup,
+      tilesGroup,
+      furnitureGroup,
+      landmarkOverviewGroup,
+      stationShellGroup,
+      railTrackGroup,
+      wardBoundaryLines,
+      cityBoundaryLines,
+      showcaseGroup,
+      extensionGroup,
+      camera,
+      controls,
+      composer: null,
+      bloom: null,
+      beacons,
+      flags,
+      fleets,
+      vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         window.removeEventListener('popstate', onPopState);
@@ -983,16 +1062,18 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // Build nearby bespoke landmark tiles plus the closest tiles immediately
-    const first = Math.min(1, this.wantedDetail()) as Detail;
-    const landmarkTiles = this.tiles
-      .filter(t => t.tile.buildings.some(b => b.model) && dist2(t.tile.center, controls.target) <= 1800 * 1800)
-      .slice(0, 24);
-    const closestTiles = [...this.tiles]
-      .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
-      .slice(0, 14);
-    const initTiles = new Set<TileState>([...landmarkTiles, ...closestTiles]);
-    for (const t of initTiles) this.show(t, this.ensure(t, first));
+    // Build only the closest visible tiles synchronously so initial mount is instantaneous
+    if (this.currentZoomStage() === 'full') {
+      const first = Math.min(1, this.wantedDetail()) as Detail;
+      const closestTiles = [...this.tiles]
+        .filter(t => this.nearTile(t))
+        .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
+        .slice(0, 12);
+      for (const t of closestTiles) {
+        this.show(t, this.ensure(t, first));
+        this.syncTileVisibility(t, true);
+      }
+    }
     this.houseLights(false);
     this.streetLamps();
     for (const st of this.city.stations) this.setLamp(stationLamp(st, 'board'), true, false);
@@ -1165,7 +1246,7 @@ export class CityView {
       m.controls.enabled = !this.pov.isActive();
       m.railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
       if (povMode === 'map') {
-        for (const t of this.tiles) this.syncTileVisibility(t, true);
+        for (const t of this.tiles) this.syncTileVisibility(t, this.nearTile(t) && t.shown >= 0);
       } else {
         this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
         this.ensurePovVisibleTiles();
@@ -1588,7 +1669,8 @@ export class CityView {
     if (!m || !layer) return;
     const mode = this.snap.streetLabels;
     const povActive = this.pov.isActive();
-    if (this.snap.showcase || mode === 'off' || povActive) {
+    const stage = this.currentZoomStage();
+    if (this.snap.showcase || mode === 'off' || povActive || stage === 'city') {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -1694,6 +1776,7 @@ export class CityView {
     const w = m.host.clientWidth, h = m.host.clientHeight;
     const activeCam = this.activeCamera();
     const povActive = this.pov.isActive();
+    const stage = this.currentZoomStage();
     const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
     const tmp = new THREE.Vector3();
     const project = (world: [number, number, number]) => {
@@ -1719,7 +1802,7 @@ export class CityView {
       }
     }
 
-    if (this.snap.showcase || mode === 'off' || povActive || m.camera.zoom < 0.26) {
+    if (this.snap.showcase || mode === 'off' || povActive || stage === 'streets' || stage === 'city') {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -2179,7 +2262,7 @@ export class CityView {
 
   // ---------- traffic ----------
   private respawn() {
-    this.vehicles = spawnTraffic(this.lanes, this.snap.quality.traffic);
+    this.vehicles = spawnBoundedTraffic(this.lanes, this.snap.quality.traffic);
     const m = this.mounted;
     if (m) {
       for (const [kind, f] of m.fleets) {
@@ -2233,7 +2316,8 @@ export class CityView {
   }
 
   private trainStep() {
-    const hide = !this.pov.isActive() && this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles;
+    const stage = this.currentZoomStage();
+    const hide = !this.pov.isActive() && (stage !== 'full' || (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles));
     const lit = new Set<string>();
     for (const tr of this.trains) {
       if (hide) { for (const g of tr.cars) g.visible = false; continue; }
@@ -2274,6 +2358,9 @@ export class CityView {
     if (!m) return;
     this.sim.t += dt;
     this.trainStep();
+    const povActive = this.pov.isActive();
+    const stage = this.currentZoomStage();
+    if (!povActive && (stage !== 'full' || (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles))) return;
     const sig = signalsAt(this.sim.t);
     stepTraffic(this.vehicles, this.lanes, sig, this.sim.prev, dt);
     this.sim.prev = sig;
@@ -2284,8 +2371,6 @@ export class CityView {
       }
       this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
     }
-    const povActive = this.pov.isActive();
-    if (!povActive && this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles) return;
     const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
     const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, maxLineFloats = arr.length, e = mat.elements;
@@ -2295,7 +2380,10 @@ export class CityView {
       let vis = 0;
       for (let i = 0; i < f.list.length; i++) {
         const v = f.list[i]!;
-        placeVehicle(v, this.lanes[v.lane]!, mat);
+        const lane = this.lanes[v.lane]!;
+        const p0 = lane.path[0]!;
+        if (!povActive && far > 0 && (Math.abs(p0[0] - c.x) > far + 650 || Math.abs(p0[1] - c.z) > far + 650)) continue;
+        placeVehicle(v, lane, mat);
         const vx = e[12]!, vz = e[14]!;
         const out = povActive
           ? !this.pov.isPointVisibleInPov(vx, vz, 4, POV_CONFIG.CULL_VEHICLE_DIST)
@@ -2323,13 +2411,54 @@ export class CityView {
     }
   }
 
-  // ---------- view distance and auto quality ----------
+  // ---------- view distance, progressive zoom stages, and auto quality ----------
+  private currentZoomStage(): MapZoomStage {
+    const m = this.mounted;
+    const zoom = m ? m.camera.zoom : this.savedCam.zoom;
+    return mapZoomStage(zoom, Boolean(this.snap.showcase), this.pov.isActive());
+  }
+
+  private ensureLandmarkOverviewGroup() {
+    const m = this.mounted;
+    if (!m) return;
+    if (!this.landmarkOverviewLayer) {
+      this.landmarkOverviewLayer = buildLandmarkOverviewLayer(this.city, 1);
+      this.layers.add(this.landmarkOverviewLayer);
+      this.paintLayer(this.landmarkOverviewLayer);
+    }
+    if (m.landmarkOverviewGroup.children.length === 0) {
+      m.landmarkOverviewGroup.add(this.group(this.landmarkOverviewLayer));
+    }
+  }
+
+  private syncZoomStageVisibility(stage: MapZoomStage) {
+    const m = this.mounted;
+    if (!m) return;
+    if (stage === 'landmarks') {
+      this.ensureLandmarkOverviewGroup();
+    }
+    m.terrainGroup.visible = true;
+    m.majorStreetsGroup.visible = stage !== 'city';
+    m.localStreetsGroup.visible = stage === 'full';
+    m.metroBaseGroup.visible = stage === 'full' || stage === 'landmarks';
+    m.tilesGroup.visible = stage === 'full';
+    m.furnitureGroup.visible = stage === 'full';
+    m.landmarkOverviewGroup.visible = stage === 'landmarks';
+    m.railTrackGroup.visible = stage === 'full' && (this.snap.quality.houseDetail >= 3 || this.pov.isActive());
+    if (stage === 'streets' || stage === 'city') {
+      m.stationShellGroup.visible = false;
+    }
+    const showBeacons = stage === 'full' || stage === 'landmarks';
+    for (const b of m.beacons) b.visible = showBeacons;
+  }
+
   private tileRange() {
     const m = this.mounted, far = this.snap.quality.viewDistance;
-    if (!m || far <= 0) return 0;
-    const el = Math.max(0.08, this.elevation());
-    const elScale = Math.min(2.4, Math.sin(ISO_EL) / Math.max(0.22, Math.sin(el)));
-    return Math.max(far, (FRUSTUM / m.camera.zoom) * 1.25 * elScale);
+    if (!m) return 520;
+    const el = Math.max(0.12, this.elevation());
+    const elScale = Math.min(2.0, Math.sin(ISO_EL) / Math.max(0.25, Math.sin(el)));
+    const viewportRadius = (FRUSTUM / m.camera.zoom) * 0.92 * elScale + 90;
+    return far > 0 ? Math.min(Math.max(far, 720), viewportRadius) : viewportRadius;
   }
 
   private nearTile(t: TileState) {
@@ -2339,7 +2468,7 @@ export class CityView {
       return this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
     }
     const far = this.tileRange(), c = m.controls.target;
-    return far <= 0 || Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
+    return Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
   }
 
   private ensureCell(s: CellState) {
@@ -2360,7 +2489,7 @@ export class CityView {
       s.pulses.computeLineDistances();
       s.pools = new THREE.Mesh(cell.pools, this.mats.pool);
       s.pools.userData.night = 'pool';
-      this.mounted.mapGroup.add(s.groups.poles, s.groups.fixtures, s.groups.trees, s.groups.simple, s.wires, s.pulses, s.pools);
+      this.mounted.furnitureGroup.add(s.groups.poles, s.groups.fixtures, s.groups.trees, s.groups.simple, s.wires, s.pulses, s.pools);
       for (const l of [cell.poles, cell.fixtures, cell.trees, cell.simpleTrees]) this.paintLayer(l);
     }
   }
@@ -2380,6 +2509,10 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     const povActive = this.pov.isActive();
+    const stage = this.currentZoomStage();
+    this.syncZoomStageVisibility(stage);
+    if (!povActive && stage !== 'full') return;
+
     const q = this.snap.quality, far = q.viewDistance, tFar = this.tileRange(), c = m.controls.target;
     const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
     for (const t of this.tiles) {
@@ -2389,18 +2522,18 @@ export class CityView {
         continue;
       }
       const inRange = near(t.tile.center, t.tile.radius, tFar);
-      if (!inRange && t.shown > 0 && t.layers.has(0)) this.show(t, this.ensure(t, 0));
-      this.syncTileVisibility(t, true);
+      this.syncTileVisibility(t, inRange && t.shown >= 0);
     }
     const px = this.pxPerMetre(), showFurn = povActive || !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
     let built = 0;
-    const maxBuild = initial || povActive ? 10 : this.interacting ? 0 : 2;
+    const maxBuild = initial || povActive ? 8 : this.interacting ? 0 : 2;
+    const cellLim = far > 0 ? Math.min(far, tFar) : tFar;
     for (const s of this.cells) {
       const on = povActive
         ? this.pov.isPointVisibleInPov(s.bucket.center[0], s.bucket.center[1], CELL_R, POV_CONFIG.CULL_FURN_DIST)
-        : near(s.bucket.center, CELL_R);
+        : near(s.bucket.center, CELL_R, cellLim);
       if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
         this.ensureCell(s);
         built++;
@@ -2446,7 +2579,7 @@ export class CityView {
     if (!v.group && this.mounted) {
       v.group = this.group(v.layer);
       v.group.visible = false;
-      this.mounted.mapGroup.add(v.group);
+      this.mounted.tilesGroup.add(v.group);
       this.paintLayer(v.layer);
     }
     return level;
@@ -2462,24 +2595,29 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     const povActive = this.pov.isActive();
+    const stage = this.currentZoomStage();
+    this.syncZoomStageVisibility(stage);
+    if (!povActive && stage !== 'full') {
+      if (this.snap.pending !== 0) this.update({ pending: 0, stats: this.shownStats() });
+      return;
+    }
+
     const want = this.wantedDetail();
     const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
     const waiting: { t: TileState; level: Detail }[] = [], unbuilt: TileState[] = [];
     for (const t of this.tiles) {
       if (!this.nearTile(t)) {
-        if (povActive) {
-          this.syncTileVisibility(t, false);
-        } else if (t.shown < 0) {
-          unbuilt.push(t);
-        }
+        this.syncTileVisibility(t, false);
         continue;
       }
       const tileWant = povActive ? this.pov.tileDetailInPov(t.tile.center, want) : want;
       if (t.layers.has(tileWant)) {
         this.show(t, this.ensure(t, tileWant));
         this.syncTileVisibility(t, true);
+      } else if (t.shown < 0) {
+        unbuilt.push(t);
+        if (tileWant > 0) waiting.push({ t, level: tileWant });
       } else {
-        if (t.shown < 0) this.show(t, this.ensure(t, povActive ? 1 : 0));
         this.syncTileVisibility(t, true);
         waiting.push({ t, level: tileWant });
       }
@@ -2489,7 +2627,7 @@ export class CityView {
       const l0Budget = this.interacting ? 3 : isMobileDevice() ? 5 : 8;
       for (let i = 0; i < Math.min(l0Budget, unbuilt.length); i++) {
         const t = unbuilt[i]!;
-        this.show(t, this.ensure(t, 0));
+        this.show(t, this.ensure(t, povActive ? 1 : 0));
         this.syncTileVisibility(t, true);
       }
     }
@@ -2500,6 +2638,7 @@ export class CityView {
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
         const item = waiting[i]!;
         this.show(item.t, this.ensure(item.t, item.level));
+        this.syncTileVisibility(item.t, true);
       }
     }
     const pending = busy ? waiting.length : Math.max(0, waiting.length - (povActive ? 4 : want <= 1 ? 3 : 2));
@@ -2508,19 +2647,34 @@ export class CityView {
 
   private shownStats(): Layer['stats'] {
     if (this.activeShowcase) return { ...this.activeShowcase.built.layer.stats };
-    const s = { ...this.base.stats };
+    const s = { ...this.baseLayers.terrain.stats };
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
-    if (this.mounted?.stationShellGroup.visible !== false) add(this.stationShell);
-    if (this.mounted?.railTrackGroup.visible) add(this.railTracks);
-    for (const t of this.tiles) {
-      if (t.cutKey && t.cutLayer && t.cutGroup?.visible) {
-        add(t.cutLayer);
-        continue;
-      }
-      const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
-      if (v?.layer && v.group?.visible !== false) add(v.layer);
+    const m = this.mounted;
+    if (!m || m.majorStreetsGroup.visible) add(this.baseLayers.majorStreets);
+    if (!m || m.localStreetsGroup.visible) add(this.baseLayers.localStreets);
+    if (!m || m.metroBaseGroup.visible) add(this.baseLayers.metro);
+    if (m?.stationShellGroup.visible !== false) add(this.stationShell);
+    if (m?.railTrackGroup.visible) add(this.railTracks);
+    if (m?.landmarkOverviewGroup.visible && this.landmarkOverviewLayer) {
+      add(this.landmarkOverviewLayer);
     }
-    for (const c of this.cells) if (c.cell) { add(c.cell.fixtures); if (this.snap.quality.wires) add(c.cell.poles); if (this.snap.quality.trees === 'full') add(c.cell.trees); }
+    if (!m || m.tilesGroup.visible) {
+      for (const t of this.tiles) {
+        if (t.cutKey && t.cutLayer && t.cutGroup?.visible) {
+          add(t.cutLayer);
+          continue;
+        }
+        const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+        if (v?.layer && v.group?.visible) add(v.layer);
+      }
+    }
+    if (!m || m.furnitureGroup.visible) {
+      for (const c of this.cells) if (c.cell && c.groups?.fixtures.visible) {
+        add(c.cell.fixtures);
+        if (this.snap.quality.wires) add(c.cell.poles);
+        if (this.snap.quality.trees === 'full') add(c.cell.trees);
+      }
+    }
     return s;
   }
 
@@ -2731,12 +2885,14 @@ export class CityView {
   private zoomFade(force = false) {
     const m = this.mounted;
     if (!m) return;
+    const stage = this.currentZoomStage();
     const px = this.pxPerMetre(), auto = this.snap.quality.autoDetail && !this.snap.showcase && !this.pov.isActive();
     const f = !auto ? 0 : Math.round(farness(px, this.snap.quality) * 20) / 20;
-    const key = `${f}|${this.snap.povMode}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
+    const key = `${stage}|${f}|${this.snap.povMode}|${px < FAR.vehicleLines}|${px < FAR.bikes}|${px < FAR.details}|${px < FAR.vehicles}|${px < FAR.creases}|${px < FAR.silhouette}|${px < FAR.streetLines}|${this.snap.showcase ?? ''}`;
     if (key === this.far && !force) return;
     this.far = key;
     this.farF = f;
+    this.syncZoomStageVisibility(stage);
     const css = getComputedStyle(document.documentElement);
     this.vehicleColors(n => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff'));
     this.mats.crease.opacity = 1 - 0.85 * f;
@@ -2744,8 +2900,8 @@ export class CityView {
     this.mats.detail.opacity = 1 - 0.85 * f;
     this.mats.wire.opacity = 1 - 0.5 * f;
     this.tiers(m.scene);
-    m.vehicleLines.visible = this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
-    const hideAllVehicles = auto && px < FAR.vehicles;
+    const hideAllVehicles = stage !== 'full' || (auto && px < FAR.vehicles);
+    m.vehicleLines.visible = !hideAllVehicles && this.snap.quality.creases && !(auto && px < FAR.vehicleLines);
     for (const [kind, fl] of m.fleets) for (const o of fl.meshes) {
       const shell = o.material === this.vehicleShell;
       o.visible = !hideAllVehicles && !(auto && kind === 'bike' && px < FAR.bikes) && !(shell && (!this.snap.quality.silhouette || (auto && px < FAR.silhouette)));
@@ -2854,7 +3010,7 @@ export class CityView {
     for (const t of this.tiles) {
       if (!t.cutKey) continue;
       t.cutKey = '';
-      this.syncTileVisibility(t, true);
+      this.syncTileVisibility(t, this.nearTile(t) && t.shown >= 0);
     }
   }
 
@@ -2866,6 +3022,12 @@ export class CityView {
     }
     if (this.pov.isActive()) {
       m.stationShellGroup.visible = !(this.snap.seeThrough && this.pov.isMetro() && this.pov.isNearStation(85));
+      this.clearAllTileCuts();
+      return;
+    }
+    const stage = this.currentZoomStage();
+    if (stage !== 'full') {
+      m.stationShellGroup.visible = stage === 'landmarks';
       this.clearAllTileCuts();
       return;
     }
@@ -2898,23 +3060,23 @@ export class CityView {
       if (!hidden || !hidden.length || t.shown < 0) {
         if (t.cutKey) {
           t.cutKey = '';
-          this.syncTileVisibility(t, true);
+          this.syncTileVisibility(t, this.nearTile(t));
         }
         continue;
       }
       const level = t.shown as Detail;
       const key = `${level}:${hidden.join(',')}`;
       if (t.cutKey !== key) {
-        if (t.cutGroup) m.mapGroup.remove(t.cutGroup);
+        if (t.cutGroup) m.tilesGroup.remove(t.cutGroup);
         if (t.cutLayer) this.layers.delete(t.cutLayer);
         t.cutLayer = buildTile(this.city, t.tile, level, new Set(hidden));
         this.layers.add(t.cutLayer);
         t.cutGroup = this.group(t.cutLayer);
-        m.mapGroup.add(t.cutGroup);
+        m.tilesGroup.add(t.cutGroup);
         this.paintLayer(t.cutLayer);
         t.cutKey = key;
       }
-      this.syncTileVisibility(t, true);
+      this.syncTileVisibility(t, this.nearTile(t));
     }
   }
 

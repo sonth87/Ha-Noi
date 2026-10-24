@@ -6,13 +6,13 @@ import { Batch } from './batch';
 import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, getFlagMaterial, isFlagVisibleAtSpan, stepSharedWavingFlags, stepWavingFlag,
 } from './buildings';
-import { buildCityGeometry, buildTile, tilesOf } from './city';
+import { buildCityGeometry, buildLandmarkOverviewLayer, buildMapBaseLayers, buildTile, isMajorLandmarkBuilding, tilesOf } from './city';
 import { buildHouse } from './house3d';
 import { offsetLine, strip } from './streets';
 import { windowRank } from './lights';
 import { buildShowcase, showcasesOf } from './showcase';
 import {
-  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments,
+  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments, mapZoomStage,
 } from './adminBoundaries';
 
 const { city: fullCity } = loadCity('nga-tu-thai-ha');
@@ -246,14 +246,39 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(buildShowcase(city, naItem.id)!.flags).toHaveLength(1);
   });
 
-  it('defines dashed administrative boundaries and centered labels for 15 Phường and Hà Nội', () => {
+  it('defines dashed administrative boundaries, centered labels, and 4-stage progressive zoom hierarchy', () => {
     expect(WARD_BOUNDARIES).toHaveLength(15);
     expect(HANOI_OUTER_BOUNDARY.name).toBe('Hà Nội');
     expect(adminBoundaryModeForZoom(2.0, false, false)).toBe('off');
     expect(adminBoundaryModeForZoom(0.8, false, false)).toBe('ward');
+    expect(adminBoundaryModeForZoom(0.25, false, false)).toBe('ward');
     expect(adminBoundaryModeForZoom(0.15, false, false)).toBe('city');
     expect(adminBoundaryModeForZoom(0.8, true, false)).toBe('off');
     expect(adminBoundaryModeForZoom(0.8, false, true)).toBe('off');
+
+    // 4-stage Google Maps-style progressive zoom visibility
+    expect(mapZoomStage(1.4, false, false)).toBe('full');
+    expect(mapZoomStage(0.75, false, false)).toBe('full');
+    expect(mapZoomStage(0.55, false, false)).toBe('landmarks');
+    expect(mapZoomStage(0.30, false, false)).toBe('streets');
+    expect(mapZoomStage(0.14, false, false)).toBe('city');
+    expect(mapZoomStage(0.14, true, false)).toBe('full');
+    expect(mapZoomStage(0.14, false, true)).toBe('full');
+
+    const normalHouse = city.buildings.find(b => b.house && !b.model)!;
+    const landmarkBldg = city.buildings.find(b => b.model === 'khue-van-cac')!;
+    expect(isMajorLandmarkBuilding(normalHouse)).toBe(false);
+    expect(isMajorLandmarkBuilding(landmarkBldg)).toBe(true);
+
+    const baseLayers = buildMapBaseLayers(city);
+    expect(baseLayers.terrain.stats.triangles).toBeGreaterThan(0);
+    expect(baseLayers.majorStreets.stats.triangles).toBeGreaterThan(0);
+    expect(baseLayers.localStreets.stats.triangles).toBeGreaterThan(0);
+    expect(baseLayers.metro.stats.triangles).toBeGreaterThan(0);
+
+    const landmarkLayer = buildLandmarkOverviewLayer(city, 1);
+    expect(landmarkLayer.stats.triangles).toBeGreaterThan(1000);
+    expect(landmarkLayer.stats.triangles).toBeLessThan(g.stats.triangles);
 
     const wardSegs = buildDashedBoundarySegments(WARD_BOUNDARIES);
     const citySegs = buildDashedBoundarySegments([HANOI_OUTER_BOUNDARY]);
@@ -263,4 +288,5 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(citySegs.length).toBeGreaterThan(200);
   });
 });
+
 

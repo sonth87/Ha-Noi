@@ -26,7 +26,11 @@ export function buildGround(B: Batch, city: City) {
   for (const { x0, y0, x1, y1 } of city.region) B.flat('ground', [[x0 - m, y0 - m], [x1 + m, y0 - m], [x1 + m, y1 + m], [x0 - m, y1 + m]], 0);
 }
 
-export function buildStreets(B: Batch, city: City) {
+export type StreetRenderMode = 'all' | 'major' | 'local';
+
+const isMinorRoad = (kind: Road['kind']) => kind === 'alley' || kind === 'service';
+
+export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all') {
   const net = roadNetwork(city), roads = new Map(net.roads.map(r => [r.id, r]));
   // where each road's sidewalks and markings stop near a junction: [from, to] along its path, per side
   const cuts = new Map<string, { left: [number, number][]; right: [number, number][]; marks: [number, number][] }>();
@@ -34,7 +38,7 @@ export function buildStreets(B: Batch, city: City) {
 
   for (const node of net.nodes) {
     if (node.arms.some(a => roads.get(a.road)!.layer > 0 && zAt(roads.get(a.road)!, a.at) > 0.5)) continue;
-    const corners = junction(B, node, roads);
+    const corners = junction(B, node, roads, mode);
     for (const [k, arm] of node.arms.entries()) {
       const c = cutOf(arm.road), span = (t: number): [number, number] => (arm.dir > 0 ? [arm.at - 0.01, arm.at + t] : [arm.at - t, arm.at + 0.01]);
       // the arm's right side faces the corner after it, its left the corner before it
@@ -48,8 +52,17 @@ export function buildStreets(B: Batch, city: City) {
   }
 
   for (const r of net.roads) {
-    if (r.layer > 0 && r.profile.length) { bridge(B, r); continue; }
-    B.flat('road', strip(r.path, -r.width / 2, r.width / 2), ROAD_Z);
+    const minor = isMinorRoad(r.kind);
+    const drawCarriageway = mode === 'all' || (mode === 'major' ? !minor : minor);
+    const drawLocalDetails = mode === 'all' || mode === 'local';
+    if (r.layer > 0 && r.profile.length) {
+      if (drawCarriageway) bridge(B, r);
+      continue;
+    }
+    if (drawCarriageway) {
+      B.flat('road', strip(r.path, -r.width / 2, r.width / 2), ROAD_Z);
+    }
+    if (!drawLocalDetails) continue;
     const c = cuts.get(r.id) ?? { left: [], right: [], marks: [] };
     for (const [side, w, cut] of [[1, r.sidewalk.right, c.right], [-1, r.sidewalk.left, c.left]] as const) {
       if (w <= 0) continue;
@@ -63,6 +76,7 @@ export function buildStreets(B: Batch, city: City) {
     for (let k = 1; k < n; k++) offs.push(-r.width / 2 + (k * r.width) / n);
     for (const o of offs) for (const run of pieces(r.path, c.marks)) dashes(B, offsetLine(run, o));
   }
+  if (mode === 'major') return;
   const metroStations = city.stations.filter(st => st.kind === 'metro');
   for (const s of city.streets) if (s.kind === 'footway' || s.kind === 'steps') {
     // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
@@ -127,7 +141,7 @@ const nearestSeg = (path: readonly Vec2[], p: Vec2) => {
   return best;
 };
 
-export function buildAreas(B: Batch, city: City) {
+export function buildAreas(B: Batch, city: City, includeMonuments = true) {
   const SURF: Partial<Record<Area['kind'], [Surface, number]>> = {
     park: ['grass', 0.02], grass: ['grass', 0.03], plaza: ['plaza', 0.03], 'traffic-island': ['plaza', 0.12], pitch: ['pitch', 0.04], water: ['water', 0.04], pool: ['water', 0.05],
   };
@@ -135,6 +149,12 @@ export function buildAreas(B: Batch, city: City) {
     const k = SURF[a.kind];
     if (k) B.flat(k[0], a.polygon, k[1], 'detail', a.name || a.subtype ? a.id : undefined);
   }
+  if (includeMonuments) {
+    buildMonumentFeatures(B, city);
+  }
+}
+
+export function buildMonumentFeatures(B: Batch, city: City) {
   for (const f of city.features) {
     if (f.kind !== 'monument' && f.kind !== 'heritage') continue;
     drawMonumentFeature(B, f);
@@ -147,7 +167,7 @@ interface Corner { tA: number; tB: number }
 
 /** Fill the corners of a junction; returns, per pair of neighbouring arms (k, k+1), how far from
     the node the fillet begins on each (or null where there is no corner: arms almost in line). */
-function junction(B: Batch, node: NetNode, roads: Map<string, Road>): (Corner | null)[] {
+function junction(B: Batch, node: NetNode, roads: Map<string, Road>, mode: StreetRenderMode = 'all'): (Corner | null)[] {
   const n = node.arms.length, out: (Corner | null)[] = [];
   const minor = (a: Arm) => { const k = roads.get(a.road)!.kind; return k === 'alley' || k === 'service'; };
   for (let k = 0; k < n; k++) {
@@ -163,7 +183,8 @@ function junction(B: Batch, node: NetNode, roads: Map<string, Road>): (Corner | 
     if (Math.abs(det) < 1e-6) { out.push(null); continue; }
     const dx = pB[0] - pA[0], dy = pB[1] - pA[1];
     const tCa = (dx * -Bm.u[1] - dy * -Bm.u[0]) / det, tCb = (A.u[0] * dy - A.u[1] * dx) / det;
-    const R = minor(A) || minor(Bm) ? 2 : 4, tl = R / Math.tan(th / 2);
+    const isMinorCorner = minor(A) || minor(Bm);
+    const R = isMinorCorner ? 2 : 4, tl = R / Math.tan(th / 2);
     const tA = tCa + tl, tB = tCb + tl;
     if (tCa < -1 || tCb < -1 || tA > 30 || tB > 30) { out.push(null); continue; }
     const TA: Vec2 = [pA[0] + A.u[0] * tA, pA[1] + A.u[1] * tA], TB: Vec2 = [pB[0] + Bm.u[0] * tB, pB[1] + Bm.u[1] * tB];
@@ -175,12 +196,18 @@ function junction(B: Batch, node: NetNode, roads: Map<string, Road>): (Corner | 
       while (d < -Math.PI) d += 2 * Math.PI;
       return Array.from({ length: steps + 1 }, (_, i) => [C[0] + r * Math.cos(a0 + (d * i) / steps), C[1] + r * Math.sin(a0 + (d * i) / steps)] as const);
     };
-    // asphalt out to the kerb fillet
-    B.flat('road', [node.at, pA, TA, ...arc(R).slice(1, -1), TB, pB], ROAD_Z);
-    // the sidewalk round the corner, when both arms have one on this side
-    const w = Math.min(A.walkR, Bm.walkL);
-    if (w > 0 && R > 0.5) {
-      walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
+    const drawCornerRoad = mode === 'all' || (mode === 'major' ? !isMinorCorner : isMinorCorner);
+    const drawCornerWalk = mode === 'all' || mode === 'local';
+    if (drawCornerRoad) {
+      // asphalt out to the kerb fillet
+      B.flat('road', [node.at, pA, TA, ...arc(R).slice(1, -1), TB, pB], ROAD_Z);
+    }
+    if (drawCornerWalk) {
+      // the sidewalk round the corner, when both arms have one on this side
+      const w = Math.min(A.walkR, Bm.walkL);
+      if (w > 0 && R > 0.5) {
+        walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
+      }
     }
     out.push({ tA, tB });
   }
