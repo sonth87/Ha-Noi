@@ -26,6 +26,19 @@ export function streetKind(t: OsmTags): StreetKind | undefined {
 /** a hint for the kind of building; undefined = judge by the footprint */
 export function buildingHint(t: OsmTags): BuildingKind | undefined {
   if (t.tourism === 'hotel') return 'hotel';
+  if (
+    t.historic ||
+    t.heritage ||
+    t.amenity === 'place_of_worship' ||
+    t.tourism === 'museum' ||
+    t.tourism === 'attraction' ||
+    t.building === 'temple' ||
+    t.building === 'church' ||
+    t.building === 'religious' ||
+    t.building === 'museum'
+  ) {
+    return 'other';
+  }
   const b = t.building === 'construction' ? (t.construction ?? 'commercial') : t.building;
   switch (b) {
     case 'house': case 'detached': case 'semidetached_house': case 'terrace': return 'house';
@@ -35,7 +48,7 @@ export function buildingHint(t: OsmTags): BuildingKind | undefined {
     case 'hotel': return 'hotel';
     case 'school': case 'university': case 'college': case 'kindergarten': return 'school';
     case 'kiosk': case 'hut': case 'shed': case 'garage': case 'garages': case 'roof': case 'toilets': case 'service': return 'kiosk';
-    case 'hospital': case 'public': case 'civic': case 'industrial': case 'warehouse': case 'religious': case 'temple': case 'church': return 'other';
+    case 'hospital': case 'public': case 'civic': case 'industrial': case 'warehouse': case 'religious': case 'temple': case 'church': case 'museum': return 'other';
     default: return undefined;
   }
 }
@@ -60,8 +73,8 @@ export function featureKind(t: OsmTags): FeatureKind | undefined {
   if (t.natural === 'tree') return 'tree';
   if (t.highway === 'street_lamp') return 'street-lamp';
   if (t.power === 'pole') return 'power-pole';
-  if ((t.historic === 'monument' || t.historic === 'memorial' || t.artwork_type === 'statue') && t.name) return 'monument';
-  if ((t.historic === 'archaeological_site' || t.historic === 'ruins') && t.name) return 'heritage';
+  if ((t.historic === 'monument' || t.historic === 'memorial' || t.artwork_type === 'statue' || t.artwork_type === 'drum') && t.name) return 'monument';
+  if ((t.historic === 'archaeological_site' || t.historic === 'ruins' || t.historic === 'aircraft') && t.name) return 'heritage';
   return undefined;
 }
 

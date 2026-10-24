@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { loadCity, loadCityAsync } from '@my-city/osm-import';
+import { loadCity } from '@my-city/osm-import';
 import { tilesOf } from '@render/city';
 import { isHouseLamp, windowRank, windowShade } from '@render/lights';
 import { DEFAULT_AREA_ID, SEE_THROUGH } from './constants';
@@ -11,6 +11,8 @@ import { CityEventBus } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut } from './seeThrough';
 import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
 import { formatUrlState, parseUrlState } from './urlState';
+
+const { city } = loadCity(DEFAULT_AREA_ID);
 
 describe('quality', () => {
   it('starts with 30 % traffic', () => {
@@ -78,7 +80,6 @@ describe('zoomed out', () => {
 
 describe('street labels (pin callout & map modes)', () => {
   it('filters by zoom level, keeps callout pins sparse, and aligns map labels along streets', () => {
-    const { city } = loadCity(DEFAULT_AREA_ID);
     const catalog = buildStreetCatalog(city);
     expect(catalog.some(e => e.name === 'Phố Thái Hà' && e.shortName === 'Thái Hà')).toBe(true);
 
@@ -101,7 +102,6 @@ describe('street labels (pin callout & map modes)', () => {
 
 describe('place info catalog & labels (off, popup, label modes)', () => {
   it('indexes buildings, parks, lakes, monuments, heritage sites, and stations with names, addresses, and metrics', () => {
-    const { city } = loadCity(DEFAULT_AREA_ID);
     const catalog = buildPlaceCatalog(city, new Set(['bldg:w677190114', 'bldg:w1115247053']));
 
     const vpbank = catalog.byId.get('w677190114');
@@ -155,8 +155,7 @@ describe('place info catalog & labels (off, popup, label modes)', () => {
 });
 
 describe('multi-language (i18n) & data-driven catalog', () => {
-  it('translates UI strings and builds localized place catalogs in Vietnamese and English', async () => {
-    const { city } = await loadCityAsync(DEFAULT_AREA_ID);
+  it('translates UI strings and builds localized place catalogs in Vietnamese and English', () => {
     expect(city.cityName).toBe('Hà Nội');
     expect(city.places?.length).toBeGreaterThan(10);
 
@@ -186,7 +185,6 @@ describe('SDK event bus & see-through foreground cut', () => {
     bus.emit('mode:change', { mode: '2d' });
     expect(events).toEqual(['3d']);
 
-    const { city } = loadCity(DEFAULT_AREA_ID);
     const tiles = tilesOf(city).map(tile => ({ tile }));
     const bldgBounds = buildBuildingBoundsIndex(tiles);
     expect(bldgBounds.length).toBe(city.buildings.length);

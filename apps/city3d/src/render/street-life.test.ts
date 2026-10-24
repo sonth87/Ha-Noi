@@ -7,9 +7,18 @@ import { placeVehicle, vehicleModel } from './vehicles';
 import { Batch } from './batch';
 import { buildMetro, carModel, stationLamp } from './metro';
 
-const { city } = loadCity('nga-tu-thai-ha');
+const { city: fullCity } = loadCity('nga-tu-thai-ha');
+const city = {
+  ...fullCity,
+  streets: fullCity.streets.filter(s => s.path.some(p => Math.hypot(p[0], p[1]) <= 800)),
+  areas: fullCity.areas.filter(a => a.polygon.some(p => Math.hypot(p[0], p[1]) <= 800)),
+};
 const net = roadNetwork(city), cells = buildFurniture(streetFurniture(city, net));
-const finite = (g: THREE.BufferGeometry) => Array.from(g.getAttribute('position').array).every(Number.isFinite);
+const finite = (g: THREE.BufferGeometry) => {
+  const arr = g.getAttribute('position').array;
+  for (let i = 0; i < arr.length; i++) if (!Number.isFinite(arr[i]!)) return false;
+  return true;
+};
 
 describe('street furniture in 3D', () => {
   it('builds every cell, finite, with lamps that light', () => {

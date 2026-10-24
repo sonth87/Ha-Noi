@@ -14,10 +14,11 @@ describe('road network', () => {
   });
 
   it('keeps every junction on its roads, with three arms or more', () => {
+    const roadById = new Map(net.roads.map(x => [x.id, x]));
     for (const n of net.nodes) {
       expect(n.arms.length).toBeGreaterThanOrEqual(2);
       for (const a of n.arms) {
-        const r = net.roads.find(x => x.id === a.road)!;
+        const r = roadById.get(a.road)!;
         expect(r.path.some(p => dist(p, n.at) < 0.05)).toBe(true);
       }
     }
@@ -27,11 +28,13 @@ describe('road network', () => {
 
   it('smooths corners without moving ends, and keeps one-way roads one way', () => {
     for (const r of net.roads) {
+      if (r.kind === 'service' || r.kind === 'alley') continue;
       for (let i = 1; i < r.path.length - 1; i++) {
         const a = r.path[i - 1]!, b = r.path[i]!, c = r.path[i + 1]!;
         const t = Math.abs(Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0]));
+        const turn = Math.min(t, 2 * Math.PI - t);
         // on the main roads no corner sharper than ~50° is left except at a junction (tiny alleys keep a few)
-        if (r.kind !== 'service' && r.kind !== 'alley' && !net.nodes.some(n => dist(n.at, b) < 0.05)) expect(Math.min(t, 2 * Math.PI - t)).toBeLessThan(0.9);
+        if (turn >= 0.9 && !net.nodes.some(n => dist(n.at, b) < 0.05)) expect(turn).toBeLessThan(0.9);
       }
     }
     const ts = net.roads.filter(r => r.name === 'Phố Tây Sơn' && r.oneway);

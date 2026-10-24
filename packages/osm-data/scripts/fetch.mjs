@@ -11,10 +11,17 @@ if (!id || !areas[id]) {
   process.exit(1);
 }
 /** the API sometimes drops a large response half-way: try again, waiting longer each time */
-async function getJson(url, tries = 4) {
+async function postOverpass(q, tries = 4) {
   for (let i = 1; ; i++) {
     try {
-      const res = await fetch(url, { headers: { 'User-Agent': 'my-city/1.0' } });
+      const res = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'my-city/1.0',
+          'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+        },
+        body: 'data=' + encodeURIComponent(q),
+      });
       if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
       return JSON.parse(await res.text());
     } catch (e) {
@@ -40,23 +47,26 @@ const KEEP_TAGS = new Set([
   'tourism', 'building', 'construction', 'building:part', 'building:levels', 'building:material',
   'height', 'roof:shape', 'man_made', 'area:highway', 'leisure', 'landuse', 'natural', 'water',
   'place', 'amenity', 'public_transport', 'power', 'historic', 'heritage', 'artwork_type',
-  'start_date', 'railway', 'station', 'type', 'office',
+  'start_date', 'railway', 'station', 'type', 'office', 'religion',
   'addr:housenumber', 'addr:street', 'addr:subdistrict',
 ]);
 
-// Fetch the Ba Đình boxes + full Hanoi Metro lines (2A Cát Linh – Hà Đông & Line 3) via Overpass
-const baDinhBoxes = a.bboxes.slice(-2);
-const boxQueries = baDinhBoxes.map(([w, s_, e_, n]) =>
-  `node(${s_},${w},${n},${e_});way(${s_},${w},${n},${e_});relation["type"~"^(building|multipolygon)$"](${s_},${w},${n},${e_});`
-).join('');
-const metroQuery = `way["railway"~"^(subway|light_rail|monorail)$"](20.945,105.730,21.055,105.860);node["railway"="station"](20.945,105.730,21.055,105.860);way["railway"="platform"](20.945,105.730,21.055,105.860);`;
-const q = `[out:json][timeout:120];(${boxQueries}${metroQuery});(._;>;);out body;`;
-console.log('Fetching Ba Đình + full Metro lines from Overpass...');
-const data = await getJson(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(q)}`, 6);
-head ??= { version: '0.6', generator: data.generator, copyright: 'OpenStreetMap and contributors', attribution: 'http://www.openstreetmap.org/copyright', license: 'http://opendatacommons.org/licenses/odbl/1-0/' };
-for (const el of data.elements) seen.set(`${el.type}/${el.id}`, el);
+// Fetch the 4 expanded districts (Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân) via Overpass POST
+const newDistrictBoxes = a.bboxes.slice(-4);
+for (const [idx, [w, s_, e_, n]] of newDistrictBoxes.entries()) {
+  const q = `[out:json][timeout:180];(way["highway"~"^(trunk|primary|secondary|tertiary|residential|living_street|pedestrian|unclassified|trunk_link|primary_link|secondary_link|tertiary_link)$"](${s_},${w},${n},${e_});way["natural"="water"](${s_},${w},${n},${e_});relation["natural"="water"](${s_},${w},${n},${e_});way["water"](${s_},${w},${n},${e_});relation["water"](${s_},${w},${n},${e_});way["leisure"~"^(park|garden|pitch|swimming_pool)$"](${s_},${w},${n},${e_});relation["leisure"~"^(park|garden)$"](${s_},${w},${n},${e_});way["landuse"~"^(grass|recreation_ground|religious|basin)$"](${s_},${w},${n},${e_});way["man_made"="bridge"](${s_},${w},${n},${e_});node["historic"](${s_},${w},${n},${e_});way["historic"](${s_},${w},${n},${e_});relation["historic"](${s_},${w},${n},${e_});node["tourism"~"^(attraction|museum|artwork|viewpoint|hotel)$"](${s_},${w},${n},${e_});way["tourism"](${s_},${w},${n},${e_});node["amenity"~"^(place_of_worship|theatre|cinema|townhall|library|marketplace|hospital|university|college)$"](${s_},${w},${n},${e_});way["amenity"~"^(place_of_worship|theatre|cinema|townhall|library|marketplace|hospital|university|college|school|embassy|police|post_office)$"](${s_},${w},${n},${e_});way["building"](${s_},${w},${n},${e_});way["building:part"](${s_},${w},${n},${e_});relation["type"~"^(building|multipolygon)$"]["building"](${s_},${w},${n},${e_}););(._;>;);out body;`;
+  console.log(`Fetching district box ${idx + 1}/${newDistrictBoxes.length} (${s_},${w},${n},${e_})...`);
+  const data = await postOverpass(q, 5);
+  head ??= { version: '0.6', generator: data.generator, copyright: 'OpenStreetMap and contributors', attribution: 'http://www.openstreetmap.org/copyright', license: 'http://opendatacommons.org/licenses/odbl/1-0/' };
+  for (const el of data.elements) seen.set(`${el.type}/${el.id}`, el);
+  console.log(`  +${data.elements.length} elements (total unique: ${seen.size})`);
+}
 
-const inArea = (lat, lon) => lat >= 20.995 && lat <= 21.046 && lon >= 105.800 && lon <= 105.854;
+
+const inCoreArea = (lat, lon) => lat >= 20.995 && lat <= 21.046 && lon >= 105.800 && lon <= 105.8475;
+const inHoanKiemCore = (lat, lon) => lat >= 21.021 && lat <= 21.039 && lon >= 105.844 && lon <= 105.859;
+const inExpandedArea = (lat, lon) => lat >= 20.984 && lat <= 21.077 && lon >= 105.797 && lon <= 105.866;
+
 const nodes = new Map(), ways = new Map(), rels = [];
 for (const e of seen.values()) {
   if (e.tags) {
@@ -69,28 +79,56 @@ for (const e of seen.values()) {
   else if (e.type === 'way') ways.set(e.id, e);
   else if (e.type === 'relation') rels.push(e);
 }
+
+const approxWayAreaM2 = (w) => {
+  const ns = (w.nodes || []).map(id => nodes.get(id)).filter(Boolean);
+  if (ns.length < 4) return 0;
+  const lat0 = ns[0].lat * Math.PI / 180, k = Math.cos(lat0) * 111320, ky = 110540;
+  let s = 0;
+  for (let i = 0; i < ns.length - 1; i++) {
+    const x0 = ns[i].lon * k, y0 = ns[i].lat * ky;
+    const x1 = ns[i + 1].lon * k, y1 = ns[i + 1].lat * ky;
+    s += x0 * y1 - x1 * y0;
+  }
+  return Math.abs(s) * 0.5;
+};
+
 const keptRels = rels.filter(r => {
   const t = r.tags || {};
   if (t.type !== 'building' && t.type !== 'multipolygon') return false;
   return (r.members || []).some(m => {
     if (m.type !== 'way') return false;
     const w = ways.get(m.ref);
-    return w && (w.nodes || []).some(nid => { const n = nodes.get(nid); return n && inArea(n.lat, n.lon); });
+    return w && (w.nodes || []).some(nid => { const n = nodes.get(nid); return n && inExpandedArea(n.lat, n.lon); });
   });
 });
 const relWayIds = new Set();
 for (const r of keptRels) for (const m of r.members || []) if (m.type === 'way') relWayIds.add(m.ref);
+
 const keptWays = [...ways.values()].filter(w => {
   if (relWayIds.has(w.id)) return true;
   if (!w.tags) return false;
-  if (w.tags.railway && ['subway', 'light_rail', 'monorail', 'platform'].includes(w.tags.railway)) return true;
-  return (w.nodes || []).some(nid => { const n = nodes.get(nid); return n && inArea(n.lat, n.lon); });
+  const t = w.tags;
+  if (t.railway && ['subway', 'light_rail', 'monorail', 'rail', 'platform'].includes(t.railway)) return true;
+  const n0 = nodes.get(w.nodes?.[0]);
+  if (!n0 || !inExpandedArea(n0.lat, n0.lon)) return false;
+  if (inCoreArea(n0.lat, n0.lon)) return true;
+  if (t.highway || t.natural || t.water || t.leisure || t.landuse || t.man_made || t.historic || t.heritage || t.tourism || t.amenity) return true;
+  if (t['building:part']) return true;
+  if (t.building) {
+    if (t.name || t['building:levels'] || t.height || t.office || t['addr:street']) return true;
+    if (t.building !== 'yes' && t.building !== 'house' && t.building !== 'residential' && t.building !== 'detached') return true;
+    const minArea = inHoanKiemCore(n0.lat, n0.lon) ? 85 : 165;
+    return approxWayAreaM2(w) >= minArea;
+  }
+  return true;
 });
+
 const usedNodeIds = new Set();
 for (const w of keptWays) for (const nid of w.nodes || []) usedNodeIds.add(nid);
 const keptNodes = [...nodes.values()].filter(n =>
   usedNodeIds.has(n.id) ||
-  (n.tags && (inArea(n.lat, n.lon) || n.tags.railway === 'station' || n.tags.public_transport === 'station'))
+  (n.tags && (inExpandedArea(n.lat, n.lon) || n.tags.railway === 'station' || n.tags.public_transport === 'station'))
 );
 
 const order = { node: 0, way: 1, relation: 2 };

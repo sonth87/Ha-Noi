@@ -6,9 +6,10 @@
 import * as THREE from 'three';
 import { bbox, floorId, houseStoreys, resolveHouse, type Building, type City, type HouseInput, type Prop, type Vec2 } from '@my-city/core';
 import { Batch, V } from './batch';
-import { beaconsOf, buildBuildings, cityFloors, nationalCinemaRotundaCenter } from './buildings';
+import { beaconsOf, buildBuildings, cityFloors, flagpolesOf, nationalCinemaRotundaCenter, type WavingFlagSpec } from './buildings';
 import { layerOf, type Layer } from './city';
 import { lampPost, parkLamp, poolGeometry, tree } from './furniture';
+import { landmarkExtraBoundsPts } from './landmarks';
 import { buildMetro } from './metro';
 
 export interface ShowcaseItem {
@@ -28,6 +29,7 @@ export interface BuiltShowcase {
   shellLayer?: Layer;
   pools: THREE.BufferGeometry;
   beacons: THREE.Vector3[];
+  flags: WavingFlagSpec[];
   /** metro cars placed on the station showcase (cab, position in city metres, heading) */
   cars: { cab: boolean; at: [number, number, number]; heading: number }[];
   floors: string[];
@@ -86,7 +88,7 @@ const ARCHETYPES: ArchetypeDef[] = [
 ];
 
 function buildingBoundsPts(b: Building): Vec2[] {
-  const pts = [b.footprint, ...b.parts.map(p => p.footprint)].flat();
+  const pts = [b.footprint, ...b.parts.map(p => p.footprint), landmarkExtraBoundsPts(b)].flat();
   if (b.model === 'national-cinema') {
     const rc = nationalCinemaRotundaCenter(b);
     pts.push([rc[0] - 22, rc[1] - 20], [rc[0] + 22, rc[1] + 18]);
@@ -100,10 +102,53 @@ export function showcasesOf(city: City): ShowcaseItem[] {
 
   // 1. Featured OSM landmarks (bespoke 3D models first, then signature landmarks, then tall towers)
   const bespokeModelPriority: Record<string, number> = {
-    'viet-tower': 0,
-    novotel: 1,
-    'vpbank-tower': 2,
-    'national-cinema': 3,
+    'khue-van-cac': 0,
+    'ho-chi-minh-mausoleum': 1,
+    'one-pillar-pagoda': 2,
+    'nha-san-bac-ho': 3,
+    'thap-rua': 4,
+    'den-ngoc-son': 5,
+    'hanoi-opera-house': 6,
+    'st-joseph-cathedral': 7,
+    'trang-tien-plaza': 8,
+    'o-quan-chuong': 9,
+    'chua-tran-quoc': 10,
+    'den-quan-thanh': 11,
+    'phu-tay-ho': 12,
+    'den-hai-ba-trung': 13,
+    'chua-quan-su': 14,
+    'chua-phuc-khanh': 15,
+    'van-mieu-mon': 16,
+    'van-mieu-hall': 17,
+    'nha-thai-hoc': 18,
+    'hanoi-flag-tower': 19,
+    'doan-mon': 20,
+    'national-assembly': 21,
+    'ho-chi-minh-museum': 22,
+    'presidential-palace': 23,
+    'bac-son-memorial': 24,
+    'national-history-museum': 25,
+    'hoa-lo-prison': 26,
+    'cho-dong-xuan': 27,
+    'lotte-center': 28,
+    'vinhomes-metropolis': 29,
+    'capital-place': 30,
+    'daewoo-hotel': 31,
+    'hanoi-centre': 32,
+    'vincom-ba-trieu': 33,
+    'royal-city': 34,
+    'vincom-pnt': 35,
+    'vincom-nct': 36,
+    'pullman-hanoi': 37,
+    'viet-tower': 38,
+    novotel: 39,
+    'vpbank-tower': 40,
+    'national-cinema': 41,
+    'van-mieu-gate': 42,
+    'traditional-temple': 50,
+    'traditional-pagoda': 51,
+    'church-hall': 52,
+    'traditional-mausoleum': 53,
   };
   const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
   const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
@@ -126,40 +171,45 @@ export function showcasesOf(city: City): ShowcaseItem[] {
   const bespokeCount = landmarks.filter(b => b.model !== undefined).length;
   let seenBespoke = 0;
 
-  for (const b of landmarks) {
-    const name = b.name!.trim();
-    if (seenNames.has(name)) continue;
-    seenNames.add(name);
-    const lv = maxLevels(b), h = Math.round(maxHeight(b));
-    const box = bbox(buildingBoundsPts(b)), span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
-    const radius = Math.max(24, Math.round(span * 0.72 + 14));
-    const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
-    out.push({
-      id: `bldg:${b.id}`,
-      group: GROUP_LANDMARK,
-      name: `${name} (${lv} tầng)`,
-      subtitle: `${name} · ${lv} tầng (${h} m) · dữ liệu mặt bằng OpenStreetMap`,
-      zoom: Number(zoom.toFixed(2)),
-      radius,
-    });
-    if (b.model !== undefined) seenBespoke++;
-    // insert Metro stations right after the bespoke 3D model landmarks
-    if (!insertedStations && seenBespoke >= bespokeCount) {
-      insertedStations = true;
-      for (const st of city.stations.filter(s => s.kind === 'metro')) {
-        const tag = st.lineTag ?? 'Metro 2A';
-        const lineDesc = st.lineName ?? 'Tuyến 2A Cát Linh – Hà Đông';
-        out.push({
-          id: `station:${st.id}`,
-          group: GROUP_LANDMARK,
-          name: `Ga đường sắt trên cao ${st.name} (${tag})`,
-          subtitle: `Ga ${st.name} · ${lineDesc} · 3 tầng, cầu cạn & đoàn tàu 4 toa`,
-          zoom: 3.4,
-          radius: 46,
-        });
-      }
+  const insertMetroStations = () => {
+    if (insertedStations) return;
+    insertedStations = true;
+    for (const st of city.stations.filter(s => s.kind === 'metro')) {
+      const tag = st.lineTag ?? 'Metro 2A';
+      const lineDesc = st.lineName ?? 'Tuyến 2A Cát Linh – Hà Đông';
+      out.push({
+        id: `station:${st.id}`,
+        group: GROUP_LANDMARK,
+        name: `Ga đường sắt trên cao ${st.name} (${tag})`,
+        subtitle: `Ga ${st.name} · ${lineDesc} · 3 tầng, cầu cạn & đoàn tàu 4 toa`,
+        zoom: 3.4,
+        radius: 46,
+      });
     }
+  };
+
+  for (const b of landmarks) {
+    if (b.model !== undefined) seenBespoke++;
+    const name = b.name!.trim();
+    if (!seenNames.has(name)) {
+      seenNames.add(name);
+      const lv = maxLevels(b), h = Math.round(maxHeight(b));
+      const box = bbox(buildingBoundsPts(b)), span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+      const radius = Math.max(24, Math.round(span * 0.72 + 14));
+      const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
+      out.push({
+        id: `bldg:${b.id}`,
+        group: GROUP_LANDMARK,
+        name: `${name} (${lv} tầng)`,
+        subtitle: `${name} · ${lv} tầng (${h} m) · dữ liệu mặt bằng OpenStreetMap`,
+        zoom: Number(zoom.toFixed(2)),
+        radius,
+      });
+    }
+    // insert Metro stations right after the bespoke 3D model landmarks
+    if (seenBespoke >= bespokeCount) insertMetroStations();
   }
+  insertMetroStations();
 
   // 2. Standalone Hanoi architectural archetypes
   for (const a of ARCHETYPES) {
@@ -297,7 +347,7 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
       at: [x, 2.1, h] as [number, number, number],
       heading: k === 3 ? Math.PI : 0,
     }));
-    return { item, layer: layerOf(B, true), shellLayer: layerOf(shellB, true), pools: poolGeometry(pools), beacons: [], cars, floors: [] };
+    return { item, layer: layerOf(B, true), shellLayer: layerOf(shellB, true), pools: poolGeometry(pools), beacons: [], flags: [], cars, floors: [] };
   }
 
   // ---- Case 2: OSM Landmark Building showcase ----
@@ -349,6 +399,7 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
       layer: layerOf(B, true, mockCity),
       pools: poolGeometry(pools),
       beacons: beaconsOf(mockCity),
+      flags: flagpolesOf(mockCity),
       cars: [],
       floors: cityFloors(mockCity),
     };
@@ -410,6 +461,7 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
     layer: layerOf(B, true, mockCity),
     pools: poolGeometry(pools),
     beacons: [],
+    flags: [],
     cars: [],
     floors,
   };

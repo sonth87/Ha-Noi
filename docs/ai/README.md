@@ -50,6 +50,7 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A13 | **Tòa nhà thật lấy mặt bằng và số tầng từ OpenStreetMap**, không đoán từ ảnh. Giữ đúng tỉ lệ thật. Ảnh của người dùng chỉ để đối chiếu và bổ sung chi tiết. Cách làm ở §5. Ghi id OSM vào dữ liệu và chú thích (ADR-030). |
 | A14 | **`apps/svg` đóng băng** (ADR-032): không sửa, không thêm tính năng. Chỉ được sửa khi người dùng yêu cầu rõ, hoặc khi đổi cấu trúc repo làm nó không chạy được nữa (sửa tối thiểu để chạy lại, và ghi vào checklist). Script chạy app cũ luôn được giữ. |
 | A15 | Dữ liệu OSM theo giấy phép **ODbL**: app hiển thị "© OpenStreetMap contributors"; gói `osm-data` ghi rõ nguồn và ngày tải. |
+| A16 | **Đầu tư dựng 3D riêng nghiêm túc cho mọi di tích, đền, chùa, lăng tẩm, tượng đài và công trình biểu tượng (ADR-054)**: Mỗi khi mở rộng bản đồ sang khu vực mới hoặc nâng cấp giao diện, **toàn bộ** di tích lịch sử – văn hóa, tượng đài, đền, chùa, đình, miếu, phủ, nhà thờ, lăng tẩm và các công trình kiến trúc – thương mại lớn trong khu vực đều **bắt buộc phải được đầu tư vẽ 3D riêng cẩn thận, chính xác đặc trưng kiến trúc và có biển tên/thuyết minh đầy đủ** — tuyệt đối không chỉ làm đúng vài công trình được người dùng điểm tên rồi để các di tích, đền chùa, công trình biểu tượng khác thành khối hộp sơ sài. |
 
 ## 4. Lệnh (ở thư mục gốc)
 

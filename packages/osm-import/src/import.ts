@@ -111,24 +111,46 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     t.building === 'transportation' || t.building === 'train_station' ||
     (t.building === 'yes' && t.height === '8' && ringArea(ring) < 12 && railPaths.some(rp => nearPath(centroid(ring), rp, 4)));
   const push = (list: Raw[], id: string, source: string, ring: Vec2[], t: OsmTags) => { const r = normalizeRing(ring); if (r.length >= 3) list.push({ id, source, ring: r, t }); };
+  const outlineByWayId = new Map<number, Raw>();
   for (const w of ways.values()) {
     const t = tags(w);
     if (w.nodes.length < 4 || w.nodes[0] !== w.nodes[w.nodes.length - 1]) continue;
     const wPath = path(w);
     if (t.building && t.building !== 'no') {
-      if (!isMetroShellOrPier(t, wPath)) push(outlines, `w${w.id}`, src('way', w.id), wPath, t);
+      if (!isMetroShellOrPier(t, wPath)) {
+        const prevLen = outlines.length;
+        push(outlines, `w${w.id}`, src('way', w.id), wPath, t);
+        if (outlines.length > prevLen) outlineByWayId.set(w.id, outlines[outlines.length - 1]!);
+      }
     } else if (t['building:part'] && t['building:part'] !== 'no') push(partsRaw, `w${w.id}`, src('way', w.id), wPath, t);
   }
   for (const r of relations) {
     const t = tags(r);
     if (t.type === 'building') {
       const outWays = r.members.filter(m => m.type === 'way' && (m.role === 'outline' || m.role === 'outer')).map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w && w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]);
-      outWays.forEach((w, k) => push(outlines, `r${r.id}${outWays.length > 1 ? `-${k}` : ''}`, src('relation', r.id), path(w), { building: 'apartments', ...tags(w), ...t }));
+      outWays.forEach((w, k) => {
+        const existing = outlineByWayId.get(w.id);
+        if (existing) {
+          existing.t = { ...t, ...existing.t };
+        } else {
+          push(outlines, `r${r.id}${outWays.length > 1 ? `-${k}` : ''}`, src('relation', r.id), path(w), { building: 'apartments', ...tags(w), ...t });
+        }
+      });
       continue;
     }
     if (t.type !== 'multipolygon') continue;
     const isB = !!t.building && t.building !== 'no', isP = !!t['building:part'];
     if (!isB && !isP) continue;
+    if (isB) {
+      const outerWayIds = r.members.filter(m => m.type === 'way' && (m.role === 'outer' || m.role === '')).map(m => m.ref);
+      if (outerWayIds.length > 0 && outerWayIds.every(id => outlineByWayId.has(id))) {
+        for (const id of outerWayIds) {
+          const existing = outlineByWayId.get(id)!;
+          existing.t = { ...t, ...existing.t };
+        }
+        continue;
+      }
+    }
     const { outer, inner } = rings(r, ways, path);
     report.droppedHoles += inner;
     outer.forEach((ring, k) => push(isB ? outlines : partsRaw, `r${r.id}${outer.length > 1 ? `-${k}` : ''}`, src('relation', r.id), ring, t));
@@ -144,7 +166,15 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
       keepWithBox.find(x => c[0] >= x.box.x0 && c[0] <= x.box.x1 && c[1] >= x.box.y0 && c[1] <= x.box.y1 && pointInRing(c, x.b.ring)) ??
       keepWithBox.find(x => p.ring.some(v => (v[0] >= x.box.x0 && v[0] <= x.box.x1 && v[1] >= x.box.y0 && v[1] <= x.box.y1 && pointInRing(v, x.b.ring)) || x.b.ring.some(u => dist(u, v) < 0.5)))
     )?.b;
-    if (!owner) { if (inside(c)) report.orphanParts.push(p.source); continue; }
+    if (!owner) {
+      if (inside(c)) {
+        const promoted: Raw = { id: `bp_${p.id}`, source: p.source, ring: p.ring, t: { ...p.t, building: p.t.building ?? p.t['building:part'] ?? 'yes' } };
+        keep.push(promoted);
+        keepWithBox.push({ b: promoted, box: bbox(promoted.ring), area: ringArea(promoted.ring) });
+        partsOf.set(promoted.id, [p]);
+      }
+      continue;
+    }
     partsOf.set(owner.id, [...(partsOf.get(owner.id) ?? []), p]);
   }
 
@@ -212,48 +242,83 @@ export function importArea(data: OsmExtract, cfg: AreaConfig, attribution: strin
     }
   }
 
+  const partFloorsOf = (pt: OsmTags, kind: Building['kind'], fallbackLevels: number): number[] => {
+    const lv = Number.parseFloat(pt['building:levels'] ?? '');
+    const h = Number.parseFloat(pt.height ?? '');
+    const z0 = Number.parseFloat(pt.min_height ?? '0') || 0;
+    const netH = h > z0 ? h - z0 : h;
+    if (!Number.isFinite(lv) && Number.isFinite(netH) && netH > 0) {
+      const n = Math.max(1, Math.round(netH / 3.2));
+      const fh = Number((netH / n).toFixed(2));
+      return Array.from({ length: n }, () => fh);
+    }
+    return storeyHeights(kind, levelsOf(pt) ?? fallbackLevels);
+  };
+
+  const GENERIC_PART_NAME = /^(chung cư|văn phòng.*|toà\s+[a-z0-9]+|tòa\s+[a-z0-9]+|tower\s+[a-z0-9]+|khối\s+[a-z0-9]+|m\d+|s\d+|t\d+)$/iu;
+
   const buildings: Building[] = keep.map(b => {
-    const kind = guessKind(b.ring, buildingHint(b.t)), own = levelsOf(b.t);
-    const levels = own ?? guessLevels(kind, b.source);
+    const c = centroid(b.ring);
+    const campus = campuses.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
+    const subtype = inferSubtype(b.t) ?? campus?.subtype;
+    const isHeritage = subtype === 'heritage';
+    const rawKind = guessKind(b.ring, isHeritage ? 'other' : buildingHint(b.t));
+    const kind: Building['kind'] = isHeritage && (rawKind === 'tube-house' || rawKind === 'house') ? 'other' : rawKind;
+    const own = levelsOf(b.t);
+    const baseArea = ringArea(b.ring);
+    const levels = own ?? (isHeritage ? (baseArea < 90 ? 1 : 2) : guessLevels(kind, b.source));
     const raw = partsOf.get(b.id) ?? [];
     const bFacade: BuildingPart['facade'] = b.t['building:material'] === 'glass' ? 'glass' : 'wall';
     const rawParts: BuildingPart[] = raw.map(p => ({
-      id: p.id, footprint: p.ring, z0: 0,
-      floors: storeyHeights(kind, levelsOf(p.t) ?? levels),
+      id: p.id, footprint: p.ring, z0: Number.parseFloat(p.t.min_height ?? '0') || 0,
+      floors: partFloorsOf(p.t, kind, levels),
       facade: (p.t['building:material'] ?? b.t['building:material']) === 'glass' ? 'glass' : 'wall',
-      roof: 'flat', source: p.source,
+      roof: p.t['roof:shape'] && p.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: p.source,
     }));
     // When OSM only mapped the tower building:part(s) inside a larger podium outline, keep the base podium too
     const ov = cfg.overrides.buildings?.[b.source];
     const isBespoke = Boolean(ov?.model && ov?.parts);
-    const rawArea = raw.reduce((s, p) => s + ringArea(p.ring), 0), baseArea = ringArea(b.ring);
+    const rawArea = raw.reduce((s, p) => s + ringArea(p.ring), 0);
     const maxPartLevels = raw.length ? Math.max(...raw.map(p => levelsOf(p.t) ?? levels)) : levels;
-    const needPodium = raw.length > 0 && !isBespoke && rawArea < baseArea * 0.82;
+    const needPodium = raw.length > 0 && !isBespoke && !isHeritage && rawArea < baseArea * 0.82;
     const podiumLevels = own !== undefined && own < maxPartLevels ? own : Math.min(4, Math.max(1, maxPartLevels - 1));
     const parts: BuildingPart[] = raw.length
       ? (needPodium ? [...rawParts, { id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, Math.max(1, podiumLevels)), facade: bFacade, roof: 'flat', source: b.source }] : rawParts)
-      : [{ id: b.id, footprint: b.ring, z0: 0, floors: storeyHeights(kind, levels), facade: bFacade, roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
+      : [{ id: b.id, footprint: b.ring, z0: 0, floors: partFloorsOf(b.t, kind, levels), facade: bFacade, roof: b.t['roof:shape'] && b.t['roof:shape'] !== 'flat' ? 'pitched' : 'flat', source: b.source }];
     const localFronts = nearStreets(b.ring);
     const front = frontEdge(b.ring, localFronts);
     const { w, d } = frontage(b.ring, front);
     const fromOsm = own !== undefined || raw.some(p => levelsOf(p.t) !== undefined);
-    // on a main street a house is always a shop (rules.houseFor)
+    // on a main street a house is always a shop (rules.houseFor); never generate a modern tube house for a heritage building
     const facing = frontStreet(b.ring, front, localFronts), on = facing && facing.gap < 25 && MAIN.has(facing.street.kind) ? 'main' : 'minor';
-    const house = raw.length ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
+    const house = raw.length || isHeritage ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
     // a generated house sets its own storey heights (a raised ground floor over a semi-basement…)
     if (house) parts[0] = { ...parts[0]!, floors: houseStoreys(house.spec) };
-    const c = centroid(b.ring);
-    const campus = campuses.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
     let name = b.t.name;
+    if (!name && raw.length) {
+      const partNames = [...new Set(raw.map(p => p.t.name?.trim()).filter((n): n is string => n !== undefined && n.length > 0 && !GENERIC_PART_NAME.test(n)))];
+      if (partNames.length) name = partNames.slice(0, 2).join(' – ');
+    }
     if (campus && (!name || /^[A-ZĐ]\d{1,2}$/i.test(name.trim()))) {
       name = name ? `${campus.name} – Nhà ${name.trim()}` : campus.name;
     }
     const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
-    const subtype = inferSubtype(b.t) ?? campus?.subtype;
     const district = cfg.districtOf?.(c);
     const description = name ? cfg.heritageNotes?.[name.trim()] : undefined;
+    const nTrim = name?.trim() ?? '';
+    const autoModel =
+      b.t.building === 'church' || b.t.building === 'cathedral' || /^(nhà thờ|giáo xứ|thánh đường)\b/i.test(nTrim)
+        ? 'church-hall'
+        : /^(lăng|lăng mộ)\b/i.test(nTrim)
+          ? 'traditional-mausoleum'
+          : /^(chùa|tổ đình)\b/i.test(nTrim) || (isHeritage && b.t.religion === 'buddhist')
+            ? 'traditional-pagoda'
+            : /^(đền|đình|miếu|phủ)\b/i.test(nTrim) || b.t.building === 'temple' || b.t.building === 'shrine'
+              ? 'traditional-temple'
+              : undefined;
     return {
       id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
+      ...(autoModel ? { model: autoModel, isSignatureLandmark: Boolean(nTrim) } : {}),
       ...(address ? { address } : {}),
       ...(district ? { district } : {}),
       ...(subtype ? { subtype } : {}),

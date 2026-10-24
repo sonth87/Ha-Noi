@@ -305,6 +305,18 @@ export function buildPlaceCatalog(
       : `${kindLabel} cao ${lv} tầng (~${h} m), diện tích mặt bằng khoảng ${areaM2.toLocaleString('vi')} m² tại ${address}.`;
     const desc = b.description ?? fallbackDesc;
 
+    const customZ =
+      b.model === 'hanoi-flag-tower' ? 48 :
+      b.model === 'national-assembly' ? 55 :
+      b.model === 'ho-chi-minh-mausoleum' ? 23.5 :
+      b.model === 'doan-mon' ? 16.5 :
+      b.model === 'bac-son-memorial' ? 16.5 :
+      b.model === 'khue-van-cac' ? 11.2 :
+      b.model === 'van-mieu-mon' ? 10.2 :
+      b.model === 'one-pillar-pagoda' ? 9.8 :
+      b.model === 'nha-san-bac-ho' ? 9.2 :
+      h + (b.model === 'vpbank-tower' || b.model === 'lotte-center' ? 10 : b.model === 'national-cinema' ? 6 : 2.2);
+
     const entry: PlaceEntry = {
       id: b.id,
       source: b.source,
@@ -315,7 +327,7 @@ export function buildPlaceCatalog(
       badge: catBadges[cat],
       tier,
       minPxPerMetre,
-      world: [c[0], c[1], h + (b.model === 'vpbank-tower' ? 8 : b.model === 'national-cinema' ? 6 : 2.2)],
+      world: [c[0], c[1], customZ],
       ground: [c[0], c[1]],
       description: desc,
       metrics: [
@@ -378,13 +390,13 @@ export function selectVisiblePlaceLabels(
 
   // 'label' mode: show Name + Address badge above buildings, landmarks, parks, lakes, monuments, heritage sites, stations
   const maxLabels = isMobile
-    ? (pxPerMetre < 1.5 ? 8 : pxPerMetre < 3.0 ? 12 : 16)
-    : (pxPerMetre < 1.5 ? 14 : pxPerMetre < 3.0 ? 20 : pxPerMetre < 5.5 ? 26 : 32);
+    ? (pxPerMetre < 1.5 ? 10 : pxPerMetre < 3.0 ? 14 : 18)
+    : (pxPerMetre < 1.5 ? 18 : pxPerMetre < 3.0 ? 24 : pxPerMetre < 5.5 ? 30 : 36);
   const padX = isMobile ? 42 : 56;
   const padTop = isMobile ? 50 : 60;
   const padBottom = isMobile ? 38 : 38;
-  const minW = isMobile ? 108 : 124;
-  const minH = isMobile ? 34 : 38;
+  const minW = isMobile ? 104 : 118;
+  const minH = isMobile ? 32 : 36;
 
   // When zoomed in, tall skyscrapers (e.g., VPBank 100 m, Lotte 272 m) have their rooftop above the top edge of the screen
   // while their body/podium is right in the middle of the viewport. Dynamically clamp the anchor height so the label stays on-screen.
@@ -424,10 +436,10 @@ export function selectVisiblePlaceLabels(
       chosen.push({ entry: c.entry, x: c.x, y: c.y, anchorWorld: c.anchorWorld, offsetY: 0 });
       continue;
     }
-    // For signature landmarks (e.g. Rạp Chiếu phim Quốc gia & VPBank Tower across an intersection),
-    // if rotating the camera aligns them vertically on screen, nudge vertically by ±40 px so both stay visible!
+    // For signature landmarks (e.g. Rạp Chiếu phim Quốc gia & VPBank Tower, or Lăng Bác & Chùa Một Cột),
+    // if rotating the camera aligns them vertically on screen, nudge vertically by ±38 px so both stay visible!
     if (c.entry.isSignatureLandmark) {
-      for (const dy of [40, -40, 76, -76]) {
+      for (const dy of [38, -38, 74, -74]) {
         const ny = c.y + dy;
         if (ny >= padTop && ny <= heightPx - padBottom && !collidesAt(ny)) {
           chosen.push({ entry: c.entry, x: c.x, y: ny, anchorWorld: c.anchorWorld, offsetY: dy });

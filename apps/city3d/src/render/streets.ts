@@ -16,6 +16,7 @@
 import * as THREE from 'three';
 import { closestOnPath, dist, frontStreet, polylineLength, roadNetwork, type Area, type Arm, type City, type NetNode, type Road, type Vec2 } from '@my-city/core';
 import { V, type Batch, type Surface } from './batch';
+import { drawMonumentFeature } from './landmarks';
 
 const ROAD_Z = 0.1, WALK_Z = 0.25, MARK_Z = 0.12;
 
@@ -136,16 +137,7 @@ export function buildAreas(B: Batch, city: City) {
   }
   for (const f of city.features) {
     if (f.kind !== 'monument' && f.kind !== 'heritage') continue;
-    const [x, y] = f.at;
-    const oct = (r: number): Vec2[] => Array.from({ length: 8 }, (_, i) => [x + r * Math.cos((i * Math.PI) / 4), y + r * Math.sin((i * Math.PI) / 4)]);
-    B.solid(oct(4.8), 0, 0.55, () => 'wall', 'walk', f.id);
-    B.solid(oct(3.2), 0.55, 1.4, () => 'wall', 'roof', f.id);
-    if (f.kind === 'monument') {
-      B.solid(oct(1.5), 1.4, 5.2, () => 'wall', 'roof', f.id);
-      B.solid(oct(0.85), 5.2, 8.6, () => 'metal', 'metal', f.id);
-    } else {
-      B.solid(oct(2.2), 1.4, 2.8, () => 'wall', 'roof', f.id);
-    }
+    drawMonumentFeature(B, f);
   }
 }
 

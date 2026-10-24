@@ -28,6 +28,9 @@ import {
   type City, type Lane, type Signals, type Track, type TrainPhase, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { Batch, type Surface } from '@render/batch';
+import {
+  MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, isFlagVisibleAtSpan, stepSharedWavingFlags, type WavingFlagInstance,
+} from '@render/buildings';
 import { beaconsOf, buildBase, buildTile, cityFloors, layerOf, tilesOf, type Detail, type Layer, type Tile } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
@@ -35,10 +38,13 @@ import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metr
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import {
+  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments, type AdminBoundaryDef,
+} from '@render/adminBoundaries';
+import {
   CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
   HOVER_THROTTLE_MS, ISO_EL, MIN_ZOOM_TO_CURSOR_EL, MOVE_KEYS, ORBIT_RADIUS, PAN_BOUNDS_MARGIN,
-  POV_CONFIG, POV_MODES, SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS, azOf,
-  type PovMode,
+  POV_CONFIG, POV_MODES, SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS,
+  azFromHeading, azOf, headingFromAz, type PovMode,
 } from './constants';
 import { LOCALES, getLocale, setGlobalLocale, t, type Locale } from './i18n';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
@@ -59,9 +65,19 @@ import {
   type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
 } from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
+import { projector } from '@my-city/osm-import';
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
+
+export interface PegmanDropPreview {
+  kind: 'metro' | 'car';
+  world: [number, number, number];
+  screenX: number;
+  screenY: number;
+  trainIndex: number;
+  label: string;
+}
 
 export interface Snapshot {
   mode: Mode;
@@ -168,7 +184,7 @@ export class CityView {
   private readonly streetById = new Map<string, StreetEntry>();
   private readonly panBounds: { x0: number; y0: number; x1: number; y1: number };
   private readonly showcaseCache = new Map<string, BuiltShowcase>();
-  private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; doors: THREE.MeshBasicMaterial; shellGroup: THREE.Group | null } | null = null;
+  private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; flags: WavingFlagInstance[]; doors: THREE.MeshBasicMaterial; shellGroup: THREE.Group | null } | null = null;
   private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
   private trains: Train[] = [];
   private vehicles: Vehicle[] = [];
@@ -188,13 +204,19 @@ export class CityView {
   private placeItems = new Map<string, { entry: PlaceEntry; x: number; y: number; anchorWorld?: [number, number, number]; offsetY?: number }>();
   private placeSig = '';
   private lastPlaceSelect = 0;
+  private adminLayer: HTMLDivElement | null = null;
+  private adminNodes = new Map<string, HTMLButtonElement>();
+  private adminSig = '';
   private lastDistStep = 0;
   private hoveredPinKey: string | null = null;
   private hoverBanner: HTMLDivElement | null = null;
   private popupCard: HTMLDivElement | null = null;
+  private myLocationMarker: HTMLDivElement | null = null;
+  private myLocation: [number, number] | null = null;
   private activePopup: { entry: PlaceEntry; floor?: string } | null = null;
   private hoveredPlaceId: string | null = null;
   private readonly frame;
+  private readonly northAz: number;
   private savedCam: { x: number; z: number; zoom: number; az: number; el: number; place: string | null };
   private urlCandidateSig = '';
   private urlSyncedSig = '';
@@ -207,6 +229,8 @@ export class CityView {
     mapGroup: THREE.Group;
     stationShellGroup: THREE.Group;
     railTrackGroup: THREE.Group;
+    wardBoundaryLines: LineSegments2;
+    cityBoundaryLines: LineSegments2;
     showcaseGroup: THREE.Group;
     extensionGroup: THREE.Group;
     camera: THREE.OrthographicCamera;
@@ -214,6 +238,7 @@ export class CityView {
     composer: EffectComposer | null;
     bloom: UnrealBloomPass | null;
     beacons: THREE.Mesh[];
+    flags: WavingFlagInstance[];
     fleets: Map<VehicleKind, Fleet>;
     vehicleLines: LineSegments2;
     stop: () => void;
@@ -230,6 +255,8 @@ export class CityView {
     }),
     crease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     baseCrease: new LineMaterial({ linewidth: 1, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
+    wardBoundary: new LineMaterial({ linewidth: 1.75, transparent: true, opacity: 0.78, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -12 }),
+    cityBoundary: new LineMaterial({ linewidth: 2.4, transparent: true, opacity: 0.88, polygonOffset: true, polygonOffsetFactor: -4, polygonOffsetUnits: -12 }),
     detail: new LineMaterial({ linewidth: 1, vertexColors: true, color: 0xffffff, transparent: true, polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -6 }),
     wire: new LineMaterial({ linewidth: 1, transparent: true }),
     pulse: new LineMaterial({ linewidth: 2, dashed: true, dashSize: 0.8, gapSize: 23, transparent: true }),
@@ -259,6 +286,7 @@ export class CityView {
 
   constructor(readonly city: City) {
     this.frame = frameForCity(city.id);
+    this.northAz = Math.PI / 2 + (this.frame.bearing * Math.PI) / 180;
     const stationShellB = new Batch();
     const railTracksB = new Batch();
     this.base = buildBase(city, stationShellB, railTracksB);
@@ -321,7 +349,7 @@ export class CityView {
     const initMode: Mode = initUrl?.mode ?? '2d';
     const initHeading = initUrl?.heading ?? 0;
     const initView = (((Math.round(initHeading / 90) % 4) + 4) % 4) as Snapshot['view'];
-    const initAz = initUrl?.heading !== undefined ? Math.PI / 4 - (initUrl.heading * Math.PI) / 180 : azOf(initView);
+    const initAz = initUrl?.heading !== undefined ? azFromHeading(initUrl.heading, this.northAz) : azOf(initView, this.northAz);
     const initEl = initUrl?.tilt !== undefined ? Math.max(0.05, Math.min(1.43, (initUrl.tilt * Math.PI) / 180)) : ISO_EL;
     const validShowcase = initUrl?.showcase && this.showcases.some(s => s.id === initUrl.showcase) ? initUrl.showcase : null;
 
@@ -477,7 +505,7 @@ export class CityView {
     controls.dampingFactor = 0.18;
     controls.panSpeed = 1.0;
     controls.zoomSpeed = 1.2;
-    controls.minZoom = 0.14; controls.maxZoom = 60;
+    controls.minZoom = 0.075; controls.maxZoom = 60;
     controls.minPolarAngle = 0.05; controls.maxPolarAngle = 1.43;
     controls.screenSpacePanning = false;
     controls.zoomToCursor = true;
@@ -496,7 +524,19 @@ export class CityView {
     const stationShellGroup = this.group(this.stationShell, false);
     const railTrackGroup = this.group(this.railTracks, false);
     railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
-    mapGroup.add(baseGroup, stationShellGroup, railTrackGroup);
+    const wardBoundaryLines = new LineSegments2(
+      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments(WARD_BOUNDARIES, 0.6, 26, 16)),
+      this.mats.wardBoundary,
+    );
+    wardBoundaryLines.frustumCulled = false;
+    wardBoundaryLines.visible = false;
+    const cityBoundaryLines = new LineSegments2(
+      new LineSegmentsGeometry().setPositions(buildDashedBoundarySegments([HANOI_OUTER_BOUNDARY], 0.85, 72, 44)),
+      this.mats.cityBoundary,
+    );
+    cityBoundaryLines.frustumCulled = false;
+    cityBoundaryLines.visible = false;
+    mapGroup.add(baseGroup, stationShellGroup, railTrackGroup, wardBoundaryLines, cityBoundaryLines);
     for (const t of this.tiles) {
       for (const v of t.layers.values()) v.group = null;
       t.shown = -1;
@@ -505,6 +545,11 @@ export class CityView {
     }
     for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
+    const flags = flagpolesOf(this.city).map(spec => {
+      const f = createWavingFlagGroup(spec);
+      mapGroup.add(f.group);
+      return f;
+    });
     const fleets = new Map<VehicleKind, Fleet>();
     for (const kind of VEHICLE_KINDS) {
       const fleet: Fleet = { model: vehicleModel(kind), meshes: [], list: this.vehicles.filter(v => v.kind === kind) };
@@ -774,11 +819,23 @@ export class CityView {
       this.syncForegroundCut();
       this.zoomFade();
       const blink = this.snap.night && Math.floor(now / 700) % 2 === 0;
+      const flagTime = now / 1000;
       if (this.snap.showcase) {
-        if (this.activeShowcase) for (const b of this.activeShowcase.beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
+        if (this.activeShowcase) {
+          for (const b of this.activeShowcase.beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
+          if (this.activeShowcase.flags.length > 0) stepSharedWavingFlags(flagTime);
+        }
       } else {
         this.trafficStep(dt);
         if (povActive) {
+          const camPos = this.activeCamera().position;
+          let anyFlagVis = false;
+          for (const f of flags) {
+            const vis = Math.hypot(f.spec.polePos[0] - camPos.x, f.spec.polePos[1] - camPos.z) <= MAX_FLAG_VIEW_SPAN_M;
+            f.group.visible = vis;
+            if (vis) anyFlagVis = true;
+          }
+          if (anyFlagVis) stepSharedWavingFlags(flagTime);
           const tel = this.pov.step(dt, this.sim.t, this.trains, this.nightOn('beam'));
           if (this.miniMapCanvas) {
             this.pov.drawMiniMap(this.miniMapCanvas, this.trains, this.sim.t);
@@ -801,6 +858,10 @@ export class CityView {
               povLocationName: tel.locationName,
             });
           }
+        } else {
+          const showFlags = isFlagVisibleAtSpan(FRUSTUM / camera.zoom);
+          for (const f of flags) f.group.visible = showFlags;
+          if (showFlags) stepSharedWavingFlags(flagTime);
         }
         this.detailStep();
         if (!this.interacting || now - this.lastDistStep > 120) {
@@ -812,6 +873,8 @@ export class CityView {
       }
       this.streetLabelsStep();
       this.placeInfoStep();
+      this.adminBoundariesStep();
+      this.myLocationStep();
       this.syncUrlState(now);
       for (const { ext } of this.extensions.values()) {
         try { ext.onTick?.(dt, this.sdk); } catch { /* isolate extension errors */ }
@@ -821,13 +884,18 @@ export class CityView {
         if (this.mounted.bloom?.enabled && this.mounted.composer) this.mounted.composer.render();
         else this.mounted.renderer.render(scene, this.activeCamera());
       }
+      if (!povActive) {
+        const az = Math.atan2(camera.position.z - controls.target.z, camera.position.x - controls.target.x);
+        const heading = Math.round(headingFromAz(az, this.northAz)) % 360;
+        const view = (((Math.round(heading / 90) % 4) + 4) % 4) as Snapshot['view'];
+        if (heading !== this.snap.heading || view !== this.snap.view) {
+          this.update({ heading, view });
+        }
+      }
       frames++;
       if (now - t0 > 500) {
         const fps = Math.round((frames * 1000) / (now - t0)); frames = 0; t0 = now;
-        const az = Math.atan2(camera.position.z - controls.target.z, camera.position.x - controls.target.x);
-        const heading = Math.round((((((Math.PI / 4 - az) * 180) / Math.PI) % 360) + 360) % 360);
-        const view = (((Math.round(heading / 90) % 4) + 4) % 4) as Snapshot['view'];
-        if (fps !== this.snap.fps || heading !== this.snap.heading || view !== this.snap.view) this.update({ fps, heading, view });
+        if (fps !== this.snap.fps) this.update({ fps });
         this.autoQuality(fps);
       }
     };
@@ -847,6 +915,20 @@ export class CityView {
     this.placeNodes.clear();
     this.placeItems.clear();
     this.placeSig = '';
+
+    const adminLayer = document.createElement('div');
+    adminLayer.className = 'admin-boundary-labels';
+    host.appendChild(adminLayer);
+    this.adminLayer = adminLayer;
+    this.adminNodes.clear();
+    this.adminSig = '';
+
+    const myLocEl = document.createElement('div');
+    myLocEl.className = 'my-location-marker';
+    myLocEl.style.display = 'none';
+    myLocEl.innerHTML = '<span class="my-location-halo"></span><span class="my-location-dot"></span>';
+    host.appendChild(myLocEl);
+    this.myLocationMarker = myLocEl;
 
     const hoverBanner = document.createElement('div');
     hoverBanner.className = 'place-hover-banner';
@@ -868,7 +950,7 @@ export class CityView {
     window.addEventListener('hashchange', onPopState);
 
     this.mounted = {
-      host, renderer, scene, mapGroup, stationShellGroup, railTrackGroup, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, fleets, vehicleLines,
+      host, renderer, scene, mapGroup, stationShellGroup, railTrackGroup, wardBoundaryLines, cityBoundaryLines, showcaseGroup, extensionGroup, camera, controls, composer: null, bloom: null, beacons, flags, fleets, vehicleLines,
       stop: () => {
         cancelAnimationFrame(raf); ro.disconnect();
         window.removeEventListener('popstate', onPopState);
@@ -901,9 +983,11 @@ export class CityView {
     this.applyQuality(this.snap.quality);
     this.applyTheme(this.snap.theme);
     resize();
-    // Build all bespoke landmark tiles plus the closest tiles immediately
+    // Build nearby bespoke landmark tiles plus the closest tiles immediately
     const first = Math.min(1, this.wantedDetail()) as Detail;
-    const landmarkTiles = this.tiles.filter(t => t.tile.buildings.some(b => b.model));
+    const landmarkTiles = this.tiles
+      .filter(t => t.tile.buildings.some(b => b.model) && dist2(t.tile.center, controls.target) <= 1800 * 1800)
+      .slice(0, 24);
     const closestTiles = [...this.tiles]
       .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
       .slice(0, 14);
@@ -923,6 +1007,7 @@ export class CityView {
     }
     this.streetLabelsStep(true);
     this.placeInfoStep(true);
+    this.adminBoundariesStep(true);
     this.syncUrlState(performance.now(), true);
     raf = requestAnimationFrame(tick);
   }
@@ -956,14 +1041,81 @@ export class CityView {
     this.placeNodes.clear();
     this.placeItems.clear();
     this.placeSig = '';
+    this.adminLayer?.remove();
+    this.adminLayer = null;
+    this.adminNodes.clear();
+    this.adminSig = '';
+    this.myLocationMarker?.remove();
+    this.myLocationMarker = null;
     this.hoverBanner?.remove();
     this.hoverBanner = null;
     this.popupCard?.remove();
     this.popupCard = null;
     this.activePopup = null;
-    m.controls.dispose(); m.composer?.dispose(); m.bloom?.dispose(); m.renderer.dispose();
+
+    // Free all per-mount GPU & ArrayBuffer allocations (prevents StrictMode & HMR memory exhaustion)
+    this.pov.unmountPlayerCar(m.mapGroup);
+    m.wardBoundaryLines.geometry.dispose();
+    m.cityBoundaryLines.geometry.dispose();
+    m.vehicleLines.geometry.dispose();
+    for (const f of m.fleets.values()) {
+      for (const o of f.meshes) o.dispose();
+      for (const g of f.model.parts.values()) g.dispose();
+      f.model.shell.dispose();
+    }
+    m.fleets.clear();
+    for (const b of m.beacons) b.geometry.dispose();
+    for (const tr of this.trains) {
+      tr.doors.dispose();
+      for (const car of tr.cars) {
+        for (const child of car.children) {
+          if (child instanceof LineSegments2) child.geometry.dispose();
+        }
+      }
+    }
+    this.trains = [];
+
+    m.controls.dispose();
+    m.composer?.dispose();
+    m.bloom?.dispose();
+    m.renderer.dispose();
+    m.renderer.forceContextLoss();
     m.renderer.domElement.remove();
     this.mounted = null;
+  }
+
+  /** Full teardown for HMR reload so all cached Layer and CarModel ArrayBuffers are released */
+  dispose() {
+    this.unmount();
+    const disposeLayer = (l: Layer) => {
+      for (const g of l.surfaces.values()) g.dispose();
+      l.shell.dispose();
+      l.creases.dispose();
+      l.details.dispose();
+      l.windows.dispose();
+    };
+    for (const l of this.layers) disposeLayer(l);
+    this.layers.clear();
+    for (const t of this.tiles) {
+      t.layers.clear();
+      if (t.cutLayer) {
+        disposeLayer(t.cutLayer);
+        t.cutLayer = null;
+      }
+    }
+    for (const c of this.cells) {
+      if (c.cell) {
+        c.cell.wires.dispose();
+        c.cell.pools.dispose();
+        c.cell = null;
+      }
+    }
+    for (const cm of this.carModels) {
+      if (!cm) continue;
+      for (const g of cm.parts.values()) g.dispose();
+      cm.shell.dispose();
+    }
+    this.carModels = [];
   }
 
   // ---------- commands ----------
@@ -998,8 +1150,8 @@ export class CityView {
   }
   toggleMode() { this.setMode(this.snap.mode === '2d' ? '3d' : '2d'); }
 
-  setPovMode(povMode: PovMode) {
-    if (povMode === this.snap.povMode) return;
+  setPovMode(povMode: PovMode, keepSelection = false) {
+    if (povMode === this.snap.povMode && !keepSelection) return;
     if (povMode !== 'map' && this.snap.showcase) {
       this.setShowcase(null);
     }
@@ -1008,7 +1160,7 @@ export class CityView {
     this.held.clear();
     const m = this.mounted;
     const mapTarget = m ? { x: m.controls.target.x, z: m.controls.target.z } : { x: this.savedCam.x, z: this.savedCam.z };
-    this.pov.setMode(povMode, this.trains, mapTarget, this.sim.t);
+    this.pov.setMode(povMode, this.trains, mapTarget, this.sim.t, keepSelection);
     if (m) {
       m.controls.enabled = !this.pov.isActive();
       m.railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
@@ -1165,7 +1317,8 @@ export class CityView {
     const m = this.mounted;
     const doors = new THREE.MeshBasicMaterial({ side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1 });
     const beacons: THREE.Mesh[] = [];
-    this.activeShowcase = { built, beacons, doors, shellGroup: null };
+    const flags: WavingFlagInstance[] = [];
+    this.activeShowcase = { built, beacons, flags, doors, shellGroup: null };
     if (id.startsWith('station:')) {
       for (const st of this.city.stations) this.setLamp(stationLamp(st, 'edge'), true, false);
     }
@@ -1189,6 +1342,11 @@ export class CityView {
         b.position.copy(p);
         m.showcaseGroup.add(b);
         beacons.push(b);
+      }
+      for (const spec of built.flags) {
+        const f = createWavingFlagGroup(spec);
+        m.showcaseGroup.add(f.group);
+        flags.push(f);
       }
       for (const c of built.cars) {
         const model: CarModel = (this.carModels[c.cab ? 1 : 0] ??= carModel(c.cab)), g = new THREE.Group();
@@ -1219,11 +1377,148 @@ export class CityView {
     });
   }
 
-  /** turn by 90°; in 3D, turn too, keeping the tilt */
+  /** turn by 90° around True North (Bắc -> Đông -> Nam -> Tây); in 3D, turn too, keeping the tilt */
   rotate(dir: 1 | -1) {
     if (!this.mounted || this.pov.isActive()) return;
-    const az = this.azimuth(), k = Math.round((Math.PI / 4 - az) / (Math.PI / 2)) + dir;
-    this.startTurn(azOf(k), this.snap.mode === '2d' ? ISO_EL : this.elevation());
+    const az = this.azimuth(), k = Math.round((this.northAz - az) / (Math.PI / 2)) + dir;
+    this.startTurn(azOf(k, this.northAz), this.snap.mode === '2d' ? ISO_EL : this.elevation());
+  }
+
+  /** Smoothly rotate the camera back to True Geographic North (0° Bắc) */
+  resetNorth() {
+    if (!this.mounted) return;
+    if (this.pov.isActive()) {
+      this.pov.centerLook();
+      return;
+    }
+    const curHeading = headingFromAz(this.azimuth(), this.northAz);
+    const alreadyNorth = curHeading <= 1.2 || curHeading >= 358.8;
+    const targetEl = this.snap.mode === '2d' || alreadyNorth ? ISO_EL : this.elevation();
+    this.startTurn(azOf(0, this.northAz), targetEl);
+  }
+
+  /** Fly to the user's current position (GPS if inside Hanoi bounds, otherwise Ngã tư Thái Hà – Tây Sơn [0, 0]) and show a pulsing dot */
+  goToMyLocation() {
+    const applyLoc = (pt: [number, number]) => {
+      this.myLocation = pt;
+      this.flyTo(pt);
+      const m = this.mounted;
+      if (m && m.camera.zoom < 1.85) {
+        m.camera.zoom = 2.15;
+        m.camera.updateProjectionMatrix();
+      }
+      this.myLocationStep();
+    };
+
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const toXY = projector(this.frame);
+          const [x, z] = toXY(pos.coords.latitude, pos.coords.longitude);
+          const b = this.panBounds;
+          const inside =
+            x >= b.x0 - 400 &&
+            x <= b.x1 + 400 &&
+            z >= b.y0 - 400 &&
+            z <= b.y1 + 400;
+          applyLoc(inside ? [x, z] : [0, 0]);
+        },
+        () => applyLoc([0, 0]),
+        { enableHighAccuracy: true, timeout: 3500, maximumAge: 60000 },
+      );
+    } else {
+      applyLoc([0, 0]);
+    }
+  }
+
+  private myLocationStep() {
+    const m = this.mounted, el = this.myLocationMarker;
+    if (!m || !el) return;
+    if (!this.myLocation || this.snap.showcase || this.pov.isActive()) {
+      if (el.style.display !== 'none') el.style.display = 'none';
+      return;
+    }
+    const w = m.host.clientWidth, h = m.host.clientHeight;
+    const tmp = new THREE.Vector3(this.myLocation[0], 0.4, this.myLocation[1]).project(m.camera);
+    const vis = tmp.z >= -1 && tmp.z <= 1;
+    if (!vis) {
+      el.style.display = 'none';
+      return;
+    }
+    const sx = (tmp.x * 0.5 + 0.5) * w;
+    const sy = (-tmp.y * 0.5 + 0.5) * h;
+    el.style.display = '';
+    el.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0)`;
+  }
+
+  /** Raycast a Pegman drag position `(clientX, clientY)` onto the map to preview Metro vs Street Car drop target */
+  previewPegmanDrop(clientX: number, clientY: number): PegmanDropPreview | null {
+    const m = this.mounted;
+    if (!m || this.snap.showcase) return null;
+    const rect = m.renderer.domElement.getBoundingClientRect();
+    if (
+      clientX < rect.left ||
+      clientX > rect.right ||
+      clientY < rect.top ||
+      clientY > rect.bottom
+    ) {
+      return null;
+    }
+    const ndc = new THREE.Vector2(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, this.activeCamera());
+
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const viaductPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -10.5);
+    const hitGnd = new THREE.Vector3();
+    const hitVia = new THREE.Vector3();
+    if (!ray.ray.intersectPlane(groundPlane, hitGnd)) return null;
+    if (!ray.ray.intersectPlane(viaductPlane, hitVia)) hitVia.copy(hitGnd);
+
+    const b = this.panBounds;
+    const clampX = (v: number) => Math.max(b.x0, Math.min(b.x1, v));
+    const clampZ = (v: number) => Math.max(b.y0, Math.min(b.y1, v));
+
+    const target = this.pov.findPegmanTarget(
+      [clampX(hitGnd.x), clampZ(hitGnd.z)],
+      [clampX(hitVia.x), clampZ(hitVia.z)],
+      this.trains,
+      this.sim.t,
+    );
+
+    const proj = new THREE.Vector3(target.world[0], target.world[2], target.world[1]).project(this.activeCamera());
+    const screenX = (proj.x * 0.5 + 0.5) * rect.width;
+    const screenY = (-proj.y * 0.5 + 0.5) * rect.height;
+
+    return {
+      kind: target.kind,
+      world: target.world,
+      screenX,
+      screenY,
+      trainIndex: target.trainIndex,
+      label: target.label,
+    };
+  }
+
+  /** Drop Pegman at `(clientX, clientY)`: enters `'metro-cab'` on the nearest train if dropped on Metro, or `'drive-cabin'` on the street */
+  dropPegmanAt(clientX: number, clientY: number): boolean {
+    const preview = this.previewPegmanDrop(clientX, clientY);
+    if (!preview) return false;
+    const m = this.mounted;
+    if (preview.kind === 'metro') {
+      this.pov.selectTrainIndex(preview.trainIndex, this.trains);
+      this.setPovMode('metro-cab', true);
+      return true;
+    }
+    const camForward = m
+      ? Math.atan2(m.controls.target.z - m.camera.position.z, m.controls.target.x - m.camera.position.x)
+      : undefined;
+    this.pov.spawnCarAtDrop(preview.world[0], preview.world[1], camForward);
+    this.setPovMode('drive-cabin', true);
+    return true;
   }
 
   setTheme(theme: Theme) {
@@ -1424,7 +1719,7 @@ export class CityView {
       }
     }
 
-    if (this.snap.showcase || mode === 'off' || povActive) {
+    if (this.snap.showcase || mode === 'off' || povActive || m.camera.zoom < 0.26) {
       if (layer.style.display !== 'none') {
         layer.style.display = 'none';
         layer.replaceChildren();
@@ -1497,6 +1792,100 @@ export class CityView {
         node.remove();
         this.placeNodes.delete(key);
         this.placeItems.delete(key);
+      }
+    }
+  }
+
+  private createAdminLabelNode(def: AdminBoundaryDef, mode: 'ward' | 'city'): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `admin-boundary-badge is-${mode}`;
+    const title = document.createElement('span');
+    title.className = 'admin-boundary-title';
+    title.textContent = def.name;
+    btn.appendChild(title);
+    if (def.subtitle) {
+      const sub = document.createElement('span');
+      sub.className = 'admin-boundary-sub';
+      sub.textContent = def.subtitle;
+      btn.appendChild(sub);
+    }
+    btn.addEventListener('pointerdown', e => e.stopPropagation());
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      this.flyTo([def.center[0], def.center[1]], false);
+      if (this.mounted && mode === 'city' && this.mounted.camera.zoom < 0.45) {
+        this.mounted.camera.zoom = 0.55;
+        this.mounted.camera.updateProjectionMatrix();
+      } else if (this.mounted && mode === 'ward' && this.mounted.camera.zoom < 1.1) {
+        this.mounted.camera.zoom = 1.25;
+        this.mounted.camera.updateProjectionMatrix();
+      }
+    });
+    return btn;
+  }
+
+  private adminBoundariesStep(force = false) {
+    const m = this.mounted, layer = this.adminLayer;
+    if (!m || !layer) return;
+    const povActive = this.pov.isActive();
+    const mode = adminBoundaryModeForZoom(m.camera.zoom, Boolean(this.snap.showcase), povActive);
+    m.wardBoundaryLines.visible = mode === 'ward';
+    m.cityBoundaryLines.visible = mode === 'city';
+
+    if (mode === 'off') {
+      if (layer.style.display !== 'none') {
+        layer.style.display = 'none';
+        layer.replaceChildren();
+        this.adminNodes.clear();
+        this.adminSig = 'off';
+      }
+      return;
+    }
+
+    const w = m.host.clientWidth, h = m.host.clientHeight;
+    const activeCam = this.activeCamera();
+    const focus = m.controls.target;
+    const cp = activeCam.position;
+    const sig = `${mode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
+    if (!force && sig === this.adminSig) return;
+    this.adminSig = sig;
+
+    if (layer.style.display === 'none') layer.style.display = '';
+    if (layer.dataset.mode !== mode) {
+      layer.dataset.mode = mode;
+      layer.replaceChildren();
+      this.adminNodes.clear();
+    }
+
+    const defs: readonly AdminBoundaryDef[] = mode === 'city' ? [HANOI_OUTER_BOUNDARY] : WARD_BOUNDARIES;
+    const tmp = new THREE.Vector3();
+    const keepIds = new Set<string>();
+    const padX = mode === 'city' ? 80 : 56;
+    const padY = mode === 'city' ? 60 : 44;
+
+    for (const def of defs) {
+      tmp.set(def.center[0], mode === 'city' ? 6 : 2.5, def.center[1]).project(activeCam);
+      const sx = (tmp.x * 0.5 + 0.5) * w;
+      const sy = (-tmp.y * 0.5 + 0.5) * h;
+      const inBounds = tmp.z >= -1 && tmp.z <= 1 && sx >= padX && sx <= w - padX && sy >= padY && sy <= h - padY;
+      if (!inBounds) continue;
+
+      keepIds.add(def.id);
+      let node = this.adminNodes.get(def.id);
+      if (!node) {
+        node = this.createAdminLabelNode(def, mode);
+        layer.appendChild(node);
+        this.adminNodes.set(def.id, node);
+      }
+      node.style.display = '';
+      node.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
+    }
+
+    for (const [id, node] of this.adminNodes) {
+      if (!keepIds.has(id)) {
+        node.remove();
+        this.adminNodes.delete(id);
       }
     }
   }
@@ -1822,7 +2211,9 @@ export class CityView {
   private linesFor(fleets: Map<VehicleKind, Fleet>): LineSegmentsGeometry {
     let n = 0;
     for (const f of fleets.values()) n += f.list.length * f.model.lines.length;
-    return new LineSegmentsGeometry().setPositions(new Float32Array(Math.max(6, n)));
+    // Cap to ~650 simultaneously visible vehicles' crease lines (~1.4 MB instead of ~40 MB)
+    const cap = Math.min(Math.max(6, n), 360_000);
+    return new LineSegmentsGeometry().setPositions(new Float32Array(cap));
   }
 
   private trainMeshes(track: Track, offset: number, parent: THREE.Object3D): Train {
@@ -1897,7 +2288,7 @@ export class CityView {
     if (!povActive && this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles) return;
     const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
     const drawLines = m.vehicleLines.visible;
-    const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, e = mat.elements;
+    const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, maxLineFloats = arr.length, e = mat.elements;
     let k = 0;
     for (const f of m.fleets.values()) {
       const local = f.model.lines;
@@ -1912,7 +2303,7 @@ export class CityView {
         if (out) continue;
         for (const o of f.meshes) o.setMatrixAt(vis, mat);
         vis++;
-        if (drawLines) {
+        if (drawLines && k + local.length <= maxLineFloats) {
           for (let j = 0; j < local.length; j += 3, k += 3) {
             const x = local[j]!, y = local[j + 1]!, z = local[j + 2]!;
             arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + vx;
@@ -2245,6 +2636,8 @@ export class CityView {
     (this.mats.shell.uniforms.color!.value as THREE.Color).copy(tok('--line'));
     this.mats.crease.color = tok('--line');
     this.mats.baseCrease.color = tok('--line');
+    this.mats.wardBoundary.color = tok('--accent');
+    this.mats.cityBoundary.color = tok('--accent-hi');
     this.mats.wire.color = tok('--line');
     this.mats.pulse.color = tok('--accent');
     this.nightThings();
@@ -2285,7 +2678,7 @@ export class CityView {
     const m = this.mounted;
     if (!m) return;
     const res = m.renderer.getDrawingBufferSize(new THREE.Vector2());
-    for (const l of [this.mats.crease, this.mats.baseCrease, this.mats.detail, this.mats.wire, this.mats.pulse]) l.resolution.copy(res);
+    for (const l of [this.mats.crease, this.mats.baseCrease, this.mats.wardBoundary, this.mats.cityBoundary, this.mats.detail, this.mats.wire, this.mats.pulse]) l.resolution.copy(res);
     (this.mats.shell.uniforms.res!.value as THREE.Vector2).copy(res);
   }
 
@@ -2446,7 +2839,7 @@ export class CityView {
     const dz = m.camera.position.z - c.z;
     const dist = Math.hypot(dx, dy, dz);
     if (dist < 1e-3) {
-      this.place(m.camera, m.controls, Math.PI / 4, ISO_EL);
+      this.place(m.camera, m.controls, this.northAz, ISO_EL);
       return;
     }
     const az = Math.atan2(dz, dx);
@@ -2559,8 +2952,9 @@ export class CityView {
     m.controls.enableRotate = mode === '3d';
     m.controls.touches.TWO = mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN;
     if (mode === '2d') {
-      const k = Math.round((Math.PI / 4 - this.azimuth()) / (Math.PI / 2));
-      if (animate) this.startTurn(azOf(k), ISO_EL); else this.place(m.camera, m.controls, azOf(k), ISO_EL);
+      const k = animate ? 0 : Math.round((this.northAz - this.azimuth()) / (Math.PI / 2));
+      const targetAz = azOf(k, this.northAz);
+      if (animate) this.startTurn(targetAz, ISO_EL); else this.place(m.camera, m.controls, targetAz, ISO_EL);
     }
   }
 
@@ -2615,7 +3009,7 @@ export class CityView {
     const mapTarget = this.snap.showcase && this.savedMapCam ? this.savedMapCam.target : m.controls.target;
     const mapZoom = this.snap.showcase && this.savedMapCam ? this.savedMapCam.zoom : m.camera.zoom;
     const az = this.azimuth();
-    const heading = ((((Math.PI / 4 - az) * 180) / Math.PI) % 360 + 360) % 360;
+    const heading = headingFromAz(az, this.northAz);
     const tilt = (this.elevation() * 180) / Math.PI;
     const placeId = !this.snap.showcase && this.activePopup ? this.activePopup.entry.id : null;
 
@@ -2694,7 +3088,7 @@ export class CityView {
         m.camera.zoom = parsed.zoom;
         m.camera.updateProjectionMatrix();
       }
-      const az = parsed.heading !== undefined ? Math.PI / 4 - (parsed.heading * Math.PI) / 180 : this.azimuth();
+      const az = parsed.heading !== undefined ? azFromHeading(parsed.heading, this.northAz) : this.azimuth();
       const el = parsed.tilt !== undefined ? Math.max(0.05, Math.min(1.43, (parsed.tilt * Math.PI) / 180)) : this.elevation();
       this.place(m.camera, m.controls, az, el);
     }

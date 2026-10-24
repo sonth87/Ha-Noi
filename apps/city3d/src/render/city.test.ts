@@ -3,18 +3,35 @@ import * as THREE from 'three';
 import { PRESET_IDS, buildingLevels, floorId, houseFor, houseStoreys, resolveHouse, type Building } from '@my-city/core';
 import { loadCity } from '@my-city/osm-import';
 import { Batch } from './batch';
+import {
+  MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, getFlagMaterial, isFlagVisibleAtSpan, stepSharedWavingFlags, stepWavingFlag,
+} from './buildings';
 import { buildCityGeometry, buildTile, tilesOf } from './city';
 import { buildHouse } from './house3d';
 import { offsetLine, strip } from './streets';
 import { windowRank } from './lights';
 import { buildShowcase, showcasesOf } from './showcase';
+import {
+  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments,
+} from './adminBoundaries';
 
 const { city: fullCity } = loadCity('nga-tu-thai-ha');
-// Representative core slice (Ngã tư Thái Hà 650m radius + all custom landmarks across Đống Đa & Ba Đình)
-// so building 4 detail levels in one worker stays well within V8's default heap limit.
+// Representative core slice (Ngã tư Thái Hà 650m radius + all custom named landmarks across all 6 districts)
+// so building 4 detail levels in one worker stays fast and well within V8's default heap limit.
+const GENERIC_AUTO_MODELS = new Set(['traditional-temple', 'traditional-pagoda', 'church-hall', 'traditional-mausoleum']);
+const seenAutoModels = new Set<string>();
 const city = {
   ...fullCity,
-  buildings: fullCity.buildings.filter(b => b.model || Math.hypot(b.footprint[0]![0], b.footprint[0]![1]) <= 650),
+  streets: fullCity.streets.filter(s => s.path.some(p => Math.hypot(p[0], p[1]) <= 850)),
+  areas: fullCity.areas.filter(a => a.polygon.some(p => Math.hypot(p[0], p[1]) <= 850)),
+  buildings: fullCity.buildings.filter(b => {
+    if (Math.hypot(b.footprint[0]![0], b.footprint[0]![1]) <= 650) return true;
+    if (!b.model) return false;
+    if (!GENERIC_AUTO_MODELS.has(b.model)) return true;
+    if (seenAutoModels.has(b.model)) return false;
+    seenAutoModels.add(b.model);
+    return true;
+  }),
 };
 const g = buildCityGeometry(city);
 
@@ -102,9 +119,9 @@ describe('detail levels', () => {
   }, 60_000);
 
   it('puts every building in exactly one tile', () => {
-    const tiles = tilesOf(fullCity), ids = tiles.flatMap(t => t.buildings.map(b => b.id));
-    expect(ids.sort()).toEqual(fullCity.buildings.map(b => b.id).sort());
-    const t = tiles[0]!, L3 = buildTile(fullCity, t, 3);
+    const tiles = tilesOf(city), ids = tiles.flatMap(t => t.buildings.map(b => b.id));
+    expect(ids.sort()).toEqual(city.buildings.map(b => b.id).sort());
+    const t = tiles[0]!, L3 = buildTile(city, t, 3);
     expect(L3.stats.triangles).toBeGreaterThan(0);
   });
 });
@@ -141,21 +158,52 @@ describe('the house generator in 3D', () => {
   });
 });
 
-describe('standalone showcase dioramas', () => {
-  it('lists OSM landmarks, metro stations and Hanoi archetypes, and builds them on iso-glow plates', () => {
+describe('standalone showcase dioramas, shared flags & administrative boundaries', () => {
+  it('lists OSM landmarks across all 6 districts, metro stations and Hanoi archetypes, and builds them on iso-glow plates', () => {
     const list = showcasesOf(city);
-    expect(list.length).toBeGreaterThan(15);
+    expect(list.length).toBeGreaterThan(20);
     expect(list.some(x => x.id.startsWith('bldg:'))).toBe(true);
     expect(list.some(x => x.id.startsWith('station:'))).toBe(true);
     expect(list.some(x => x.id.startsWith('house:'))).toBe(true);
 
     const vpbankItem = list.find(x => x.name.includes('VPBank Tower'))!;
     const cinemaItem = list.find(x => x.name.includes('Trung tâm Chiếu phim Quốc gia'))!;
+    const mausoleumItem = list.find(x => x.name.includes('Lăng Chủ tịch Hồ Chí Minh'))!;
+    const onePillarItem = list.find(x => x.name.includes('Chùa Một Cột'))!;
+    const nhaSanItem = list.find(x => x.name.includes('Nhà sàn Bác Hồ'))!;
+    const khueVanCacItem = list.find(x => x.name.includes('Khuê Văn Các'))!;
+    const thapRuaItem = list.find(x => x.name.includes('Tháp Rùa'))!;
+    const denNgocSonItem = list.find(x => x.name.includes('Đền Ngọc Sơn'))!;
+    const operaItem = list.find(x => x.name.includes('Nhà hát Lớn Hà Nội'))!;
+    const cathedralItem = list.find(x => x.name.includes('Nhà thờ Lớn Hà Nội'))!;
+    const tranQuocItem = list.find(x => x.name.includes('Chùa Trấn Quốc'))!;
+    const denHaiBaTrungItem = list.find(x => x.name.includes('Đền Hai Bà Trưng'))!;
+    const royalCityItem = list.find(x => x.name.includes('Vinhomes Royal City'))!;
     expect(vpbankItem).toBeDefined();
     expect(cinemaItem).toBeDefined();
+    expect(mausoleumItem).toBeDefined();
+    expect(onePillarItem).toBeDefined();
+    expect(nhaSanItem).toBeDefined();
+    expect(khueVanCacItem).toBeDefined();
+    expect(thapRuaItem).toBeDefined();
+    expect(denNgocSonItem).toBeDefined();
+    expect(operaItem).toBeDefined();
+    expect(cathedralItem).toBeDefined();
+    expect(tranQuocItem).toBeDefined();
+    expect(denHaiBaTrungItem).toBeDefined();
+    expect(royalCityItem).toBeDefined();
 
     const sampleIds = [
-      list.find(x => x.id.startsWith('bldg:'))!.id,
+      khueVanCacItem.id,
+      mausoleumItem.id,
+      onePillarItem.id,
+      thapRuaItem.id,
+      denNgocSonItem.id,
+      operaItem.id,
+      cathedralItem.id,
+      tranQuocItem.id,
+      denHaiBaTrungItem.id,
+      royalCityItem.id,
       vpbankItem.id,
       cinemaItem.id,
       list.find(x => x.id.startsWith('station:'))!.id,
@@ -168,5 +216,51 @@ describe('standalone showcase dioramas', () => {
       expect(built!.layer.stats.triangles, id).toBeGreaterThan(200);
       expect(built!.layer.stats.lines, id).toBeGreaterThan(50);
     }
+
+    // Verify shared multi-country waving flags and < 250 m visibility threshold
+    expect(MAX_FLAG_VIEW_SPAN_M).toBe(250);
+    expect(isFlagVisibleAtSpan(180)).toBe(true);
+    expect(isFlagVisibleAtSpan(250)).toBe(true);
+    expect(isFlagVisibleAtSpan(251)).toBe(false);
+    expect(getFlagMaterial('vn')).toBe(getFlagMaterial('vn'));
+    expect(getFlagMaterial('festive')).not.toBe(getFlagMaterial('vn'));
+    expect(getFlagMaterial('fr')).not.toBe(getFlagMaterial('vn'));
+
+    const flags = flagpolesOf(city);
+    expect(flags.length).toBeGreaterThanOrEqual(5);
+    expect(flags.some(f => f.id.includes(':flag:ba-dinh'))).toBe(true);
+    expect(flags.some(f => f.id.includes(':flag:roof'))).toBe(true);
+    expect(flags.some(f => f.id.includes(':flag:ky-dai'))).toBe(true);
+    expect(flags.some(f => f.country === 'festive')).toBe(true);
+    const instances = flags.map(spec => createWavingFlagGroup(spec));
+    stepSharedWavingFlags(1.25);
+    for (const inst of instances) {
+      stepWavingFlag(inst, 1.25);
+      const pos = inst.clothGeo.getAttribute('position').array;
+      for (let i = 0; i < pos.length; i++) {
+        expect(Number.isFinite(pos[i]!)).toBe(true);
+      }
+    }
+    const naItem = list.find(x => x.name.includes('Nhà Quốc hội'))!;
+    expect(buildShowcase(city, mausoleumItem.id)!.flags).toHaveLength(1);
+    expect(buildShowcase(city, naItem.id)!.flags).toHaveLength(1);
+  });
+
+  it('defines dashed administrative boundaries and centered labels for 15 Phường and Hà Nội', () => {
+    expect(WARD_BOUNDARIES).toHaveLength(15);
+    expect(HANOI_OUTER_BOUNDARY.name).toBe('Hà Nội');
+    expect(adminBoundaryModeForZoom(2.0, false, false)).toBe('off');
+    expect(adminBoundaryModeForZoom(0.8, false, false)).toBe('ward');
+    expect(adminBoundaryModeForZoom(0.15, false, false)).toBe('city');
+    expect(adminBoundaryModeForZoom(0.8, true, false)).toBe('off');
+    expect(adminBoundaryModeForZoom(0.8, false, true)).toBe('off');
+
+    const wardSegs = buildDashedBoundarySegments(WARD_BOUNDARIES);
+    const citySegs = buildDashedBoundarySegments([HANOI_OUTER_BOUNDARY]);
+    expect(wardSegs.length % 6).toBe(0);
+    expect(wardSegs.length).toBeGreaterThan(600);
+    expect(citySegs.length % 6).toBe(0);
+    expect(citySegs.length).toBeGreaterThan(200);
   });
 });
+

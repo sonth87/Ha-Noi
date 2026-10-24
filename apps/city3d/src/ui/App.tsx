@@ -2,7 +2,7 @@
    (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { loadCity } from '@my-city/osm-import';
-import { CityView } from '@view/CityView';
+import { CityView, type PegmanDropPreview } from '@view/CityView';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, t, type TranslationKey } from '@view/i18n';
 import { lightOn } from '@view/lights';
@@ -16,7 +16,7 @@ let shared: CityView | null = null;
 const view = () => (shared ??= new CityView(loadCity(DEFAULT_AREA_ID).city));
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
-    shared?.unmount();
+    shared?.dispose();
     shared = null;
   });
 }
@@ -101,21 +101,14 @@ const IconInfo = () => (
 );
 
 const IconPlus = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
     <path d="M12 5v14M5 12h14" />
   </svg>
 );
 
 const IconMinus = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
     <path d="M5 12h14" />
-  </svg>
-);
-
-const IconRotateCcw = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-    <path d="M3 3v5h5" />
   </svg>
 );
 
@@ -126,15 +119,39 @@ const IconRotateCw = () => (
   </svg>
 );
 
-const IconChevronUp = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-    <path d="m18 15-6-6-6 6" />
+/** Rotating compass needle (North red/accent tip + South light tip) */
+const IconCompassNeedle = ({ heading }: { heading: number }) => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+    className="compass-needle-svg"
+    style={{ transform: `rotate(${-heading}deg)` }}
+  >
+    <polygon points="12,2.2 15.4,12 8.6,12" className="compass-north-tip" />
+    <polygon points="12,21.8 15.4,12 8.6,12" className="compass-south-tip" />
+    <circle cx="12" cy="12" r="1.8" className="compass-pivot" />
   </svg>
 );
 
-const IconChevronDownPad = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-    <path d="m6 9 6 6 6-6" />
+/** Google Maps–style crosshair "My Location" icon */
+const IconMyLocation = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <circle cx="12" cy="12" r="7" />
+    <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
+    <line x1="12" y1="2" x2="12" y2="5" />
+    <line x1="12" y1="19" x2="12" y2="22" />
+    <line x1="2" y1="12" x2="5" y2="12" />
+    <line x1="19" y1="12" x2="22" y2="12" />
+  </svg>
+);
+
+/** Google Maps–style Pegman standing figure icon for drag-and-drop Street / Metro POV */
+const IconPegman = () => (
+  <svg width="18" height="20" viewBox="0 0 24 26" fill="currentColor" aria-hidden="true" className="pegman-svg">
+    <circle cx="12" cy="4.6" r="3.3" />
+    <path d="M8.2 9.2c-1.3 0-2.3 1-2.3 2.3v4.4c0 .8.6 1.4 1.3 1.4h.9v6.1c0 .9.7 1.6 1.6 1.6h.8c.8 0 1.4-.6 1.4-1.4v-4.6h.2v4.6c0 .8.6 1.4 1.4 1.4h.8c.9 0 1.6-.7 1.6-1.6v-6.1h.9c.7 0 1.3-.6 1.3-1.4v-4.4c0-1.3-1-2.3-2.3-2.3H8.2Z" />
   </svg>
 );
 
@@ -190,6 +207,11 @@ export function App() {
   const [plSearch, setPlSearch] = useState('');
   const [plCat, setPlCat] = useState<string>('ALL');
   const [activePlaceId, setActivePlaceId] = useState('home');
+  const [pegmanDrag, setPegmanDrag] = useState<{
+    clientX: number;
+    clientY: number;
+    preview: PegmanDropPreview | null;
+  } | null>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -742,29 +764,175 @@ export function App() {
           )}
 
           {s.povMode === 'map' && (
-            <div className="cam-pad" role="group" aria-label={t('cam.aria', undefined, loc)}>
-              <button type="button" onClick={() => v.toggleMode()} aria-pressed={s.mode === '3d'} title={t('top.mode.title', undefined, loc)}>
-                {s.mode === '2d' ? '2D' : '3D'}
-              </button>
-              <button type="button" onClick={() => v.zoom(1.28)} title={t('cam.zoomIn', undefined, loc)} aria-label={t('cam.zoomIn', undefined, loc)}>
-                <IconPlus />
-              </button>
-              <button type="button" onClick={() => v.zoom(1 / 1.28)} title={t('cam.zoomOut', undefined, loc)} aria-label={t('cam.zoomOut', undefined, loc)}>
-                <IconMinus />
-              </button>
-              <button type="button" onClick={() => v.rotate(-1)} title={t('cam.rotLeft', undefined, loc)} aria-label={t('cam.rotLeft', undefined, loc)}>
-                <IconRotateCcw />
-              </button>
-              <button type="button" onClick={() => v.rotate(1)} title={t('cam.rotRight', undefined, loc)} aria-label={t('cam.rotRight', undefined, loc)}>
-                <IconRotateCw />
-              </button>
-              <button type="button" onClick={() => v.tilt(1)} title={t('cam.tiltUp', undefined, loc)} aria-label={t('cam.tiltUp', undefined, loc)}>
-                <IconChevronUp />
-              </button>
-              <button type="button" onClick={() => v.tilt(-1)} title={t('cam.tiltDown', undefined, loc)} aria-label={t('cam.tiltDown', undefined, loc)}>
-                <IconChevronDownPad />
-              </button>
-            </div>
+            <>
+              {pegmanDrag?.preview && (
+                <div
+                  className="pegman-drop-target"
+                  data-kind={pegmanDrag.preview.kind}
+                  style={{
+                    transform: `translate3d(${pegmanDrag.preview.screenX.toFixed(1)}px, ${pegmanDrag.preview.screenY.toFixed(1)}px, 0)`,
+                  }}
+                >
+                  <span className="pegman-target-ring" />
+                  <span className="pegman-target-core" />
+                </div>
+              )}
+
+              {pegmanDrag && (
+                <div
+                  className="pegman-drag-ghost"
+                  data-kind={pegmanDrag.preview?.kind ?? 'car'}
+                  style={{
+                    transform: `translate3d(${pegmanDrag.clientX.toFixed(1)}px, ${pegmanDrag.clientY.toFixed(1)}px, 0)`,
+                  }}
+                >
+                  <div className="pegman-ghost-figure">
+                    <IconPegman />
+                  </div>
+                  <div className="pegman-ghost-badge">
+                    {pegmanDrag.preview
+                      ? pegmanDrag.preview.kind === 'metro'
+                        ? t(
+                            'cam.pegman.dropMetro',
+                            { train: pegmanDrag.preview.trainIndex + 1, label: pegmanDrag.preview.label },
+                            loc,
+                          )
+                        : t('cam.pegman.dropCar', { label: pegmanDrag.preview.label }, loc)
+                      : t('cam.pegman.hint', undefined, loc)}
+                  </div>
+                </div>
+              )}
+
+              <div
+                className="map-dock"
+                role="group"
+                aria-label={t('cam.aria', undefined, loc)}
+                onPointerDown={e => e.stopPropagation()}
+                onDoubleClick={e => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="dock-btn compass-btn"
+                  onClick={() => v.resetNorth()}
+                  title={t(
+                    'cam.compass',
+                    { dir: t(`cam.dir.${s.view}` as TranslationKey, undefined, loc), deg: s.heading },
+                    loc,
+                  )}
+                  aria-label={t(
+                    'cam.compass',
+                    { dir: t(`cam.dir.${s.view}` as TranslationKey, undefined, loc), deg: s.heading },
+                    loc,
+                  )}
+                >
+                  <IconCompassNeedle heading={s.heading} />
+                  <span className="compass-dir-tag">
+                    {t(`cam.dir.${s.view}` as TranslationKey, undefined, loc).slice(0, 1)}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  className="dock-btn rot90-btn"
+                  onClick={e => v.rotate(e.shiftKey ? -1 : 1)}
+                  title={t('cam.rot90', undefined, loc)}
+                  aria-label={t('cam.rot90', undefined, loc)}
+                >
+                  <IconRotateCw />
+                  <span className="rot90-tag">90°</span>
+                </button>
+
+                {!s.showcase && (
+                  <button
+                    type="button"
+                    className="dock-btn loc-btn"
+                    onClick={() => v.goToMyLocation()}
+                    title={t('cam.myLocation', undefined, loc)}
+                    aria-label={t('cam.myLocation', undefined, loc)}
+                  >
+                    <IconMyLocation />
+                  </button>
+                )}
+
+                <div className="dock-zoom-pill">
+                  <button
+                    type="button"
+                    className="dock-zoom-btn"
+                    onClick={() => v.zoom(1.28)}
+                    title={t('cam.zoomIn', undefined, loc)}
+                    aria-label={t('cam.zoomIn', undefined, loc)}
+                  >
+                    <IconPlus />
+                  </button>
+                  <span className="dock-zoom-sep" aria-hidden="true" />
+                  <button
+                    type="button"
+                    className="dock-zoom-btn"
+                    onClick={() => v.zoom(1 / 1.28)}
+                    title={t('cam.zoomOut', undefined, loc)}
+                    aria-label={t('cam.zoomOut', undefined, loc)}
+                  >
+                    <IconMinus />
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  className="dock-btn mode3d-btn"
+                  onClick={() => v.toggleMode()}
+                  aria-pressed={s.mode === '3d'}
+                  title={t('top.mode.title', undefined, loc)}
+                >
+                  3D
+                </button>
+
+                {!s.showcase && (
+                  <button
+                    type="button"
+                    className={`dock-btn pegman-btn${pegmanDrag ? ' is-dragging' : ''}`}
+                    title={t('cam.pegman', undefined, loc)}
+                    aria-label={t('cam.pegman', undefined, loc)}
+                    onPointerDown={e => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      const startX = e.clientX;
+                      const startY = e.clientY;
+                      setPegmanDrag({
+                        clientX: startX,
+                        clientY: startY,
+                        preview: v.previewPegmanDrop(startX, startY),
+                      });
+
+                      const onMove = (ev: PointerEvent) => {
+                        setPegmanDrag({
+                          clientX: ev.clientX,
+                          clientY: ev.clientY,
+                          preview: v.previewPegmanDrop(ev.clientX, ev.clientY),
+                        });
+                      };
+                      const onEnd = (ev: PointerEvent) => {
+                        window.removeEventListener('pointermove', onMove);
+                        window.removeEventListener('pointerup', onEnd);
+                        window.removeEventListener('pointercancel', onEnd);
+                        setPegmanDrag(null);
+                        const moved = Math.hypot(ev.clientX - startX, ev.clientY - startY);
+                        if (moved > 8) {
+                          v.dropPegmanAt(ev.clientX, ev.clientY);
+                        } else if (host.current) {
+                          const r = host.current.getBoundingClientRect();
+                          v.dropPegmanAt(r.left + r.width * 0.5, r.top + r.height * 0.5);
+                        }
+                      };
+                      window.addEventListener('pointermove', onMove);
+                      window.addEventListener('pointerup', onEnd);
+                      window.addEventListener('pointercancel', onEnd);
+                    }}
+                  >
+                    <IconPegman />
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
         {panel && (
@@ -800,7 +968,7 @@ export function App() {
           {currentShowcase
             ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
             : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
-          · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode} · ${t('footer.angle', undefined, loc)} ${s.mode === '2d' ? s.view : `${s.heading}°`}`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
+          · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode} · ${t('footer.angle', undefined, loc)} ${t(`cam.dir.${s.view}` as TranslationKey, undefined, loc)} (${s.heading}°)`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
           {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
           {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
           {!currentShowcase

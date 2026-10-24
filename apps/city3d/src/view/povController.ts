@@ -46,6 +46,18 @@ export interface PovTelemetry {
   locationName: string;
 }
 
+export interface PegmanDropTarget {
+  kind: 'metro' | 'car';
+  /** Snapped 3D world point [x, y, z] in city coordinates (y is Three.js Z) */
+  world: [number, number, number];
+  /** 0-based index of the nearest Metro train when kind === 'metro' */
+  trainIndex: number;
+  /** Street name or Metro station / line name */
+  label: string;
+  /** Road heading in radians when kind === 'car' */
+  roadHeading: number;
+}
+
 interface BridgeSegment {
   a: Vec2;
   b: Vec2;
@@ -282,9 +294,7 @@ export class PovController {
     shellMat: THREE.ShaderMaterial,
     creaseMat: LineMaterial,
   ): void {
-    if (this.playerCarGroup) {
-      parent.remove(this.playerCarGroup);
-    }
+    this.unmountPlayerCar(parent);
     const model = vehicleModel('sedan');
     const g = new THREE.Group();
     for (const [part, geo] of model.parts) {
@@ -305,6 +315,18 @@ export class PovController {
     this.playerCarGroup = g;
   }
 
+  /** Remove and dispose the player's 3D car geometries to prevent ArrayBuffer leaks on unmount/HMR */
+  unmountPlayerCar(parent?: THREE.Object3D): void {
+    if (!this.playerCarGroup) return;
+    if (parent) parent.remove(this.playerCarGroup);
+    this.playerCarGroup.traverse(obj => {
+      const mesh = obj as THREE.Mesh;
+      if (mesh.geometry) mesh.geometry.dispose();
+    });
+    this.playerCarGroup = null;
+    this.playerBeamMesh = null;
+  }
+
   resize(width: number, height: number): void {
     this.camera.aspect = width / Math.max(1, height);
     this.camera.updateProjectionMatrix();
@@ -323,6 +345,7 @@ export class PovController {
     trains: readonly TrainInstanceRef[],
     mapTarget: { x: number; z: number },
     simTime = 0,
+    keepSelection = false,
   ): void {
     const prev = this.mode;
     this.mode = next;
@@ -351,7 +374,7 @@ export class PovController {
 
     if (next === 'drive-cabin' || next === 'drive-top') {
       const wasDriving = prev === 'drive-cabin' || prev === 'drive-top';
-      if (!wasDriving || !this.car.initialized) {
+      if (!keepSelection && (!wasDriving || !this.car.initialized)) {
         this.spawnCarNear(mapTarget.x, mapTarget.z);
       }
       if (this.playerCarGroup) {
@@ -360,10 +383,10 @@ export class PovController {
     } else {
       if (this.playerCarGroup) this.playerCarGroup.visible = false;
       const wasMetro = prev === 'metro-cab' || prev === 'metro-passenger';
-      if (!wasMetro && trains.length > 0) {
+      if (!keepSelection && !wasMetro && trains.length > 0) {
         this.selectClosestTrain(trains, mapTarget.x, mapTarget.z, simTime);
       } else if (trains.length > 0) {
-        this.trainIndex = this.trainIndex % trains.length;
+        this.trainIndex = ((this.trainIndex % trains.length) + trains.length) % trains.length;
       }
     }
   }
@@ -392,9 +415,168 @@ export class PovController {
     this.trainIndex = bestIdx;
   }
 
+  /** Find the train strictly closest in Euclidean distance to `(worldX, worldZ)` */
+  findStrictlyClosestTrain(
+    trains: readonly TrainInstanceRef[],
+    worldX: number,
+    worldZ: number,
+    simTime: number,
+  ): number {
+    let bestIdx = 0;
+    let bestDist = Infinity;
+    for (let i = 0; i < trains.length; i++) {
+      const tr = trains[i]!;
+      const { head } = this.resolveActiveTrainState(tr, simTime);
+      const { p } = samplePathAt(tr.track.path, Math.max(0, Math.min(tr.track.length, head - METRO.carLen)));
+      const d = Math.hypot(p[0] - worldX, p[1] - worldZ);
+      if (d < bestDist) {
+        bestDist = d;
+        bestIdx = i;
+      }
+    }
+    return bestIdx;
+  }
+
+  /** Evaluate whether a Pegman drag point `(groundPt, viaductPt)` lands on Metro track/station or a street */
+  findPegmanTarget(
+    groundPt: Vec2,
+    viaductPt: Vec2,
+    trains: readonly TrainInstanceRef[],
+    simTime: number,
+  ): PegmanDropTarget {
+    // 1. Check proximity to Metro stations (radius 68 m) or elevated Metro railway tracks (radius 38 m)
+    let bestStationDist = Infinity;
+    let nearestStation: City['stations'][number] | null = null;
+    for (const st of this.city.stations) {
+      if (st.kind !== 'metro') continue;
+      const d = Math.min(dist(viaductPt, st.at), dist(groundPt, st.at));
+      if (d < bestStationDist) {
+        bestStationDist = d;
+        nearestStation = st;
+      }
+    }
+
+    let bestRailDist = Infinity;
+    let bestRailPt: Vec2 = viaductPt;
+    let bestRailName = 'Metro 2A Cát Linh – Hà Đông';
+    for (const r of this.city.rails) {
+      if (r.kind !== 'metro' || r.path.length < 2) continue;
+      for (let i = 1; i < r.path.length; i++) {
+        const a = r.path[i - 1]!, b = r.path[i]!;
+        const cVia = closestOnSegment(viaductPt, a, b);
+        const cGnd = closestOnSegment(groundPt, a, b);
+        const c = cVia.d <= cGnd.d ? cVia : cGnd;
+        if (c.d < bestRailDist) {
+          bestRailDist = c.d;
+          bestRailPt = c.at;
+          if (r.name) bestRailName = r.name;
+        }
+      }
+    }
+
+    if (bestStationDist <= 68 || bestRailDist <= 38) {
+      const anchorPt: Vec2 =
+        nearestStation && bestStationDist <= 68 ? [nearestStation.at[0], nearestStation.at[1]] : bestRailPt;
+      const trainIdx = this.findStrictlyClosestTrain(trains, anchorPt[0], anchorPt[1], simTime);
+      const label =
+        nearestStation && bestStationDist <= 120
+          ? `Ga ${nearestStation.name ?? 'Metro'}`
+          : bestRailName;
+      return {
+        kind: 'metro',
+        world: [anchorPt[0], anchorPt[1], 10.5],
+        trainIndex: trainIdx,
+        label,
+        roadHeading: 0,
+      };
+    }
+
+    // 2. Otherwise snap to the closest drivable street carriageway (`lòng đường`)
+    let bestRoadDist = Infinity;
+    let bestRoadPt: Vec2 = groundPt;
+    let bestRoadHeading = 0;
+    let bestRoadName = '';
+
+    for (const seg of this.roadSegments) {
+      const c = closestOnSegment(groundPt, seg.a, seg.b);
+      // Slightly prefer surface streets when distances are nearly equal
+      const weightedDist = c.d + (seg.layer > 0 ? 3.5 : 0);
+      if (weightedDist < bestRoadDist) {
+        bestRoadDist = weightedDist;
+        bestRoadPt = c.at;
+        bestRoadHeading = seg.heading;
+        bestRoadName = seg.name;
+      }
+    }
+
+    const { z } = this.sampleRoadElevation(bestRoadPt[0], bestRoadPt[1], bestRoadHeading, 0);
+    return {
+      kind: 'car',
+      world: [bestRoadPt[0], bestRoadPt[1], z],
+      trainIndex: 0,
+      label: bestRoadName || 'Đường nội đô',
+      roadHeading: bestRoadHeading,
+    };
+  }
+
+  /** Lock onto a specific Metro train index before entering `'metro-cab'` */
+  selectTrainIndex(index: number, trains: readonly TrainInstanceRef[]): void {
+    if (!trains.length) return;
+    this.trainIndex = ((index % trains.length) + trains.length) % trains.length;
+  }
+
   /** Snap the player's car onto the nearest main drivable street near `(worldX, worldZ)` */
   resetCarNear(worldX: number, worldZ: number): void {
     this.spawnCarNear(worldX, worldZ);
+  }
+
+  /** Spawn the player's car at an exact Pegman drop coordinate `(worldX, worldZ)` along any drivable road */
+  spawnCarAtDrop(worldX: number, worldZ: number, preferredHeading?: number): void {
+    const p: Vec2 = [worldX, worldZ];
+    let bestDist = Infinity;
+    let bestPoint: Vec2 = [worldX, worldZ];
+    let bestHeading = 0;
+    let bestHalfWidth = 3.5;
+    let bestName = '';
+
+    for (const seg of this.roadSegments) {
+      const c = closestOnSegment(p, seg.a, seg.b);
+      const weightedDist = c.d + (seg.layer > 0 ? 2.5 : 0);
+      if (weightedDist < bestDist) {
+        bestDist = weightedDist;
+        bestPoint = c.at;
+        bestHeading = seg.heading;
+        bestHalfWidth = seg.carriageHalfWidth;
+        bestName = seg.name;
+      }
+    }
+
+    if (preferredHeading !== undefined && Math.cos(preferredHeading - bestHeading) < 0) {
+      bestHeading = wrapAngle(bestHeading + Math.PI);
+    }
+
+    const laneOffset = Math.min(2.0, bestHalfWidth * 0.45);
+    const spawnX = bestPoint[0] - Math.sin(bestHeading) * laneOffset;
+    const spawnY = bestPoint[1] + Math.cos(bestHeading) * laneOffset;
+    const { z, pitch } = this.sampleRoadElevation(spawnX, spawnY, bestHeading, 0);
+
+    this.car = {
+      x: spawnX,
+      y: spawnY,
+      z,
+      heading: bestHeading,
+      pitch,
+      speed: 0,
+      steer: 0,
+      chaseYaw: bestHeading,
+      initialized: true,
+    };
+    this.playerX = spawnX;
+    this.playerY = spawnY;
+    this.playerHeading = bestHeading;
+    if (bestName) {
+      this.telemetry = { ...this.telemetry, locationName: bestName };
+    }
   }
 
   private spawnCarNear(worldX: number, worldZ: number): void {

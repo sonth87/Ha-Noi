@@ -95,7 +95,25 @@ export const POV_CONFIG = {
   LOD_L2_DIST: 230,
 } as const;
 
-export const azOf = (k: number): number => Math.PI / 4 - (k * Math.PI) / 2;
+/** Bearing (degrees East of True Geographic North) of the local city X-axis (`frame.ts`) */
+export const CITY_BEARING_DEG = 62.5;
+
+/** Camera azimuth angle (radians) at which the camera looks due Geographic North (North-up on screen).
+ *  In `frame.ts`, Geographic North `(e = 0, n = 1)` maps to `(x = sin(bearing), z = -cos(bearing))`.
+ *  For camera horizontal forward `(-cos(az), -sin(az))` to equal `(sin(bearing), -cos(bearing))`,
+ *  `az = Math.PI / 2 + (bearing * Math.PI) / 180` (~152.5°). */
+export const NORTH_AZ = Math.PI / 2 + (CITY_BEARING_DEG * Math.PI) / 180;
+
+/** Azimuth for the 4 cardinal 90° views: k=0 (North 0°), k=1 (East 90°), k=2 (South 180°), k=3 (West 270°) */
+export const azOf = (k: number, northAz = NORTH_AZ): number => northAz - (k * Math.PI) / 2;
+
+/** Convert camera azimuth (radians) to compass heading in degrees [0, 360) (0° = North, 90° = East, 180° = South, 270° = West) */
+export const headingFromAz = (az: number, northAz = NORTH_AZ): number =>
+  ((((northAz - az) * 180) / Math.PI) % 360 + 360) % 360;
+
+/** Convert compass heading in degrees [0, 360) to camera azimuth (radians) */
+export const azFromHeading = (headingDeg: number, northAz = NORTH_AZ): number =>
+  northAz - (headingDeg * Math.PI) / 180;
 
 export const VEHICLE_KINDS: VehicleKind[] = ['bike', 'sedan', 'hatch', 'taxi', 'van'];
 

@@ -15,7 +15,35 @@ import * as THREE from 'three';
 import { bbox, centroid, floorId, floorZ, frontStreet, hash, partTop, pointInRing, type Building, type BuildingPart, type City, type Vec2 } from '@my-city/core';
 import { V, type Batch } from './batch';
 import { buildHouse } from './house3d';
+import {
+  CUSTOM_MASSING_MODELS,
+  MAX_FLAG_VIEW_SPAN_M,
+  createWavingFlagGroup,
+  drawLandmarkBuilding,
+  getFlagMaterial,
+  isFlagVisibleAtSpan,
+  landmarkBeaconsOf,
+  landmarkFlagsOf,
+  registerFlagPainter,
+  stepSharedWavingFlags,
+  stepWavingFlag,
+  type FlagCountryCode,
+  type WavingFlagInstance,
+  type WavingFlagSpec,
+} from './landmarks';
 
+export {
+  MAX_FLAG_VIEW_SPAN_M,
+  createWavingFlagGroup,
+  getFlagMaterial,
+  isFlagVisibleAtSpan,
+  registerFlagPainter,
+  stepSharedWavingFlags,
+  stepWavingFlag,
+  type FlagCountryCode,
+  type WavingFlagInstance,
+  type WavingFlagSpec,
+};
 export type Detail = 0 | 1 | 2 | 3;
 
 type Style = 'curtain' | 'ribbon' | 'punched';
@@ -37,6 +65,16 @@ export function beaconsOf(city: City): THREE.Vector3[] {
   for (const b of city.buildings) {
     if (b.model === 'viet-tower') out.push(mastOf(b).light);
     else if (b.model === 'vpbank-tower') out.push(...vpbankSpireOf(b).lights);
+    else if (b.model) out.push(...landmarkBeaconsOf(b));
+  }
+  return out;
+}
+
+/** Waving Vietnamese national flags on ceremonial flagpoles across the city */
+export function flagpolesOf(city: City): WavingFlagSpec[] {
+  const out: WavingFlagSpec[] = [];
+  for (const b of city.buildings) {
+    if (b.model) out.push(...landmarkFlagsOf(b));
   }
   return out;
 }
@@ -98,6 +136,10 @@ export function buildBuildings(B: Batch, city: City, list: readonly Building[], 
   const shopEdge = shopEdgeOf(city);
   for (const b of list) {
     if (b.model === 'viet-tower') drawMast(B, b);
+    if (b.model && CUSTOM_MASSING_MODELS.has(b.model)) {
+      drawLandmarkBuilding(B, b, level);
+      continue;
+    }
     if (level >= 2 && b.house) {
       const R = b.footprint, f = b.front, n = R.length, p = R[f]!, q = R[(f + 1) % n]!, w = Math.hypot(q[0] - p[0], q[1] - p[1]);
       const u: Vec2 = [(q[0] - p[0]) / w, (q[1] - p[1]) / w], nn: Vec2 = [u[1], -u[0]], d = b.house.spec.d;
@@ -109,12 +151,18 @@ export function buildBuildings(B: Batch, city: City, list: readonly Building[], 
     for (const part of b.parts) {
       const glass = part.facade === 'glass';
       B.solid(part.footprint, part.z0, partTop(part), () => (glass ? 'glass' : 'wall'), 'roof', b.id);
+      if (!b.model && part.roof === 'pitched') {
+        const pc = centroid(part.footprint), pz = partTop(part);
+        B.solid(scaleRing(part.footprint, pc, 1.04), pz, pz + 0.45, () => 'roof', 'roof', b.id);
+        B.solid(scaleRing(part.footprint, pc, 0.72), pz + 0.45, pz + 1.45, () => 'roof', 'roof', b.id);
+      }
       if (level === 0) continue;
       const style: Style = glass ? 'curtain' : b.model === 'viet-tower' || (level >= 2 && b.kind === 'office') ? 'ribbon' : 'punched';
       windows(B, b, part, style, level, neighbour, !b.model && !b.house && part.id === b.id ? shopEdge(b) : -1);
     }
     if (b.model === 'vpbank-tower') drawVpbankTower(B, b, level);
     else if (b.model === 'national-cinema') drawNationalCinema(B, b, level);
+    else if (b.model && drawLandmarkBuilding(B, b, level)) { /* drawn by landmark builder */ }
     else if (level === 3 && !b.house && !b.model && b.kind !== 'kiosk') roofTanks(B, b);
   }
 }

@@ -100,8 +100,12 @@ function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>, byS
     const extraParts: BuildingPart[] = [];
     for (const pSrc of Object.keys(ov.parts)) {
       if (!existingSources.has(pSrc)) {
-        const sib = bySource.get(pSrc);
-        if (sib) extraParts.push(...sib.parts);
+        if (pSrc === b.source) {
+          extraParts.push({ id: b.id, footprint: b.footprint, z0: 0, floors: storeyHeights(kind, 1), facade: 'wall', roof: 'flat', source: b.source });
+        } else {
+          const sib = bySource.get(pSrc);
+          if (sib) extraParts.push(...sib.parts);
+        }
       }
     }
     const allParts = [...parts, ...extraParts];
@@ -115,8 +119,20 @@ function applyBuilding(b: Building, ov: BuildingOverride, used: Set<string>, byS
     });
   }
   const floors = ov.floors ?? (ov.levels !== undefined ? storeyHeights(kind, ov.levels) : undefined);
-  if (floors && parts.length === 1) { parts = [{ ...parts[0]!, floors }]; levelsFrom = 'override'; }
-  if (ov.facade) parts = parts.map(p => ({ ...p, facade: ov.facade! }));
+  if (floors && !ov.parts) {
+    if (parts.length === 1) {
+      parts = [{ ...parts[0]!, floors }];
+      levelsFrom = 'override';
+    } else if (parts.length > 1) {
+      const maxLv = Math.max(...parts.map(p => p.floors.length));
+      parts = parts.map(p => (p.floors.length === maxLv ? { ...p, floors } : p));
+      levelsFrom = 'override';
+    }
+  }
+  if (ov.facade) {
+    const maxLv = Math.max(...parts.map(p => p.floors.length));
+    parts = parts.map(p => (parts.length === 1 || p.floors.length === maxLv || p.source !== b.source ? { ...p, facade: ov.facade! } : p));
+  }
   let house = parts.length > 1 || ov.model ? undefined : b.house;
   if (house && (ov.house || floors)) {
     const input: HouseInput = { ...house.input, ...(floors ? { floors: floors.length - 1 } : {}), ...ov.house };
