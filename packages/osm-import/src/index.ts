@@ -5,6 +5,7 @@ import type { City } from '@my-city/core';
 import { importArea, type AreaConfig, type ImportReport } from './import';
 import { NGA_TU_THAI_HA } from './area-nga-tu-thai-ha';
 
+export { loadAreaAsync } from '@my-city/osm-data';
 export { importArea, type AreaConfig, type ImportReport } from './import';
 export { projector, unprojector, type Frame } from './frame';
 

@@ -2,8 +2,7 @@
    (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { roadNetwork, streetFurniture } from '@my-city/core';
-import { loadAreaAsync } from '@my-city/osm-data';
-import { loadCityAsync } from '@my-city/osm-import';
+import { loadAreaAsync, loadCityAsync } from '@my-city/osm-import';
 import { CityView, type PegmanDropPreview } from '@view/CityView';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
