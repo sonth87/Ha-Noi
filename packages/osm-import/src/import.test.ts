@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { buildingLevels, centroid, inRect, partTop, polylineLength, signedArea, streetZ, type City, type Vec2 } from '@my-city/core';
-import { loadCity } from './index';
+import {
+  findHaNoiCatalogLandmark,
+  HA_NOI_LANDMARK_CATEGORIES,
+  HA_NOI_LANDMARKS_CATALOG,
+  loadCity,
+} from './index';
 import { projector } from './frame';
 
 const { city, report } = loadCity('nga-tu-thai-ha');
@@ -135,5 +140,25 @@ describe('the crossroads from OpenStreetMap', () => {
 
   it('gives the same city every time', () => {
     expect(loadCity('nga-tu-thai-ha').city).toEqual(city);
+  });
+
+  it('includes the complete 13-category Hanoi landmarks catalog (208 iconic relics and structures)', () => {
+    expect(HA_NOI_LANDMARK_CATEGORIES).toHaveLength(13);
+    expect(HA_NOI_LANDMARKS_CATALOG).toHaveLength(208);
+    expect(city.landmarksCatalog).toHaveLength(208);
+
+    const catIds = new Set(HA_NOI_LANDMARKS_CATALOG.map(e => e.category));
+    expect(catIds.size).toBe(13);
+
+    expect(findHaNoiCatalogLandmark('Cửa ô Thanh Hà')?.id).toBe('o-quan-chuong');
+    expect(findHaNoiCatalogLandmark('Bắc Bộ Phủ')?.id).toBe('bac-bo-phu');
+    expect(findHaNoiCatalogLandmark('Thánh đường Hồi giáo Al-Noor')?.id).toBe('thanh-duong-al-noor');
+    expect(findHaNoiCatalogLandmark('Bốt Hàng Đậu')?.id).toBe('thap-nuoc-hang-dau');
+    expect(findHaNoiCatalogLandmark('Chùa Tây Phương')?.id).toBe('chua-tay-phuong');
+    expect(findHaNoiCatalogLandmark('Đình Tây Đằng')?.id).toBe('dinh-tay-dang');
+    expect(findHaNoiCatalogLandmark('Ga Hàng Cỏ')?.id).toBe('ga-ha-noi');
+    expect(findHaNoiCatalogLandmark('Trung tâm Triển lãm Quốc gia')?.id).toBe('trung-tam-trien-lam-quoc-gia');
+    expect(findHaNoiCatalogLandmark('Sofitel Legend Metropole Hà Nội')?.id).toBe('sofitel-legend-metropole');
+    expect(findHaNoiCatalogLandmark('Cầu Chương Dương')?.id).toBe('cau-chuong-duong');
   });
 });

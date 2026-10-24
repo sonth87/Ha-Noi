@@ -12,7 +12,7 @@
 import {
   applyOverrides, bbox, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
   inRect, normalizeRing, pointInRing, polylineLength, area as ringArea, storeyHeights, streetShape,
-  type Area, type Building, type BuildingPart, type City, type CityPlace, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
+  type Area, type Building, type BuildingPart, type City, type CityLandmarkCatalogEntry, type CityPlace, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
 } from '@my-city/core';
 import type { OsmExtract, OsmNode, OsmRelation, OsmTags, OsmWay } from '@my-city/osm-data';
 import { projector, type Frame } from './frame';
@@ -37,6 +37,8 @@ export interface AreaConfig {
   stationMeta?: (rawName: string, at: Vec2) => { lineTag?: string; lineName?: string; address?: string };
   /** curated quick-navigation places for the area */
   places?: CityPlace[];
+  /** curated 13-category landmark catalog for the city/region */
+  landmarksCatalog?: readonly CityLandmarkCatalogEntry[];
   overrides: Overrides;
 }
 
@@ -331,6 +333,22 @@ export function importArea(
 
   const GENERIC_PART_NAME = /^(chung cư|văn phòng.*|toà\s+[a-z0-9]+|tòa\s+[a-z0-9]+|tower\s+[a-z0-9]+|khối\s+[a-z0-9]+|m\d+|s\d+|t\d+)$/iu;
 
+  const catalogBySource = new Map<string, CityLandmarkCatalogEntry>();
+  const catalogByName = new Map<string, CityLandmarkCatalogEntry>();
+  if (cfg.landmarksCatalog) {
+    for (const entry of cfg.landmarksCatalog) {
+      if (entry.osmSource) catalogBySource.set(entry.osmSource, entry);
+      catalogByName.set(entry.name.trim().toLowerCase(), entry);
+      const stripped = entry.name.replace(/\s*\([^)]*\)\s*$/u, '').trim();
+      if (stripped) catalogByName.set(stripped.toLowerCase(), entry);
+      if (entry.aliases) {
+        for (const alias of entry.aliases) {
+          catalogByName.set(alias.trim().toLowerCase(), entry);
+        }
+      }
+    }
+  }
+
   const buildings: Building[] = keep.map(b => {
     const c = centroid(b.ring);
     const campusCell = campusGrid.get(`${Math.floor(c[0] / FG)},${Math.floor(c[1] / FG)}`);
@@ -379,12 +397,14 @@ export function importArea(
     if (campus && (!name || /^[A-ZĐ]\d{1,2}$/i.test(name.trim()))) {
       name = name ? `${campus.name} – Nhà ${name.trim()}` : campus.name;
     }
+    const nTrim = name?.trim() ?? '';
+    const catEntry = catalogBySource.get(b.source) ?? (nTrim ? catalogByName.get(nTrim.toLowerCase()) : undefined);
     const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
     const district = cfg.districtOf?.(c);
-    const description = name ? cfg.heritageNotes?.[name.trim()] : undefined;
-    const nTrim = name?.trim() ?? '';
+    const description = (name ? cfg.heritageNotes?.[name.trim()] : undefined) ?? catEntry?.description;
     const autoModel =
-      b.t.building === 'church' || b.t.building === 'cathedral' || /^(nhà thờ|giáo xứ|thánh đường)\b/i.test(nTrim)
+      catEntry?.model ??
+      (b.t.building === 'church' || b.t.building === 'cathedral' || /^(nhà thờ|giáo xứ|thánh đường)\b/i.test(nTrim)
         ? 'church-hall'
         : /^(lăng|lăng mộ)\b/i.test(nTrim)
           ? 'traditional-mausoleum'
@@ -392,10 +412,10 @@ export function importArea(
             ? 'traditional-pagoda'
             : /^(đền|đình|miếu|phủ)\b/i.test(nTrim) || b.t.building === 'temple' || b.t.building === 'shrine'
               ? 'traditional-temple'
-              : undefined;
+              : undefined);
     return {
       id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
-      ...(autoModel ? { model: autoModel, isSignatureLandmark: Boolean(nTrim) } : {}),
+      ...(autoModel ? { model: autoModel, isSignatureLandmark: Boolean(nTrim || catEntry) } : {}),
       ...(address ? { address } : {}),
       ...(district ? { district } : {}),
       ...(subtype ? { subtype } : {}),
@@ -620,6 +640,7 @@ export function importArea(
     streets: streets.sort(byId), junctions: junctions.sort(byId), buildings: buildings.sort(byId), areas: areas.sort(byId), features: features.sort(byId),
     rails: rails.sort(byId), stations: stations.sort(byId),
     ...(cfg.places ? { places: cfg.places } : {}),
+    ...(cfg.landmarksCatalog ? { landmarksCatalog: cfg.landmarksCatalog } : {}),
     attribution: [attribution],
   };
   const effectiveOverrides: Overrides = options?.isChunk

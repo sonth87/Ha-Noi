@@ -20,6 +20,14 @@ import {
   type WavingFlagSpec,
 } from './flags';
 
+import {
+  drawHaNoiCatalogLandmarkBuilding,
+  HA_NOI_CATALOG_CUSTOM_MASSING_MODELS,
+  haNoiCatalogLandmarkBeaconsOf,
+  haNoiCatalogLandmarkExtraBoundsPts,
+  haNoiCatalogLandmarkFlagsOf,
+} from './landmarks/vn/ha-noi/index';
+
 export {
   MAX_FLAG_VIEW_SPAN_M,
   createWavingFlagGroup,
@@ -64,6 +72,7 @@ export const CUSTOM_MASSING_MODELS = new Set<string>([
   'cau-nhat-tan',
   'cau-long-bien',
   'lang-lua-van-phuc',
+  ...HA_NOI_CATALOG_CUSTOM_MASSING_MODELS,
 ]);
 
 interface OrientedBox {
@@ -331,7 +340,7 @@ export function landmarkFlagsOf(b: Building): WavingFlagSpec[] {
       ];
     }
     default:
-      return [];
+      return haNoiCatalogLandmarkFlagsOf(b);
   }
 }
 
@@ -385,7 +394,7 @@ export function landmarkBeaconsOf(b: Building): THREE.Vector3[] {
     }
     default:
       void c;
-      return [];
+      return haNoiCatalogLandmarkBeaconsOf(b);
   }
 }
 
@@ -425,7 +434,7 @@ export function landmarkExtraBoundsPts(b: Building): Vec2[] {
     case 'tuong-dai-hoa-binh':
       return [[c[0] - 22, c[1] - 22], [c[0] + 22, c[1] + 22]];
     default:
-      return [];
+      return haNoiCatalogLandmarkExtraBoundsPts(b);
   }
 }
 
@@ -575,7 +584,7 @@ export function drawLandmarkBuilding(B: Batch, b: Building, level: Detail): bool
       drawTimesCity(B, b, level);
       return true;
     default:
-      return false;
+      return drawHaNoiCatalogLandmarkBuilding(B, b, level);
   }
 }
 

@@ -158,6 +158,69 @@ export interface CityPlace {
 }
 
 /**
+ * Standard 13-category architectural & heritage classification required when auditing any new
+ * country, city, province, district, ward, or locality (Rule A16, ADR-055).
+ */
+export type LandmarkCategoryId =
+  | '1-cua-o-cong-thanh'
+  | '2-chinh-phu-trung-uong'
+  | '3-nha-tho-ton-giao'
+  | '4-tuong-dai-chien-cong'
+  | '5-ho-guom-pho-co'
+  | '6-tu-tran-den-phu'
+  | '7-chua-co-phat-giao'
+  | '8-dinh-co-lang-xa'
+  | '9-kien-truc-phap-van-hoa-giao-duc-y-te'
+  | '10-bao-tang-trien-lam'
+  | '11-cao-oc-tttm-hien-dai'
+  | '12-khach-san-sang-trong'
+  | '13-cau-ha-tang-the-thao';
+
+export interface LandmarkCategoryMeta {
+  id: LandmarkCategoryId;
+  order: number;
+  title: string;
+  description: string;
+}
+
+/**
+ * Dedicated per-city landmark catalog entry stored in `packages/osm-import/src/cities/<country>/<city>/`
+ * for bespoke 3D rendering on the map and in standalone diorama showcases (Rule A16, ADR-055).
+ */
+export interface CityLandmarkCatalogEntry {
+  /** unique kebab-case identifier within the city */
+  id: string;
+  /** full display name of the landmark */
+  name: string;
+  /** alternative names / OSM tag aliases for automatic matching */
+  aliases?: readonly string[];
+  /** 1 of the 13 standard architectural & heritage categories */
+  category: LandmarkCategoryId;
+  /** human-readable category title */
+  categoryTitle: string;
+  /** administrative district, ward, or county */
+  district: string;
+  /** street address or location note */
+  address?: string;
+  /** semantic building kind */
+  kind: BuildingKind;
+  /** bespoke 3D architectural model identifier used by `landmarks/<country>/<city>/` */
+  model: string;
+  /** wall or glass curtain-wall facade */
+  facade?: 'wall' | 'glass';
+  /** storey heights from bottom to top (m) */
+  floors: readonly number[];
+  /** representative footprint [width, depth] in metres for standalone showcase dioramas & synthesis */
+  footprintSize: readonly [number, number];
+  /** linked OpenStreetMap source ID ("osm:way/..." or "osm:relation/...") if mapped in OSM */
+  osmSource?: SourceId;
+  /** optional city-frame coordinates [x, y] */
+  at?: readonly [number, number];
+  /** detailed historical, cultural, and architectural description */
+  description: string;
+}
+
+/**
  * Regional/country vernacular architecture profile (distinct from visual/structural Theme).
  * Controls how generic residential/commercial buildings are procedurally synthesized for a country/region:
  * - 'vn-tube-shophouse': Vietnamese tube houses (nhà ống), corrugated roofs, cantilevered balconies, Soviet-era tập thể blocks.
@@ -203,6 +266,8 @@ export interface City {
   stations: Station[];
   /** curated quick-navigation places / intersections for this city area */
   places?: CityPlace[];
+  /** comprehensive 13-category catalog of bespoke landmarks for this city (ADR-055) */
+  landmarksCatalog?: readonly CityLandmarkCatalogEntry[];
   /** data credits the app must show (e.g. "© OpenStreetMap contributors") */
   attribution: string[];
 }

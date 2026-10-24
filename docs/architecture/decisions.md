@@ -268,6 +268,39 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
        - **Tầng 3 — Các Đường, Phố lớn & Địa giới Phường (`0.048 <= zoom < 0.22`, bao gồm mức `0.075`)**: Ẩn toàn bộ công trình và nhà cửa (`landmarkOverviewGroup.visible = false`, `metroBaseGroup.visible = false`); hiển thị rõ nét **các đường, phố lớn** (`majorStreetsGroup` kèm viền đường sắc nét và nhãn tên phố lớn dọc theo đường), hồ nước/công viên và **địa giới nét đứt + tên các Phường** ở dạng gọn không đè nhau.
        - **Tầng 4 — Toàn cảnh Thành phố (`0.015 <= zoom < 0.048`)**: Khi zoom out xa hơn nữa (xuống tới `minZoom = 0.015`), ẩn toàn bộ đường phố (`majorStreetsGroup.visible = false`) và công trình; chỉ hiển thị nền địa hình – hồ nước – công viên lớn (`terrainGroup`), đường nét đứt địa giới bao ngoài **Hà Nội** và nhãn **"HÀ NỘI"** căn giữa.
 
+### ADR-055 · Kiến trúc thư mục riêng theo Quốc gia / Thành phố, Quy trình Rà soát 13 Nhóm Công trình Bắt buộc và Danh mục 208 Công trình Biểu tượng Hà Nội
+- **Trạng thái**: Đã chốt (2026-10-24, người dùng cung cấp danh sách mở rộng 13 nhóm công trình tại Hà Nội và yêu cầu: mỗi thành phố/quốc gia có thư mục lưu trữ riêng cho dữ liệu vẽ công trình; cập nhật quy tắc bắt buộc mỗi khi thêm một vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã mới thì phải rà soát toàn bộ khu vực đó theo đủ các nhóm di tích, công trình kiến trúc nổi tiếng xưa và nay, tòa nhà lớn, đình, chùa, đền, tượng đài, bảo tàng, tòa nhà chính phủ, khách sạn lớn, kiến trúc thời kỳ trước, nhà thờ, cầu... để lập dữ liệu vẽ riêng cho từng công trình)
+- **Quyết định**:
+  1. **Tổ chức thư mục dữ liệu & bộ dựng 3D riêng theo từng Quốc gia / Thành phố**:
+     - **Tầng dữ liệu & nhập OSM (`packages/osm-import/src/cities/<country>/<city>/`)**:
+       - `districts.ts`: phân vùng hành chính (`districtOf`), vùng bao (`region`) và siêu dữ liệu nhà ga (`stationMeta`).
+       - `places.ts`: danh sách địa danh điều hướng nhanh (`CityPlace[]`).
+       - `heritage-notes.ts`: thuyết minh lịch sử – kiến trúc và chuẩn hóa tên khu vực.
+       - `overrides.ts`: bảng ghi đè chiều cao, số tầng, mặt đứng và mô hình 3D theo `osm:way/...` hoặc `osm:relation/...`.
+       - `catalog-part1.ts`, `catalog-part2.ts`, `landmarks-catalog.ts`: danh mục toàn diện 13 nhóm công trình biểu tượng (`CityLandmarkCatalogEntry[]`) kèm hàm tra cứu theo tên/alias/OSM ID.
+       - `index.ts`: hợp nhất `AreaConfig` cho thành phố.
+     - **Tầng dựng hình 3D (`apps/city3d/src/render/landmarks/<country>/<city>/`)**:
+       - Dùng chung các hàm hình học cơ sở tại `apps/city3d/src/render/landmarks/shared.ts` (`orientedBoxOf`, `localPt`, `localRect`, `drawTraditionalCurvedRoof`, `addBandWindows`...).
+       - Đặt bộ dựng 3D đặc thù của từng thành phố trong `apps/city3d/src/render/landmarks/<country>/<city>/` (ví dụ `vn/ha-noi/catalog-builders.ts` và `vn/ha-noi/index.ts`).
+  2. **Quy chuẩn 13 Nhóm Công trình Biểu tượng & Quy trình Rà soát Bắt buộc (`LandmarkCategoryId` trong `@my-city/core`, `Rule A16` trong `docs/ai/README.md`)**:
+     - Mỗi khi thêm bất kỳ **vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã** mới nào, bắt buộc thực hiện rà soát toàn diện khu vực đó theo **13 nhóm công trình chuẩn**:
+       1. `citadels-gates` — *1. Cửa Ô, Cổng Thành & Thành Quách Cổ*
+       2. `government-party` — *2. Toà nhà Chính phủ, Cơ quan Trung ương Đảng & Nhà khách Nhà nước*
+       3. `churches-religious` — *3. Hệ thống Nhà thờ (Công giáo, Tin lành) & Công trình Tôn giáo*
+       4. `monuments-memorials` — *4. Đài Tưởng niệm, Tượng đài & Di tích Chiến công*
+       5. `hoan-kiem-old-quarter` — *5. Cụm danh thắng Hồ Hoàn Kiếm, Phố Cổ & Di tích Đô thị*
+       6. `tu-tran-temples` — *6. Tứ Trấn Thăng Long, Đền, Phủ & Đạo Quán*
+       7. `ancient-pagodas` — *7. Chùa Cổ, Thiền viện & Quần thể Phật giáo*
+       8. `communal-houses-villages` — *8. Đình Cổ & Kiến trúc Làng Xã Ngoại thành*
+       9. `french-colonial-culture` — *9. Công trình Văn hóa, Giáo dục & Y tế thời Pháp thuộc*
+       10. `museums-exhibitions` — *10. Bảo tàng & Trung tâm Triển lãm*
+       11. `skyscrapers-malls` — *11. Toà nhà Cao tầng, Trung tâm Thương mại & Tổ hợp Hiện đại*
+       12. `luxury-hotels` — *12. Khách sạn Sang trọng & Nổi tiếng*
+       13. `bridges-sports-arenas` — *13. Cầu, Hạ tầng, Thể thao & Công trình Văn hoá Quy mô lớn*
+  3. **Danh mục 208 Công trình Biểu tượng Hà Nội (`HA_NOI_LANDMARKS_CATALOG`) & Tích hợp Diorama Showcase (`showcase.ts`)**:
+     - Lập đầy đủ hồ sơ dữ liệu (tên chính thức, tên gọi khác/aliases, phân nhóm 1–13, địa chỉ, quận/huyện/phường, kích thước mặt bằng, cấu trúc tầng, chất liệu mặt đứng, mã mô hình 3D riêng `model`, thuyết minh lịch sử – kiến trúc) cho toàn bộ **208 công trình** thuộc 13 nhóm tại Hà Nội.
+     - Tự động gắn mô hình 3D chuyên biệt (`catEntry.model`) và thuyết minh (`catEntry.description`) cho mọi tòa nhà OSM khớp nguồn hoặc khớp tên/alias trong `importArea`, đồng thời đưa toàn bộ 208 công trình vào danh mục **3D Diorama Showcase** (`catalog:<id>`) phân theo đúng 13 nhóm để người dùng có thể chọn xem riêng từng công trình trên đế `iso-glow`.
+
 ---
 
 ## Câu hỏi mở

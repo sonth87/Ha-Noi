@@ -12,7 +12,13 @@ import {
 } from '@my-city/osm-data';
 import type { City, Street } from '@my-city/core';
 import { importArea, type AreaConfig, type ImportReport } from './import';
-import { NGA_TU_THAI_HA } from './area-nga-tu-thai-ha';
+import {
+  findHaNoiCatalogLandmark,
+  HA_NOI_AREA_CONFIG,
+  HA_NOI_LANDMARK_CATEGORIES,
+  HA_NOI_LANDMARKS_CATALOG,
+  NGA_TU_THAI_HA,
+} from './area-nga-tu-thai-ha';
 
 export {
   getCityManifest,
@@ -26,6 +32,12 @@ export {
 } from '@my-city/osm-data';
 export { importArea, type AreaConfig, type ImportOptions, type ImportReport } from './import';
 export { projector, unprojector, type Frame } from './frame';
+export {
+  findHaNoiCatalogLandmark,
+  HA_NOI_AREA_CONFIG,
+  HA_NOI_LANDMARK_CATEGORIES,
+  HA_NOI_LANDMARKS_CATALOG,
+};
 
 const areaRegistry: Record<string, AreaConfig> = {
   [NGA_TU_THAI_HA.area]: NGA_TU_THAI_HA,

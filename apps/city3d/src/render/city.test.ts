@@ -253,6 +253,49 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(buildShowcase(city, mausoleumItem.id)!.flags).toHaveLength(1);
     expect(buildShowcase(city, naItem.id)!.flags).toHaveLength(1);
     expect(buildShowcase(city, myDinhItem.id)!.flags).toHaveLength(1);
+
+    // Verify 13-category Hanoi Master Landmark Catalog items (208 entries) in showcasesOf & buildShowcase
+    const catalogItems = list.filter(x => x.id.startsWith('catalog:'));
+    expect(catalogItems).toHaveLength(208);
+    const sampleCatalogIds = [
+      'catalog:bac-mon',
+      'catalog:dien-kinh-thien',
+      'catalog:hau-lau',
+      'catalog:khu-di-tich-co-loa',
+      'catalog:ban-chap-hanh-trung-uong-dang',
+      'catalog:bac-bo-phu',
+      'catalog:bo-ngoai-giao-ton-that-thuyet',
+      'catalog:nha-tho-cua-bac',
+      'catalog:nha-tho-ham-long',
+      'catalog:thanh-duong-al-noor',
+      'catalog:tuong-dai-ly-thai-to',
+      'catalog:di-tich-ho-huu-tiep',
+      'catalog:thap-hoa-phong',
+      'catalog:thap-nuoc-hang-dau',
+      'catalog:nha-co-87-ma-may',
+      'catalog:cho-hom',
+      'catalog:chua-tay-phuong',
+      'catalog:dinh-tay-dang',
+      'catalog:cong-lang-mong-phu',
+      'catalog:ga-ha-noi',
+      'catalog:dh-quoc-gia-19-le-thanh-tong',
+      'catalog:bao-tang-my-thuat-viet-nam',
+      'catalog:bao-tang-lich-su-quan-su',
+      'catalog:trung-tam-trien-lam-quoc-gia',
+      'catalog:lotte-mall-west-lake',
+      'catalog:sofitel-legend-metropole',
+      'catalog:khach-san-jw-marriott',
+      'catalog:khach-san-intercontinental-westlake',
+      'catalog:khach-san-pan-pacific',
+      'catalog:cau-chuong-duong',
+      'catalog:cau-vinh-tuy',
+      'catalog:cung-the-thao-quan-ngua',
+    ];
+    for (const cid of sampleCatalogIds) {
+      const builtCat = buildShowcase(city, cid);
+      expect(builtCat, cid).not.toBeNull();
+      expect(builtCat!.layer.stats.triangles, cid).toBeGreaterThan(150);
+    }
   });
 
   it('defines dashed administrative boundaries, centered labels, and 4-stage progressive zoom hierarchy', () => {

@@ -4,7 +4,7 @@
    archetype built at L3 detail. Every showcase uses the same Batch / Layer pipeline as the map, so
    day/night, bloom, window lighting and clicking a floor to toggle its lights all work unchanged. */
 import * as THREE from 'three';
-import { bbox, floorId, houseStoreys, resolveHouse, type Building, type City, type HouseInput, type Prop, type Vec2 } from '@my-city/core';
+import { bbox, floorId, houseStoreys, resolveHouse, type Building, type City, type CityLandmarkCatalogEntry, type HouseInput, type Prop, type Vec2 } from '@my-city/core';
 import { Batch, V } from './batch';
 import { beaconsOf, buildBuildings, cityFloors, flagpolesOf, nationalCinemaRotundaCenter, type WavingFlagSpec } from './buildings';
 import { layerOf, type Layer } from './city';
@@ -233,7 +233,78 @@ export function showcasesOf(city: City): ShowcaseItem[] {
     });
   }
 
+  // 3. Full 13-Category City Landmarks Catalog (208 iconic Hanoi relics, citadels, ministries, churches, pagodas, bridges...)
+  if (city.landmarksCatalog) {
+    for (const entry of city.landmarksCatalog) {
+      const [w, d] = entry.footprintSize;
+      const lv = entry.floors.length;
+      const h = Math.round(entry.floors.reduce((s, f) => s + f, 0));
+      const span = Math.max(w, d);
+      const radius = Math.max(24, Math.round(span * 0.72 + 14));
+      const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
+      out.push({
+        id: `catalog:${entry.id}`,
+        group: entry.categoryTitle,
+        name: `${entry.name} (${lv} tầng)`,
+        subtitle: `${entry.address ? `${entry.address} · ` : ''}${entry.district} · ${entry.description}`,
+        zoom: Number(zoom.toFixed(2)),
+        radius,
+      });
+    }
+  }
+
   return out;
+}
+
+function buildingFromCatalogEntry(city: City, entry: CityLandmarkCatalogEntry): Building {
+  const norm = (s: string) => s.trim().toLowerCase();
+  const targetNames = new Set<string>([norm(entry.name), ...(entry.aliases ?? []).map(norm)]);
+  const matched = city.buildings.find(
+    b =>
+      (entry.osmSource && b.source === entry.osmSource) ||
+      (b.name && targetNames.has(norm(b.name))),
+  );
+  if (matched) {
+    return {
+      ...matched,
+      model: matched.model ?? entry.model,
+      isSignatureLandmark: true,
+      description: matched.description ?? entry.description,
+    };
+  }
+  const [w, d] = entry.footprintSize;
+  const hw = w / 2, hd = d / 2;
+  const fp: Vec2[] = [
+    [-hw, hd],
+    [hw, hd],
+    [hw, -hd],
+    [-hw, -hd],
+  ];
+  return {
+    id: `cat_${entry.id}`,
+    name: entry.name,
+    kind: entry.kind,
+    footprint: fp,
+    front: 0,
+    levelsFrom: 'osm',
+    model: entry.model,
+    isSignatureLandmark: true,
+    address: entry.address,
+    district: entry.district,
+    description: entry.description,
+    parts: [
+      {
+        id: `cat_${entry.id}_p0`,
+        footprint: fp,
+        z0: 0,
+        floors: [...entry.floors],
+        facade: entry.facade ?? 'wall',
+        roof: 'flat',
+        source: entry.osmSource ?? `catalog:${entry.id}`,
+      },
+    ],
+    source: entry.osmSource ?? `catalog:${entry.id}`,
+  };
 }
 
 /** Draw an iso-glow style architectural diorama base plate from [-hx, -hy] to [hx, hy]:
@@ -360,10 +431,17 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
     return { item, layer: layerOf(B, true), shellLayer: layerOf(shellB, true), pools: poolGeometry(pools), beacons: [], flags: [], cars, floors: [] };
   }
 
-  // ---- Case 2: OSM Landmark Building showcase ----
-  if (id.startsWith('bldg:')) {
-    const bId = id.slice('bldg:'.length);
-    const b = city.buildings.find(x => x.id === bId);
+  // ---- Case 2: OSM Landmark Building or 13-Category Catalog Landmark showcase ----
+  if (id.startsWith('bldg:') || id.startsWith('catalog:')) {
+    let b: Building | undefined;
+    if (id.startsWith('bldg:')) {
+      const bId = id.slice('bldg:'.length);
+      b = city.buildings.find(x => x.id === bId);
+    } else {
+      const catId = id.slice('catalog:'.length);
+      const entry = city.landmarksCatalog?.find(x => x.id === catId);
+      if (entry) b = buildingFromCatalogEntry(city, entry);
+    }
     if (!b) return null;
 
     // bounding box over building footprint, all its parts, and any courtyard rotunda
