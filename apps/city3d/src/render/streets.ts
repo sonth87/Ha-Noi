@@ -36,12 +36,61 @@ const isMinorRoad = (r: Road) =>
 const isArterialRoad = (kind: Road['kind']) =>
   kind === 'primary' || kind === 'secondary' || kind === 'tertiary';
 
-export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all') {
-  const net = roadNetwork(city), roads = new Map(net.roads.map(r => [r.id, r]));
-  // where each road's sidewalks and markings stop near a junction: [from, to] along its path, per side
-  const cuts = new Map<string, { left: [number, number][]; right: [number, number][]; marks: [number, number][] }>();
-  const cutOf = (id: string) => { let c = cuts.get(id); if (!c) cuts.set(id, (c = { left: [], right: [], marks: [] })); return c; };
+export const LOCAL_STREET_TILE = 256;
 
+export interface LocalStreetCuts {
+  left: [number, number][];
+  right: [number, number][];
+  marks: [number, number][];
+}
+
+export interface LocalStreetSharedContext {
+  roads: Map<string, Road>;
+  cuts: Map<string, LocalStreetCuts>;
+  metroStations: City['stations'];
+  forecourtGrid: Map<string, City['streets']>;
+}
+
+export interface LocalStreetTile {
+  id: string;
+  center: [number, number];
+  radius: number;
+  nodes: NetNode[];
+  roads: Road[];
+  footways: City['streets'];
+  buildings: City['buildings'];
+  ctx: LocalStreetSharedContext;
+}
+
+const FORECOURT_GRID = 48;
+
+function buildForecourtStreetGrid(city: City): Map<string, City['streets']> {
+  const streets = city.streets.filter(s => s.layer === 0 && s.kind !== 'footway' && s.kind !== 'steps');
+  const grid = new Map<string, City['streets']>();
+  for (const s of streets) {
+    const pad = s.width / 2 + 16;
+    const seen = new Set<string>();
+    for (let k = 1; k < s.path.length; k++) {
+      const a = s.path[k - 1]!, b = s.path[k]!;
+      const x0 = Math.min(a[0], b[0]) - pad, x1 = Math.max(a[0], b[0]) + pad;
+      const y0 = Math.min(a[1], b[1]) - pad, y1 = Math.max(a[1], b[1]) + pad;
+      for (let i = Math.floor(x0 / FORECOURT_GRID); i <= Math.floor(x1 / FORECOURT_GRID); i++) {
+        for (let j = Math.floor(y0 / FORECOURT_GRID); j <= Math.floor(y1 / FORECOURT_GRID); j++) {
+          const key = `${i},${j}`;
+          if (seen.has(key)) continue;
+          seen.add(key);
+          const l = grid.get(key);
+          if (l) l.push(s); else grid.set(key, [s]);
+        }
+      }
+    }
+  }
+  return grid;
+}
+
+function computeRoadCuts(net: ReturnType<typeof roadNetwork>, roads: Map<string, Road>, B: Batch | null, mode: StreetRenderMode): Map<string, LocalStreetCuts> {
+  const cuts = new Map<string, LocalStreetCuts>();
+  const cutOf = (id: string) => { let c = cuts.get(id); if (!c) cuts.set(id, (c = { left: [], right: [], marks: [] })); return c; };
   for (const node of net.nodes) {
     if (node.arms.some(a => roads.get(a.road)!.layer > 0 && zAt(roads.get(a.road)!, a.at) > 0.5)) continue;
     const corners = junction(B, node, roads, mode);
@@ -56,51 +105,157 @@ export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all
       c.marks.push(span(others + 2));
     }
   }
+  return cuts;
+}
 
-  for (const r of net.roads) {
-    const minor = isMinorRoad(r);
-    const drawCarriageway = mode === 'all' || (mode === 'major' ? !minor : minor);
-    const drawLocalDetails = mode === 'all' || mode === 'local';
-    if (r.layer > 0 && r.profile.length) {
-      if (drawCarriageway) bridge(B, r);
-      continue;
-    }
-    const c = cuts.get(r.id) ?? { left: [], right: [], marks: [] };
-    if (drawCarriageway) {
-      B.flat('road', strip(r.path, -r.width / 2, r.width / 2), ROAD_Z);
-      if (mode === 'major' && isArterialRoad(r.kind)) {
-        const a = r.width / 2;
-        for (const [side, cut] of [[1, c.right], [-1, c.left]] as const) {
-          for (const run of pieces(r.path, cut)) {
-            const edge = offsetLine(run, side * a);
-            for (let i = 1; i < edge.length; i++) {
-              const p0 = edge[i - 1]!, p1 = edge[i]!;
-              B.line(V(p0[0], p0[1], ROAD_Z + 0.01), V(p1[0], p1[1], ROAD_Z + 0.01), 'crease');
-            }
+function drawRoadGeometry(B: Batch, r: Road, c: LocalStreetCuts, mode: StreetRenderMode) {
+  const minor = isMinorRoad(r);
+  const drawCarriageway = mode === 'all' || (mode === 'major' ? !minor : minor);
+  const drawLocalDetails = mode === 'all' || mode === 'local';
+  if (r.layer > 0 && r.profile.length) {
+    if (drawCarriageway) bridge(B, r);
+    return;
+  }
+  if (drawCarriageway) {
+    B.flat('road', strip(r.path, -r.width / 2, r.width / 2), ROAD_Z);
+    if (mode === 'major' && isArterialRoad(r.kind)) {
+      const a = r.width / 2;
+      for (const [side, cut] of [[1, c.right], [-1, c.left]] as const) {
+        for (const run of pieces(r.path, cut)) {
+          const edge = offsetLine(run, side * a);
+          for (let i = 1; i < edge.length; i++) {
+            const p0 = edge[i - 1]!, p1 = edge[i]!;
+            B.line(V(p0[0], p0[1], ROAD_Z + 0.01), V(p1[0], p1[1], ROAD_Z + 0.01), 'crease');
           }
         }
       }
     }
-    if (!drawLocalDetails) continue;
-    for (const [side, w, cut] of [[1, r.sidewalk.right, c.right], [-1, r.sidewalk.left, c.left]] as const) {
-      if (w <= 0) continue;
-      const a = r.width / 2;
-      for (const run of pieces(r.path, cut)) {
-        walkRibbon(B, offsetLine(run, side * a), offsetLine(run, side * (a + w)));
-      }
+  }
+  if (!drawLocalDetails) return;
+  for (const [side, w, cut] of [[1, r.sidewalk.right, c.right], [-1, r.sidewalk.left, c.left]] as const) {
+    if (w <= 0) continue;
+    const a = r.width / 2;
+    for (const run of pieces(r.path, cut)) {
+      walkRibbon(B, offsetLine(run, side * a), offsetLine(run, side * (a + w)));
     }
-    const offs: number[] = [];
-    const n = r.oneway ? r.lanes : 2 * Math.max(1, Math.floor(r.lanes / 2));
-    for (let k = 1; k < n; k++) offs.push(-r.width / 2 + (k * r.width) / n);
-    for (const o of offs) for (const run of pieces(r.path, c.marks)) dashes(B, offsetLine(run, o));
+  }
+  const offs: number[] = [];
+  const n = r.oneway ? r.lanes : 2 * Math.max(1, Math.floor(r.lanes / 2));
+  for (let k = 1; k < n; k++) offs.push(-r.width / 2 + (k * r.width) / n);
+  for (const o of offs) for (const run of pieces(r.path, c.marks)) dashes(B, offsetLine(run, o));
+}
+
+function drawFootwayGeometry(B: Batch, s: City['streets'][number], metroStations: City['stations']) {
+  // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
+  if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) return;
+  if (s.layer > 0 && s.profile.length) bridge(B, s);
+  else B.flat('walk', strip(s.path, -s.width / 2, s.width / 2), ROAD_Z * 0.5);
+}
+
+function drawBuildingForecourt(B: Batch, b: City['buildings'][number], grid: Map<string, City['streets']>) {
+  const R = b.footprint, p = R[b.front]!, q = R[(b.front + 1) % R.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+  const near = grid.get(`${Math.floor(mid[0] / FORECOURT_GRID)},${Math.floor(mid[1] / FORECOURT_GRID)}`);
+  if (!near) return;
+  const f = frontStreet(R, b.front, near);
+  if (!f || f.gap < 0.3 || f.gap > 15) return;
+  const S = f.street;
+  // which side of the street the building is on: right is (−dy, dx) along the path
+  const i = nearestSeg(S.path, mid), a = S.path[i - 1]!, bb = S.path[i]!;
+  const right = (-(bb[1] - a[1])) * (mid[0] - a[0]) + (bb[0] - a[0]) * (mid[1] - a[1]) > 0;
+  const walk = right ? S.sidewalk.right : S.sidewalk.left, edge = offsetLine(S.path, (right ? 1 : -1) * (S.width / 2 + walk));
+  const p2 = closestOnPath(p, edge).at, q2 = closestOnPath(q, edge).at;
+  if (dist(p, p2) > 16 || dist(q, q2) > 16) return;
+  B.flat('walk', [p, q, q2, p2], walk > 0 ? WALK_Z : ROAD_Z * 0.6);
+}
+
+export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all') {
+  const net = roadNetwork(city), roads = new Map(net.roads.map(r => [r.id, r]));
+  const cuts = computeRoadCuts(net, roads, B, mode);
+  const emptyCut: LocalStreetCuts = { left: [], right: [], marks: [] };
+  for (const r of net.roads) {
+    drawRoadGeometry(B, r, cuts.get(r.id) ?? emptyCut, mode);
   }
   if (mode === 'major') return;
   const metroStations = city.stations.filter(st => st.kind === 'metro');
   for (const s of city.streets) if (s.kind === 'footway' || s.kind === 'steps') {
-    // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
-    if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) continue;
-    if (s.layer > 0 && s.profile.length) bridge(B, s);
-    else B.flat('walk', strip(s.path, -s.width / 2, s.width / 2), ROAD_Z * 0.5);
+    drawFootwayGeometry(B, s, metroStations);
+  }
+}
+
+/** Partition local streets (minor alleys, sidewalks, lane markings, footways, and building forecourts)
+    into 256 m spatial tiles so they are built and rendered on-demand only inside the camera viewport. */
+export function localStreetTilesOf(city: City, size = LOCAL_STREET_TILE): LocalStreetTile[] {
+  const net = roadNetwork(city), roads = new Map(net.roads.map(r => [r.id, r]));
+  const cuts = computeRoadCuts(net, roads, null, 'local');
+  const metroStations = city.stations.filter(st => st.kind === 'metro');
+  const forecourtGrid = buildForecourtStreetGrid(city);
+  const ctx: LocalStreetSharedContext = { roads, cuts, metroStations, forecourtGrid };
+
+  const buckets = new Map<string, {
+    nodes: NetNode[];
+    roads: Road[];
+    footways: City['streets'];
+    buildings: City['buildings'];
+  }>();
+  const bucketOf = (x: number, y: number) => {
+    const k = `${Math.floor(x / size)},${Math.floor(y / size)}`;
+    let b = buckets.get(k);
+    if (!b) {
+      b = { nodes: [], roads: [], footways: [], buildings: [] };
+      buckets.set(k, b);
+    }
+    return b;
+  };
+
+  for (const node of net.nodes) {
+    if (node.arms.some(a => roads.get(a.road)!.layer > 0 && zAt(roads.get(a.road)!, a.at) > 0.5)) continue;
+    bucketOf(node.at[0], node.at[1]).nodes.push(node);
+  }
+  for (const r of net.roads) {
+    const mid = r.path[Math.floor(r.path.length / 2)]!;
+    bucketOf(mid[0], mid[1]).roads.push(r);
+  }
+  for (const s of city.streets) {
+    if (s.kind !== 'footway' && s.kind !== 'steps') continue;
+    const mid = s.path[Math.floor(s.path.length / 2)]!;
+    bucketOf(mid[0], mid[1]).footways.push(s);
+  }
+  for (const b of city.buildings) {
+    const R = b.footprint, p = R[b.front]!, q = R[(b.front + 1) % R.length]!;
+    bucketOf((p[0] + q[0]) / 2, (p[1] + q[1]) / 2).buildings.push(b);
+  }
+
+  const out: LocalStreetTile[] = [];
+  for (const [k, b] of buckets) {
+    const [i, j] = k.split(',').map(Number) as [number, number];
+    const center: [number, number] = [(i + 0.5) * size, (j + 0.5) * size];
+    let maxR = size * Math.SQRT1_2;
+    const checkPt = (pt: Vec2) => {
+      const d = Math.hypot(pt[0] - center[0], pt[1] - center[1]) + 16;
+      if (d > maxR) maxR = d;
+    };
+    for (const n of b.nodes) checkPt(n.at);
+    for (const r of b.roads) for (const pt of r.path) checkPt(pt);
+    for (const s of b.footways) for (const pt of s.path) checkPt(pt);
+    for (const bldg of b.buildings) checkPt(bldg.footprint[bldg.front]!);
+    out.push({ id: k, center, radius: maxR, nodes: b.nodes, roads: b.roads, footways: b.footways, buildings: b.buildings, ctx });
+  }
+  return out.sort((a, b) => (a.id < b.id ? -1 : 1));
+}
+
+export function buildLocalStreetTileBatch(B: Batch, tile: LocalStreetTile) {
+  const emptyCut: LocalStreetCuts = { left: [], right: [], marks: [] };
+  for (const node of tile.nodes) {
+    junction(B, node, tile.ctx.roads, 'local');
+  }
+  for (const r of tile.roads) {
+    drawRoadGeometry(B, r, tile.ctx.cuts.get(r.id) ?? emptyCut, 'local');
+  }
+  for (const s of tile.footways) {
+    drawFootwayGeometry(B, s, tile.ctx.metroStations);
+  }
+  for (const b of tile.buildings) {
+    drawBuildingForecourt(B, b, tile.ctx.forecourtGrid);
   }
 }
 
@@ -123,40 +278,9 @@ function walkRibbon(B: Batch, kerbEdge: readonly Vec2[], backEdge: readonly Vec2
     the street's sidewalk (raised like it) or, where the street has none (alleys), to the street's
     edge (flat). In Hà Nội the shop fronts open straight onto the sidewalk. */
 export function buildForecourts(B: Batch, city: City) {
-  const streets = city.streets.filter(s => s.layer === 0 && s.kind !== 'footway' && s.kind !== 'steps');
-  const G = 48, grid = new Map<string, City['streets']>();
-  for (const s of streets) {
-    const pad = s.width / 2 + 16;
-    const seen = new Set<string>();
-    for (let k = 1; k < s.path.length; k++) {
-      const a = s.path[k - 1]!, b = s.path[k]!;
-      const x0 = Math.min(a[0], b[0]) - pad, x1 = Math.max(a[0], b[0]) + pad;
-      const y0 = Math.min(a[1], b[1]) - pad, y1 = Math.max(a[1], b[1]) + pad;
-      for (let i = Math.floor(x0 / G); i <= Math.floor(x1 / G); i++) {
-        for (let j = Math.floor(y0 / G); j <= Math.floor(y1 / G); j++) {
-          const key = `${i},${j}`;
-          if (seen.has(key)) continue;
-          seen.add(key);
-          const l = grid.get(key);
-          if (l) l.push(s); else grid.set(key, [s]);
-        }
-      }
-    }
-  }
+  const grid = buildForecourtStreetGrid(city);
   for (const b of city.buildings) {
-    const R = b.footprint, p = R[b.front]!, q = R[(b.front + 1) % R.length]!, mid: Vec2 = [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
-    const near = grid.get(`${Math.floor(mid[0] / G)},${Math.floor(mid[1] / G)}`);
-    if (!near) continue;
-    const f = frontStreet(R, b.front, near);
-    if (!f || f.gap < 0.3 || f.gap > 15) continue;
-    const S = f.street;
-    // which side of the street the building is on: right is (−dy, dx) along the path
-    const i = nearestSeg(S.path, mid), a = S.path[i - 1]!, bb = S.path[i]!;
-    const right = (-(bb[1] - a[1])) * (mid[0] - a[0]) + (bb[0] - a[0]) * (mid[1] - a[1]) > 0;
-    const walk = right ? S.sidewalk.right : S.sidewalk.left, edge = offsetLine(S.path, (right ? 1 : -1) * (S.width / 2 + walk));
-    const p2 = closestOnPath(p, edge).at, q2 = closestOnPath(q, edge).at;
-    if (dist(p, p2) > 16 || dist(q, q2) > 16) continue;
-    B.flat('walk', [p, q, q2, p2], walk > 0 ? WALK_Z : ROAD_Z * 0.6);
+    drawBuildingForecourt(B, b, grid);
   }
 }
 
@@ -192,7 +316,7 @@ interface Corner { tA: number; tB: number }
 
 /** Fill the corners of a junction; returns, per pair of neighbouring arms (k, k+1), how far from
     the node the fillet begins on each (or null where there is no corner: arms almost in line). */
-function junction(B: Batch, node: NetNode, roads: Map<string, Road>, mode: StreetRenderMode = 'all'): (Corner | null)[] {
+function junction(B: Batch | null, node: NetNode, roads: Map<string, Road>, mode: StreetRenderMode = 'all'): (Corner | null)[] {
   const n = node.arms.length, out: (Corner | null)[] = [];
   const minor = (a: Arm) => isMinorRoad(roads.get(a.road)!);
   for (let k = 0; k < n; k++) {
@@ -212,26 +336,28 @@ function junction(B: Batch, node: NetNode, roads: Map<string, Road>, mode: Stree
     const R = isMinorCorner ? 2 : 4, tl = R / Math.tan(th / 2);
     const tA = tCa + tl, tB = tCb + tl;
     if (tCa < -1 || tCb < -1 || tA > 30 || tB > 30) { out.push(null); continue; }
-    const TA: Vec2 = [pA[0] + A.u[0] * tA, pA[1] + A.u[1] * tA], TB: Vec2 = [pB[0] + Bm.u[0] * tB, pB[1] + Bm.u[1] * tB];
-    const C: Vec2 = [TA[0] + rA[0] * R, TA[1] + rA[1] * R];
-    const arc = (r: number, steps = 8): Vec2[] => {
-      const a0 = Math.atan2(TA[1] - C[1], TA[0] - C[0]), a1 = Math.atan2(TB[1] - C[1], TB[0] - C[0]);
-      let d = a1 - a0;
-      while (d > Math.PI) d -= 2 * Math.PI;
-      while (d < -Math.PI) d += 2 * Math.PI;
-      return Array.from({ length: steps + 1 }, (_, i) => [C[0] + r * Math.cos(a0 + (d * i) / steps), C[1] + r * Math.sin(a0 + (d * i) / steps)] as const);
-    };
-    const drawCornerRoad = mode === 'all' || (mode === 'major' ? !isMinorCorner : isMinorCorner);
-    const drawCornerWalk = mode === 'all' || mode === 'local';
-    if (drawCornerRoad) {
-      // asphalt out to the kerb fillet
-      B.flat('road', [node.at, pA, TA, ...arc(R).slice(1, -1), TB, pB], ROAD_Z);
-    }
-    if (drawCornerWalk) {
-      // the sidewalk round the corner, when both arms have one on this side
-      const w = Math.min(A.walkR, Bm.walkL);
-      if (w > 0 && R > 0.5) {
-        walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
+    if (B) {
+      const TA: Vec2 = [pA[0] + A.u[0] * tA, pA[1] + A.u[1] * tA], TB: Vec2 = [pB[0] + Bm.u[0] * tB, pB[1] + Bm.u[1] * tB];
+      const C: Vec2 = [TA[0] + rA[0] * R, TA[1] + rA[1] * R];
+      const arc = (r: number, steps = 8): Vec2[] => {
+        const a0 = Math.atan2(TA[1] - C[1], TA[0] - C[0]), a1 = Math.atan2(TB[1] - C[1], TB[0] - C[0]);
+        let d = a1 - a0;
+        while (d > Math.PI) d -= 2 * Math.PI;
+        while (d < -Math.PI) d += 2 * Math.PI;
+        return Array.from({ length: steps + 1 }, (_, i) => [C[0] + r * Math.cos(a0 + (d * i) / steps), C[1] + r * Math.sin(a0 + (d * i) / steps)] as const);
+      };
+      const drawCornerRoad = mode === 'all' || (mode === 'major' ? !isMinorCorner : isMinorCorner);
+      const drawCornerWalk = mode === 'all' || mode === 'local';
+      if (drawCornerRoad) {
+        // asphalt out to the kerb fillet
+        B.flat('road', [node.at, pA, TA, ...arc(R).slice(1, -1), TB, pB], ROAD_Z);
+      }
+      if (drawCornerWalk) {
+        // the sidewalk round the corner, when both arms have one on this side
+        const w = Math.min(A.walkR, Bm.walkL);
+        if (w > 0 && R > 0.5) {
+          walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
+        }
       }
     }
     out.push({ tA, tB });

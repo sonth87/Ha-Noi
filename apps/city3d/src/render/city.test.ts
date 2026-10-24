@@ -6,7 +6,9 @@ import { Batch } from './batch';
 import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, getFlagMaterial, isFlagVisibleAtSpan, stepSharedWavingFlags, stepWavingFlag,
 } from './buildings';
-import { buildCityGeometry, buildLandmarkOverviewLayer, buildMapBaseLayers, buildTile, isMajorLandmarkBuilding, tilesOf } from './city';
+import {
+  buildCityGeometry, buildLandmarkOverviewLayer, buildLocalStreetTile, buildMapBaseLayers, buildTile, isMajorLandmarkBuilding, localStreetTilesOf, tilesOf,
+} from './city';
 import { buildHouse } from './house3d';
 import { offsetLine, strip } from './streets';
 import { windowRank } from './lights';
@@ -280,6 +282,18 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(baseLayers.majorStreets.stats.lines).toBeGreaterThan(0);
     expect(baseLayers.localStreets.stats.triangles).toBeGreaterThan(0);
     expect(baseLayers.metro.stats.triangles).toBeGreaterThan(0);
+
+    const localTiles = localStreetTilesOf(city);
+    expect(localTiles.length).toBeGreaterThan(4);
+    let tiledLocalTris = 0;
+    let tiledLocalLines = 0;
+    for (const lt of localTiles) {
+      const builtLt = buildLocalStreetTile(city, lt);
+      tiledLocalTris += builtLt.stats.triangles;
+      tiledLocalLines += builtLt.stats.lines;
+    }
+    expect(tiledLocalTris).toBe(baseLayers.localStreets.stats.triangles);
+    expect(tiledLocalLines).toBe(baseLayers.localStreets.stats.lines);
 
     const landmarkLayer = buildLandmarkOverviewLayer(city, 1);
     expect(landmarkLayer.stats.triangles).toBeGreaterThan(1000);

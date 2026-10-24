@@ -32,8 +32,8 @@ import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, isFlagVisibleAtSpan, stepSharedWavingFlags, type WavingFlagInstance,
 } from '@render/buildings';
 import {
-  beaconsOf, buildLandmarkOverviewLayer, buildMapBaseLayers, buildTile, cityFloors, layerOf, tilesOf,
-  type Detail, type Layer, type MapBaseLayers, type Tile,
+  beaconsOf, buildLandmarkOverviewLayer, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
+  type Detail, type Layer, type LocalStreetTile, type MapBaseLayers, type Tile,
 } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
 import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
@@ -138,6 +138,14 @@ interface TileState {
   cutKey: string;
   cutLayer: Layer | null;
   cutGroup: THREE.Group | null;
+  lastUsed: number;
+}
+
+interface LocalTileState {
+  tile: LocalStreetTile;
+  layer: Layer | null;
+  group: THREE.Group | null;
+  lastUsed: number;
 }
 
 interface CellState {
@@ -147,6 +155,7 @@ interface CellState {
   wires: LineSegments2 | null;
   pulses: LineSegments2 | null;
   pools: THREE.Mesh | null;
+  lastUsed: number;
 }
 
 interface Fleet {
@@ -182,9 +191,14 @@ export class CityView {
   readonly railTracks: Layer;
   private landmarkOverviewLayer: Layer | null = null;
   readonly tiles: TileState[];
+  readonly localTiles: LocalTileState[];
   private readonly landmarkTileSet = new Set<TileState>();
   private readonly bldgBounds: BldgBounds[];
   readonly cells: CellState[];
+  private cacheTick = 0;
+  private readonly projScreenMatrix = new THREE.Matrix4();
+  private readonly camFrustum = new THREE.Frustum();
+  private readonly tmpSphere = new THREE.Sphere();
   readonly floors: string[];
   readonly lanes: Lane[];
   readonly tracks: Track[];
@@ -314,18 +328,19 @@ export class CityView {
     this.northAz = Math.PI / 2 + (this.frame.bearing * Math.PI) / 180;
     const stationShellB = new Batch();
     const railTracksB = new Batch();
-    this.baseLayers = buildMapBaseLayers(city, stationShellB, railTracksB);
+    // Skip building global localStreets up-front; local streets/sidewalks/forecourts are streamed in 256m tiles!
+    this.baseLayers = buildMapBaseLayers(city, stationShellB, railTracksB, true);
     this.base = this.baseLayers.terrain;
     this.stationShell = layerOf(stationShellB, true, city);
     this.railTracks = layerOf(railTracksB, true, city);
     this.layers.add(this.baseLayers.terrain);
     this.layers.add(this.baseLayers.majorStreets);
-    this.layers.add(this.baseLayers.localStreets);
     this.layers.add(this.baseLayers.metro);
     this.layers.add(this.stationShell);
     this.layers.add(this.railTracks);
     this.floors = cityFloors(city);
-    this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null }));
+    this.tiles = tilesOf(city).map(tile => ({ tile, layers: new Map(), shown: -1 as const, cutKey: '', cutLayer: null, cutGroup: null, lastUsed: 0 }));
+    this.localTiles = localStreetTilesOf(city).map(tile => ({ tile, layer: null, group: null, lastUsed: 0 }));
     for (const t of this.tiles) {
       if (t.tile.buildings.some(b => b.model != null || buildingHeight(b) >= 28 || (Boolean(b.name) && buildingHeight(b) >= 16))) {
         this.landmarkTileSet.add(t);
@@ -333,7 +348,7 @@ export class CityView {
     }
     this.bldgBounds = buildBuildingBoundsIndex(this.tiles);
     const net = roadNetwork(city);
-    this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null }));
+    this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 }));
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
@@ -551,7 +566,7 @@ export class CityView {
 
     const terrainGroup = this.group(this.baseLayers.terrain, true);
     const majorStreetsGroup = this.group(this.baseLayers.majorStreets, true);
-    const localStreetsGroup = this.group(this.baseLayers.localStreets, true);
+    const localStreetsGroup = new THREE.Group();
     const metroBaseGroup = this.group(this.baseLayers.metro, true);
     const tilesGroup = new THREE.Group();
     const furnitureGroup = new THREE.Group();
@@ -591,6 +606,7 @@ export class CityView {
       t.cutKey = '';
       t.cutGroup = null;
     }
+    for (const lt of this.localTiles) lt.group = null;
     for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const flags = flagpolesOf(this.city).map(spec => {
@@ -642,7 +658,12 @@ export class CityView {
           landmarkOverviewGroup.traverse(o => { if (o.userData.surface && o.visible) pickable.push(o); });
         }
         if (stationShellGroup.visible) for (const o of stationShellGroup.children) if (o.userData.surface) pickable.push(o);
-        for (const grp of [metroBaseGroup, terrainGroup, majorStreetsGroup, localStreetsGroup]) {
+        if (localStreetsGroup.visible) {
+          for (const lt of this.localTiles) {
+            if (lt.group?.visible) for (const o of lt.group.children) if (o.userData.surface) pickable.push(o);
+          }
+        }
+        for (const grp of [metroBaseGroup, terrainGroup, majorStreetsGroup]) {
           if (grp.visible) for (const o of grp.children) if (o.userData.surface) pickable.push(o);
         }
       }
@@ -1062,6 +1083,8 @@ export class CityView {
     this.applyMode(this.snap.mode, false);
     this.applyTheme(this.snap.theme);
     this.applyQuality(this.snap.quality);
+    this.cacheTick++;
+    this.refreshCameraFrustum();
     // Build only the closest visible tiles synchronously so initial mount is instantaneous
     if (this.currentZoomStage() === 'full') {
       const mobile = isMobileDevice();
@@ -1071,6 +1094,7 @@ export class CityView {
         .sort((a, b) => dist2(a.tile.center, controls.target) - dist2(b.tile.center, controls.target))
         .slice(0, mobile ? 6 : 12);
       for (const t of closestTiles) {
+        t.lastUsed = this.cacheTick;
         this.show(t, this.ensure(t, first));
         this.syncTileVisibility(t, true);
       }
@@ -1165,24 +1189,34 @@ export class CityView {
     this.mounted = null;
   }
 
+  private disposeLayerObj(l: Layer) {
+    this.layers.delete(l);
+    for (const g of l.surfaces.values()) g.dispose();
+    l.shell.dispose();
+    l.creases.dispose();
+    l.details.dispose();
+    l.windows.dispose();
+  }
+
   /** Full teardown for HMR reload so all cached Layer and CarModel ArrayBuffers are released */
   dispose() {
     this.unmount();
-    const disposeLayer = (l: Layer) => {
-      for (const g of l.surfaces.values()) g.dispose();
-      l.shell.dispose();
-      l.creases.dispose();
-      l.details.dispose();
-      l.windows.dispose();
-    };
-    for (const l of this.layers) disposeLayer(l);
+    for (const l of [...this.layers]) this.disposeLayerObj(l);
     this.layers.clear();
     for (const t of this.tiles) {
       t.layers.clear();
+      t.shown = -1;
       if (t.cutLayer) {
-        disposeLayer(t.cutLayer);
+        this.disposeLayerObj(t.cutLayer);
         t.cutLayer = null;
       }
+    }
+    for (const lt of this.localTiles) {
+      if (lt.layer) {
+        this.disposeLayerObj(lt.layer);
+        lt.layer = null;
+      }
+      lt.group = null;
     }
     for (const c of this.cells) {
       if (c.cell) {
@@ -1190,6 +1224,10 @@ export class CityView {
         c.cell.pools.dispose();
         c.cell = null;
       }
+      c.groups = null;
+      c.wires = null;
+      c.pulses = null;
+      c.pools = null;
     }
     for (const cm of this.carModels) {
       if (!cm) continue;
@@ -1214,12 +1252,23 @@ export class CityView {
   /** Immediately build L1 for any unbuilt tiles visible from the POV camera so the city is never empty */
   private ensurePovVisibleTiles() {
     if (!this.mounted || !this.pov.isActive()) return;
+    this.cacheTick++;
+    this.refreshCameraFrustum();
     for (const t of this.tiles) {
       const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
-      if (vis && t.shown < 1) {
-        this.show(t, this.ensure(t, 1));
+      if (vis) {
+        t.lastUsed = this.cacheTick;
+        if (t.shown < 1) this.show(t, this.ensure(t, 1));
       }
       this.syncTileVisibility(t, vis);
+    }
+    for (const lt of this.localTiles) {
+      const vis = this.pov.isTileVisibleInPov(lt.tile.center, lt.tile.radius, false);
+      if (vis) {
+        lt.lastUsed = this.cacheTick;
+        this.ensureLocalTile(lt);
+      }
+      if (lt.group) lt.group.visible = vis;
     }
   }
 
@@ -2394,6 +2443,21 @@ export class CityView {
     if (this.activeShowcase) this.activeShowcase.doors.color = tok('--accent-hi');
   }
 
+  private refreshCameraFrustum() {
+    if (!this.mounted) return;
+    const cam = this.activeCamera();
+    cam.updateMatrixWorld();
+    this.projScreenMatrix.multiplyMatrices(cam.projectionMatrix, cam.matrixWorldInverse);
+    this.camFrustum.setFromProjectionMatrix(this.projScreenMatrix);
+  }
+
+  private inFrustumXZ(center: [number, number], radius: number, margin = 36, centerY = 18): boolean {
+    if (!this.mounted) return true;
+    this.tmpSphere.center.set(center[0], centerY, center[1]);
+    this.tmpSphere.radius = radius + margin + 22;
+    return this.camFrustum.intersectsSphere(this.tmpSphere);
+  }
+
   private trafficStep(dt: number) {
     const m = this.mounted;
     if (!m) return;
@@ -2402,6 +2466,7 @@ export class CityView {
     const povActive = this.pov.isActive();
     const stage = this.currentZoomStage();
     if (!povActive && (stage !== 'full' || (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles))) return;
+    this.refreshCameraFrustum();
     const sig = signalsAt(this.sim.t);
     stepTraffic(this.vehicles, this.lanes, sig, this.sim.prev, dt);
     this.sim.prev = sig;
@@ -2412,7 +2477,10 @@ export class CityView {
       }
       this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
     }
-    const far = this.snap.quality.viewDistance, c = m.controls.target, mat = new THREE.Matrix4();
+    const qFar = this.snap.quality.viewDistance;
+    const tFar = this.tileRange();
+    const far = qFar > 0 ? Math.min(qFar, tFar) : tFar;
+    const c = m.controls.target, mat = new THREE.Matrix4();
     const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, maxLineFloats = arr.length, e = mat.elements;
     let k = 0;
@@ -2428,7 +2496,7 @@ export class CityView {
         const vx = e[12]!, vz = e[14]!;
         const out = povActive
           ? !this.pov.isPointVisibleInPov(vx, vz, 4, POV_CONFIG.CULL_VEHICLE_DIST)
-          : far > 0 && Math.hypot(vx - c.x, vz - c.z) > far;
+          : (far > 0 && Math.hypot(vx - c.x, vz - c.z) > far) || !this.inFrustumXZ([vx, vz], 4, 16, 2);
         if (out) continue;
         for (const o of f.meshes) o.setMatrixAt(vis, mat);
         vis++;
@@ -2513,7 +2581,21 @@ export class CityView {
       return this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
     }
     const far = this.tileRange(), c = m.controls.target;
-    return Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius <= far;
+    if (Math.hypot(t.tile.center[0] - c.x, t.tile.center[1] - c.z) - t.tile.radius > far) return false;
+    return this.inFrustumXZ(t.tile.center, t.tile.radius, 42, 24);
+  }
+
+  private ensureLocalTile(lt: LocalTileState) {
+    if (!lt.layer) {
+      lt.layer = buildLocalStreetTile(this.city, lt.tile);
+      this.layers.add(lt.layer);
+    }
+    if (!lt.group && this.mounted) {
+      lt.group = this.group(lt.layer, true);
+      lt.group.visible = false;
+      this.mounted.localStreetsGroup.add(lt.group);
+      this.paintLayer(lt.layer);
+    }
   }
 
   private ensureCell(s: CellState) {
@@ -2550,6 +2632,85 @@ export class CityView {
     }
   }
 
+  /** Evict offscreen GPU geometries (LRU) when built tiles/cells exceed device memory caps */
+  private evictFarCaches() {
+    const m = this.mounted;
+    if (!m || this.interacting) return;
+    const mobile = isMobileDevice();
+    const maxTiles = mobile ? 110 : 260;
+    const maxLocalTiles = mobile ? 18 : 44;
+    const maxCells = mobile ? 36 : 84;
+    const focus = this.pov.isActive() ? this.pov.getFocusPoint() : m.controls.target;
+    const keepRadius = this.tileRange() * 1.35;
+
+    const builtTiles = this.tiles.filter(t => t.layers.size > 0);
+    if (builtTiles.length > maxTiles) {
+      const candidates = builtTiles
+        .filter(t => t.lastUsed < this.cacheTick && Math.hypot(t.tile.center[0] - focus.x, t.tile.center[1] - focus.z) - t.tile.radius > keepRadius)
+        .sort((a, b) => a.lastUsed - b.lastUsed);
+      const toEvict = Math.min(candidates.length, builtTiles.length - maxTiles);
+      for (let i = 0; i < toEvict; i++) {
+        const t = candidates[i]!;
+        for (const v of t.layers.values()) {
+          if (v.group) m.tilesGroup.remove(v.group);
+          this.disposeLayerObj(v.layer);
+        }
+        t.layers.clear();
+        t.shown = -1;
+        if (t.cutGroup) {
+          m.tilesGroup.remove(t.cutGroup);
+          t.cutGroup = null;
+        }
+        if (t.cutLayer) {
+          this.disposeLayerObj(t.cutLayer);
+          t.cutLayer = null;
+        }
+        t.cutKey = '';
+      }
+    }
+
+    const builtLocal = this.localTiles.filter(lt => lt.layer !== null);
+    if (builtLocal.length > maxLocalTiles) {
+      const candidates = builtLocal
+        .filter(lt => lt.lastUsed < this.cacheTick && Math.hypot(lt.tile.center[0] - focus.x, lt.tile.center[1] - focus.z) - lt.tile.radius > keepRadius)
+        .sort((a, b) => a.lastUsed - b.lastUsed);
+      const toEvict = Math.min(candidates.length, builtLocal.length - maxLocalTiles);
+      for (let i = 0; i < toEvict; i++) {
+        const lt = candidates[i]!;
+        if (lt.group) m.localStreetsGroup.remove(lt.group);
+        if (lt.layer) this.disposeLayerObj(lt.layer);
+        lt.group = null;
+        lt.layer = null;
+      }
+    }
+
+    const builtCells = this.cells.filter(c => c.cell !== null);
+    if (builtCells.length > maxCells) {
+      const candidates = builtCells
+        .filter(c => c.lastUsed < this.cacheTick && Math.hypot(c.bucket.center[0] - focus.x, c.bucket.center[1] - focus.z) - CELL_R > keepRadius)
+        .sort((a, b) => a.lastUsed - b.lastUsed);
+      const toEvict = Math.min(candidates.length, builtCells.length - maxCells);
+      for (let i = 0; i < toEvict; i++) {
+        const c = candidates[i]!;
+        if (c.groups) {
+          m.furnitureGroup.remove(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple);
+          c.groups = null;
+        }
+        if (c.wires) { m.furnitureGroup.remove(c.wires); c.wires = null; }
+        if (c.pulses) { m.furnitureGroup.remove(c.pulses); c.pulses = null; }
+        if (c.pools) { m.furnitureGroup.remove(c.pools); c.pools = null; }
+        if (c.cell) {
+          for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) {
+            this.disposeLayerObj(l);
+          }
+          c.cell.wires.dispose();
+          c.cell.pools.dispose();
+          c.cell = null;
+        }
+      }
+    }
+  }
+
   private distanceStep(initial = false) {
     const m = this.mounted;
     if (!m) return;
@@ -2558,30 +2719,59 @@ export class CityView {
     this.syncZoomStageVisibility(stage);
     if (!povActive && stage !== 'full') return;
 
+    this.cacheTick++;
+    this.refreshCameraFrustum();
     const q = this.snap.quality, far = q.viewDistance, tFar = this.tileRange(), c = m.controls.target;
-    const near = (p: [number, number], r: number, lim = far) => lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim;
+    const focus = povActive ? this.pov.getFocusPoint() : c;
+    const near = (p: [number, number], r: number, lim = far, margin = 42, centerY = 18) =>
+      (lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim) && this.inFrustumXZ(p, r, margin, centerY);
+
     for (const t of this.tiles) {
       if (povActive) {
         const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
+        if (vis) t.lastUsed = this.cacheTick;
         this.syncTileVisibility(t, vis);
         continue;
       }
-      const inRange = near(t.tile.center, t.tile.radius, tFar);
+      const inRange = near(t.tile.center, t.tile.radius, tFar, 42, 24);
+      if (inRange) t.lastUsed = this.cacheTick;
       this.syncTileVisibility(t, inRange && t.shown >= 0);
     }
+
+    // Stream 256 m local street tiles (minor alleys, sidewalks, lane markings, footways, forecourts)
+    const unbuiltLocal: LocalTileState[] = [];
+    for (const lt of this.localTiles) {
+      const vis = povActive
+        ? this.pov.isTileVisibleInPov(lt.tile.center, lt.tile.radius, false)
+        : near(lt.tile.center, lt.tile.radius, tFar, 48, 2);
+      if (vis) {
+        lt.lastUsed = this.cacheTick;
+        if (!lt.layer || !lt.group) unbuiltLocal.push(lt);
+      }
+      if (lt.group) lt.group.visible = vis;
+    }
+    if (unbuiltLocal.length) {
+      unbuiltLocal.sort((a, b) => dist2XZ(a.tile.center, focus) - dist2XZ(b.tile.center, focus));
+      const localBudget = initial || povActive ? (isMobileDevice() ? 3 : 6) : this.interacting ? 1 : 2;
+      for (let i = 0; i < Math.min(localBudget, unbuiltLocal.length); i++) {
+        const lt = unbuiltLocal[i]!;
+        this.ensureLocalTile(lt);
+        if (lt.group) lt.group.visible = true;
+      }
+    }
+
     const px = this.pxPerMetre(), showFurn = povActive || !(q.autoDetail && px < FAR.furniture);
     const trees = this.treeLook();
     const needCell = showFurn || trees !== 'off';
-    let built = 0;
-    const maxBuild = initial || povActive ? 8 : this.interacting ? 0 : 2;
     const cellLim = far > 0 ? Math.min(far, tFar) : tFar;
+    const unbuiltCells: CellState[] = [];
     for (const s of this.cells) {
       const on = povActive
         ? this.pov.isPointVisibleInPov(s.bucket.center[0], s.bucket.center[1], CELL_R, POV_CONFIG.CULL_FURN_DIST)
-        : near(s.bucket.center, CELL_R, cellLim);
-      if (on && needCell && (!s.cell || !s.groups) && built < maxBuild) {
-        this.ensureCell(s);
-        built++;
+        : near(s.bucket.center, CELL_R, cellLim, 32, 8);
+      if (on) {
+        s.lastUsed = this.cacheTick;
+        if (needCell && (!s.cell || !s.groups)) unbuiltCells.push(s);
       }
       const g = s.groups;
       if (g) {
@@ -2594,6 +2784,25 @@ export class CityView {
       if (s.pulses) s.pulses.visible = on && showFurn && q.wires && this.snap.night;
       if (s.pools) s.pools.visible = on && showFurn && this.poolsOn();
     }
+    if (unbuiltCells.length) {
+      unbuiltCells.sort((a, b) => dist2XZ(a.bucket.center, focus) - dist2XZ(b.bucket.center, focus));
+      const maxBuild = initial || povActive ? (isMobileDevice() ? 4 : 8) : this.interacting ? 0 : 2;
+      for (let i = 0; i < Math.min(maxBuild, unbuiltCells.length); i++) {
+        const s = unbuiltCells[i]!;
+        this.ensureCell(s);
+        const g = s.groups;
+        if (g) {
+          g.fixtures.visible = showFurn;
+          g.poles.visible = showFurn && q.wires;
+          g.trees.visible = trees === 'full';
+          g.simple.visible = trees === 'simple';
+        }
+        if (s.wires) s.wires.visible = showFurn && q.wires;
+        if (s.pulses) s.pulses.visible = showFurn && q.wires && this.snap.night;
+        if (s.pools) s.pools.visible = showFurn && this.poolsOn();
+      }
+    }
+    this.evictFarCaches();
   }
 
   private autoQuality(fps: number) {
@@ -2647,6 +2856,8 @@ export class CityView {
       return;
     }
 
+    this.cacheTick++;
+    this.refreshCameraFrustum();
     const want = this.wantedDetail();
     const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
     const waiting: { t: TileState; level: Detail }[] = [], unbuilt: TileState[] = [];
@@ -2655,6 +2866,7 @@ export class CityView {
         this.syncTileVisibility(t, false);
         continue;
       }
+      t.lastUsed = this.cacheTick;
       const tileWant = povActive ? this.pov.tileDetailInPov(t.tile.center, want) : want;
       if (t.layers.has(tileWant)) {
         this.show(t, this.ensure(t, tileWant));
@@ -2686,6 +2898,7 @@ export class CityView {
         this.syncTileVisibility(item.t, true);
       }
     }
+    if (!busy) this.evictFarCaches();
     const pending = busy ? waiting.length : Math.max(0, waiting.length - (povActive ? 4 : want <= 1 ? 3 : 2));
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
   }
@@ -2696,7 +2909,11 @@ export class CityView {
     const add = (l: Layer) => { s.triangles += l.stats.triangles; s.lines += l.stats.lines; s.windows += l.stats.windows; };
     const m = this.mounted;
     if (!m || m.majorStreetsGroup.visible) add(this.baseLayers.majorStreets);
-    if (!m || m.localStreetsGroup.visible) add(this.baseLayers.localStreets);
+    if (!m || m.localStreetsGroup.visible) {
+      for (const lt of this.localTiles) {
+        if (lt.layer && lt.group?.visible) add(lt.layer);
+      }
+    }
     if (!m || m.metroBaseGroup.visible) add(this.baseLayers.metro);
     if (m?.stationShellGroup.visible !== false) add(this.stationShell);
     if (m?.railTrackGroup.visible) add(this.railTracks);

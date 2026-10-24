@@ -11,8 +11,19 @@ import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js
 import { buildingHeight, centroid, floorId, floorZ, pointInRing, type Building, type City } from '@my-city/core';
 import { Batch, type LampRange, type Surface } from './batch';
 import { beaconsOf, buildBuildings, cityFloors, type Detail } from './buildings';
-import { buildAreas, buildForecourts, buildGround, buildMonumentFeatures, buildStreets } from './streets';
+import {
+  buildAreas,
+  buildForecourts,
+  buildGround,
+  buildLocalStreetTileBatch,
+  buildMonumentFeatures,
+  buildStreets,
+  localStreetTilesOf,
+  type LocalStreetTile,
+} from './streets';
 import { buildMetro } from './metro';
+
+export { localStreetTilesOf, type LocalStreetTile };
 
 export interface Layer {
   surfaces: Map<Surface, THREE.BufferGeometry>;
@@ -73,7 +84,7 @@ export function buildBase(city: City, shellB?: Batch, railB?: Batch): Layer {
 }
 
 /** Build separated semantic base layers so zoomed-out stages can hide local alleys/sidewalks/forecourts or all streets */
-export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch): MapBaseLayers {
+export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch, skipLocalStreets = false): MapBaseLayers {
   const terrainB = new Batch();
   buildGround(terrainB, city);
   buildAreas(terrainB, city, false);
@@ -82,8 +93,10 @@ export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch): M
   buildStreets(majorB, city, 'major');
 
   const localB = new Batch();
-  buildStreets(localB, city, 'local');
-  buildForecourts(localB, city);
+  if (!skipLocalStreets) {
+    buildStreets(localB, city, 'local');
+    buildForecourts(localB, city);
+  }
 
   const metroB = new Batch();
   buildMonumentFeatures(metroB, city);
@@ -95,6 +108,13 @@ export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch): M
     localStreets: layerOf(localB, true, city),
     metro: layerOf(metroB, true, city),
   };
+}
+
+/** Build a single 256 m spatial tile of local streets, sidewalks, lane markings, footways, and forecourts on demand */
+export function buildLocalStreetTile(city: City, tile: LocalStreetTile): Layer {
+  const B = new Batch();
+  buildLocalStreetTileBatch(B, tile);
+  return layerOf(B, true, city);
 }
 
 /** Single merged Layer containing only major landmarks and tall buildings across the city (for mid-range zoom 0.38 <= zoom < 0.72) */
