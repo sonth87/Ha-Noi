@@ -130,14 +130,23 @@ export function tilesOf(city: City, size = TILE): Tile[] {
   const groups = new Map<string, Building[]>();
   for (const b of city.buildings) {
     const c = centroid(b.footprint), k = `${Math.floor(c[0] / size)},${Math.floor(c[1] / size)}`;
-    groups.set(k, [...(groups.get(k) ?? []), b]);
+    let list = groups.get(k);
+    if (!list) groups.set(k, (list = []));
+    list.push(b);
   }
   return [...groups].map(([k, bs]) => {
     const [i, j] = k.split(',').map(Number) as [number, number], center: [number, number] = [(i + 0.5) * size, (j + 0.5) * size];
-    const radius = Math.max(...bs.flatMap(b => b.footprint.map(p => Math.hypot(p[0] - center[0], p[1] - center[1]))));
+    let radius = 0;
+    for (const b of bs) {
+      for (const p of b.footprint) {
+        const d = Math.hypot(p[0] - center[0], p[1] - center[1]);
+        if (d > radius) radius = d;
+      }
+    }
     return { id: k, buildings: bs, center, radius };
   }).sort((a, b) => (a.id < b.id ? -1 : 1));
 }
+
 
 export function buildTile(city: City, tile: Tile, level: Detail, skipIds?: ReadonlySet<string>): Layer {
   const B = new Batch();

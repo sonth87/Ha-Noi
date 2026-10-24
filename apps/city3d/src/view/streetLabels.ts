@@ -206,8 +206,12 @@ export function buildStreetCatalog(city: City): StreetEntry[] {
     const bestSeg = [...segs].sort((a, b) => rankOf(b.kind) - rankOf(a.kind) || polylineLength(b.path) - polylineLength(a.path))[0]!;
     const kind = bestSeg.kind;
     const bridge = segs.some(s => s.layer > 0);
-    const lanes = Math.max(...segs.map(s => s.lanes));
-    const width = Math.round(Math.max(...segs.map(s => s.width)));
+    let lanes = 1, maxWidth = 0;
+    for (const s of segs) {
+      if (s.lanes > lanes) lanes = s.lanes;
+      if (s.width > maxWidth) maxWidth = s.width;
+    }
+    const width = Math.round(maxWidth);
 
     let tier: 1 | 2 | 3 | 4;
     if (TIER_1_STREETS.has(name) || (kind === 'primary' && totalLength >= 180) || bridge) {

@@ -40,6 +40,10 @@ export function vehicleModel(kind: VehicleKind): VehicleModel {
   return { parts, shell, lines: new Float32Array([...B.creases, ...B.details]) };
 }
 
+function pushAll(dst: number[], src: readonly number[]) {
+  for (let i = 0; i < src.length; i++) dst.push(src[i]!);
+}
+
 /** a horizontal prism: a profile in the (x, z) plane, from y0 to y1 across; face(i) picks the
     surface of the face on profile edge i, caps the two sides */
 function across(B: Batch, profile: readonly Vec2[], y0: number, y1: number, face: (i: number) => 'wall' | 'roof' | 'glass' | 'metal', caps: 'wall' | 'roof' | 'glass' | 'metal', creases = true, angle = 28) {
@@ -62,7 +66,7 @@ function across(B: Batch, profile: readonly Vec2[], y0: number, y1: number, face
   else {
     const T = new Batch();
     T.edgesOf(all, angle);
-    B.shell.pos.push(...T.shell.pos); B.shell.nrm.push(...T.shell.nrm);
+    pushAll(B.shell.pos, T.shell.pos); pushAll(B.shell.nrm, T.shell.nrm);
   }
 }
 
@@ -199,9 +203,9 @@ function car(B: Batch, kind: Exclude<VehicleKind, 'bike'>, put: (p: VehiclePart)
       B.solid([[m - 0.34, -0.26], [m + 0.34, -0.26], [m + 0.34, 0.26], [m - 0.34, 0.26]], zs, zs + 0.04, () => 'metal', 'metal');
       const SB = new Batch();
       SB.solid([[m - 0.28, -0.20], [m + 0.28, -0.20], [m + 0.28, 0.20], [m - 0.28, 0.20]], zs + 0.04, zs + 0.22, () => 'wall', 'wall');
-      sign.push(...(SB.tris.get('wall') ?? []));
-      B.creases.push(...SB.creases);
-      B.shell.pos.push(...SB.shell.pos); B.shell.nrm.push(...SB.shell.nrm);
+      pushAll(sign, SB.tris.get('wall') ?? []);
+      pushAll(B.creases, SB.creases);
+      pushAll(B.shell.pos, SB.shell.pos); pushAll(B.shell.nrm, SB.shell.nrm);
     }
   }
 

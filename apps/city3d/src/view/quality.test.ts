@@ -253,5 +253,16 @@ describe('Google Maps–style URL state (@lat,lon,157m,0h,35.3t,2d)', () => {
   });
 });
 
+describe('full 6-district CityView initialization', () => {
+  it('initializes CityView on the entire unfiltered city without call stack overflow', async () => {
+    const { CityView } = await import('./CityView');
+    const view = new CityView(city);
+    expect(view.tiles.length).toBeGreaterThan(500);
+    expect(view.localTiles.length).toBeGreaterThan(40);
+    expect(view.cells.length).toBeGreaterThan(200);
+  });
+});
+
+
 
 

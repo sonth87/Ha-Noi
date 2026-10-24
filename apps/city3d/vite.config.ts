@@ -44,7 +44,6 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('nga-tu-thai-ha.osm.json')) return 'osm-data';
           if (id.includes('node_modules/three')) return 'three';
           if (id.includes('node_modules/react')) return 'vendor';
         },
