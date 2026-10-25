@@ -70,6 +70,7 @@ import {
 } from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
 import { getCityManifest, loadCityChunkCityAsync, projector } from '@my-city/osm-import';
+import type { MapPaletteId } from '@my-city/theme';
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
@@ -91,6 +92,10 @@ export interface Snapshot {
   heading: number;
   theme: Theme;
   night: boolean;
+  /** active map surface color palette ('0' = Monochrome default, '1' | '2' | '3' = Tonal Realistic) */
+  mapPalette: MapPaletteId;
+  /** active accent light key ('sodium', 'tungsten', 'neon', 'signal', 'dusk', 'moon') */
+  accent: string;
   quality: Quality;
   /** the detail level being shown, and how many tiles still wait for it */
   detail: Detail;
@@ -405,6 +410,16 @@ export class CityView {
 
     let theme: Theme = 'light';
     try { if (localStorage.getItem('city3d-theme') === 'dark') theme = 'dark'; } catch { /* default */ }
+    let mapPalette: MapPaletteId = '0';
+    try {
+      const savedPal = localStorage.getItem(STORAGE_KEYS.MAP_PALETTE);
+      if (savedPal === '0' || savedPal === '1' || savedPal === '2' || savedPal === '3') mapPalette = savedPal;
+    } catch { /* default */ }
+    let accent = 'sodium';
+    try {
+      const savedAcc = localStorage.getItem(STORAGE_KEYS.ACCENT);
+      if (savedAcc) accent = savedAcc;
+    } catch { /* default */ }
     let streetLabels: StreetLabelMode = 'pin';
     try {
       const savedLbl = localStorage.getItem(STORAGE_KEYS.STREET_LABELS) as StreetLabelMode | null;
@@ -441,7 +456,7 @@ export class CityView {
     const sig = signalsAt(0);
     const totalTrains = this.tracks.reduce((acc, tr) => acc + trainCount(tr), 0);
     this.snap = {
-      mode: initMode, view: initView, heading: Math.round(initHeading), theme, night: theme === 'dark', quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
+      mode: initMode, view: initView, heading: Math.round(initHeading), theme, night: theme === 'dark', mapPalette, accent, quality, detail: 1, pending: 0, fps: 0, lit: 0, floors: this.floors.length,
       vehicles: this.vehicles.length, signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft }, lowered: null, lights: loadLights(), stats: this.base.stats,
       showcase: validShowcase, streetLabels, placeInfo, seeThrough: initUrl?.seeThrough ?? true, locale: initLocale,
       povMode: 'map', povSpeedKmh: 0, povTrainIndex: 1, povTrainTotal: Math.max(1, totalTrains), povTrainPhase: 'run', povWindowSide: 1, povLocationName: '',
@@ -1693,6 +1708,20 @@ export class CityView {
     const night = !this.snap.night;
     this.setNight(night);
     this.setTheme(night ? 'dark' : 'light');
+  }
+
+  setMapPalette(mapPalette: MapPaletteId) {
+    if (mapPalette === this.snap.mapPalette) return;
+    this.update({ mapPalette });
+    try { localStorage.setItem(STORAGE_KEYS.MAP_PALETTE, mapPalette); } catch { /* not remembered */ }
+    this.applyTheme(this.snap.theme);
+  }
+
+  setAccent(accent: string) {
+    if (accent === this.snap.accent) return;
+    this.update({ accent });
+    try { localStorage.setItem(STORAGE_KEYS.ACCENT, accent); } catch { /* not remembered */ }
+    this.applyTheme(this.snap.theme);
   }
 
   setQuality(q: Quality, lowered: string | null = null) {
@@ -3284,6 +3313,8 @@ export class CityView {
   // ---------- theme and quality ----------
   private applyTheme(theme: Theme) {
     document.documentElement.dataset.theme = theme;
+    document.documentElement.dataset.mapPalette = this.snap.mapPalette;
+    document.documentElement.dataset.accent = this.snap.accent;
     const css = getComputedStyle(document.documentElement);
     const tok = (n: string) => new THREE.Color(css.getPropertyValue(n).trim() || '#ff00ff');
     for (const [s, m] of this.mats.surface) m.color = tok(SURFACE_TOKEN[s]);

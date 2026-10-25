@@ -12,7 +12,11 @@ import { normalizeRing, type Vec2 } from '@my-city/core';
 export const V = (x: number, y: number, z: number) => new THREE.Vector3(x, z, y);
 
 /** surfaces, by what they are; the materials (from theme tokens) are chosen per key */
-export type Surface = 'ground' | 'wall' | 'roof' | 'glass' | 'road' | 'walk' | 'marking' | 'grass' | 'water' | 'pitch' | 'plaza' | 'metal' | 'awning' | 'plant';
+export type Surface =
+  | 'ground' | 'wall' | 'roof' | 'glass' | 'road' | 'walk' | 'marking'
+  | 'grass' | 'water' | 'pitch' | 'plaza' | 'metal' | 'awning' | 'plant'
+  | 'plant-mid' | 'plant-dark' | 'tree-trunk'
+  | 'heritage-roof' | 'heritage-wall' | 'wood' | 'stone' | 'bronze' | 'tower-glass';
 
 /** a range of window vertices that light together */
 export interface LampRange { start: number; count: number }
@@ -30,8 +34,17 @@ export class Batch {
   readonly lampLines = new Map<string, LampRange[]>();
   /** triangle ranges of the solid surfaces per owner (for picking), in order of `ownerTris` */
   readonly owners: { surface: Surface; start: number; end: number; owner: string }[] = [];
+  private surfaceMap: Partial<Record<Surface, Surface>> | null = null;
 
-  private list(s: Surface) { let l = this.tris.get(s); if (!l) this.tris.set(s, (l = [])); return l; }
+  private resolveSurface(s: Surface): Surface { return this.surfaceMap?.[s] ?? s; }
+  private list(s: Surface) { const k = this.resolveSurface(s); let l = this.tris.get(k); if (!l) this.tris.set(k, (l = [])); return l; }
+
+  /** Temporarily remap generic surfaces (e.g. 'wall' → 'heritage-wall') while building a landmark. */
+  withSurfaceMap<T>(map: Partial<Record<Surface, Surface>> | null, fn: () => T): T {
+    const prev = this.surfaceMap;
+    this.surfaceMap = map ? (prev ? { ...prev, ...map } : map) : prev;
+    try { return fn(); } finally { this.surfaceMap = prev; }
+  }
 
   /** push a triangle facing along n */
   tri(s: Surface, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, n: THREE.Vector3, out = this.list(s)) {
@@ -43,7 +56,8 @@ export class Batch {
   quad(s: Surface, p: THREE.Vector3[], n: THREE.Vector3, out = this.list(s)) { this.tri(s, p[0]!, p[1]!, p[2]!, n, out); this.tri(s, p[0]!, p[2]!, p[3]!, n, out); }
 
   /** a flat polygon at height z, facing up */
-  flat(s: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail', owner?: string) {
+  flat(rawS: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail', owner?: string) {
+    const s = this.resolveSurface(rawS);
     const R = normalizeRing(ring);
     if (R.length < 3) return;
     const up = new THREE.Vector3(0, 1, 0);
@@ -59,9 +73,10 @@ export class Batch {
       for a prism, ADR-042): the bottom and top loops, an upright edge at every corner turning more
       than 20°, and per-corner normals averaged over the faces meeting there. Thousands of small
       boxes (balconies, pots, tanks) stay cheap. */
-  solid(ring: readonly Vec2[], z0: number, z1: number, wall: (i: number) => Surface = () => 'wall', top: Surface = 'roof', owner?: string) {
+  solid(ring: readonly Vec2[], z0: number, z1: number, wall: (i: number) => Surface = () => 'wall', rawTop: Surface = 'roof', owner?: string) {
     const R = normalizeRing(ring), n = R.length;
     if (n < 3 || z1 <= z0) return;
+    const top = this.resolveSurface(rawTop);
     const mark = (s: Surface, fn: () => void) => {
       const start = this.list(s).length / 9;
       fn();
@@ -76,7 +91,7 @@ export class Batch {
     R.forEach((p, i) => {
       const j = (i + 1) % n, q = R[j]!;
       const pts = [V(p[0], p[1], z0), V(q[0], q[1], z0), V(q[0], q[1], z1), V(p[0], p[1], z1)];
-      const s = wall(i);
+      const s = this.resolveSurface(wall(i));
       mark(s, () => this.quad(s, pts, nrm[i]!));
       const ns = [corner(i, false), corner(j, false), corner(j, true), corner(i, true)];
       pushShell([pts[0]!, pts[1]!, pts[2]!], [ns[0]!, ns[1]!, ns[2]!]);
@@ -95,7 +110,8 @@ export class Batch {
   }
 
   /** a prism with no lines at all (simple trees, far things) */
-  flatSolid(ring: readonly Vec2[], z0: number, z1: number, s: Surface) {
+  flatSolid(ring: readonly Vec2[], z0: number, z1: number, rawS: Surface) {
+    const s = this.resolveSurface(rawS);
     const R = normalizeRing(ring), n = R.length;
     if (n < 3 || z1 <= z0) return;
     R.forEach((p, i) => {

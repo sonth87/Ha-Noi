@@ -174,22 +174,22 @@ function drawTraditionalCurvedRoof(
   const eaveW = hw + 1.15;
   const eaveD = hd + 1.15;
   // Lower wide eave tier (diềm mái ngói mũi hài đua rộng)
-  B.solid(localRect(ob, -eaveW, eaveW, -eaveD, eaveD), zBase, zBase + roofH * 0.26, () => 'roof', 'roof', ownerId);
+  B.solid(localRect(ob, -eaveW, eaveW, -eaveD, eaveD), zBase, zBase + roofH * 0.26, () => 'heritage-roof', 'heritage-roof', ownerId);
   // Middle hipped slope tier
-  B.solid(localRect(ob, -hw * 0.86, hw * 0.86, -hd * 0.82, hd * 0.82), zBase + roofH * 0.26, zBase + roofH * 0.58, () => 'roof', 'roof', ownerId);
+  B.solid(localRect(ob, -hw * 0.86, hw * 0.86, -hd * 0.82, hd * 0.82), zBase + roofH * 0.26, zBase + roofH * 0.58, () => 'heritage-roof', 'heritage-roof', ownerId);
   // Upper hipped slope tier
-  B.solid(localRect(ob, -hw * 0.66, hw * 0.66, -hd * 0.52, hd * 0.52), zBase + roofH * 0.58, zBase + roofH * 0.86, () => 'roof', 'roof', ownerId);
+  B.solid(localRect(ob, -hw * 0.66, hw * 0.66, -hd * 0.52, hd * 0.52), zBase + roofH * 0.58, zBase + roofH * 0.86, () => 'heritage-roof', 'heritage-roof', ownerId);
   // Top ridge beam (bờ nóc) along the primary axis
   const ridgeW = Math.max(0.8, hw * 0.54);
   const ridgeD = Math.min(0.42, hd * 0.24);
-  B.solid(localRect(ob, -ridgeW, ridgeW, -ridgeD, ridgeD), zBase + roofH * 0.86, zBase + roofH + 0.28, () => 'metal', 'metal', ownerId);
+  B.solid(localRect(ob, -ridgeW, ridgeW, -ridgeD, ridgeD), zBase + roofH * 0.86, zBase + roofH + 0.28, () => 'bronze', 'bronze', ownerId);
 
   if (!ornate) return;
   // End ridge finials (kìm nóc / đầu đao bờ nóc) & central lunar/flaming pearl (lưỡng long chầu nguyệt)
   for (const su of [-1, 1] as const) {
-    B.solid(localRect(ob, su * (ridgeW - 0.22), su * (ridgeW + 0.18), -ridgeD * 1.1, ridgeD * 1.1), zBase + roofH + 0.28, zBase + roofH + 0.72, () => 'metal', 'metal', ownerId);
+    B.solid(localRect(ob, su * (ridgeW - 0.22), su * (ridgeW + 0.18), -ridgeD * 1.1, ridgeD * 1.1), zBase + roofH + 0.28, zBase + roofH + 0.72, () => 'bronze', 'bronze', ownerId);
   }
-  B.solid(regPoly(ob.c, Math.min(0.45, ridgeD * 1.25), 8), zBase + roofH + 0.28, zBase + roofH + 0.82, () => 'metal', 'metal', ownerId);
+  B.solid(regPoly(ob.c, Math.min(0.45, ridgeD * 1.25), 8), zBase + roofH + 0.28, zBase + roofH + 0.82, () => 'bronze', 'bronze', ownerId);
 
   // 4 upturned corner dragon-tail eaves (4 đầu đao cong vút ở 4 góc mái)
   for (const su of [-1, 1] as const) {
@@ -199,7 +199,7 @@ function drawTraditionalCurvedRoof(
       const pMid = localPt(ob, su * (hw * 0.66), sv * (hd * 0.52));
       B.line(V(pMid[0], pMid[1], zBase + roofH * 0.84), V(pCorner[0], pCorner[1], zBase + roofH * 0.26), 'crease');
       B.line(V(pCorner[0], pCorner[1], zBase + roofH * 0.26), V(pTip[0], pTip[1], zBase + roofH * 0.62), 'crease');
-      B.solid(regPoly(pTip, 0.24, 6), zBase + roofH * 0.22, zBase + roofH * 0.65, () => 'metal', 'metal', ownerId);
+      B.solid(regPoly(pTip, 0.24, 6), zBase + roofH * 0.22, zBase + roofH * 0.65, () => 'bronze', 'bronze', ownerId);
     }
   }
 }
@@ -438,7 +438,97 @@ export function landmarkExtraBoundsPts(b: Building): Vec2[] {
   }
 }
 
+const WOOD_HERITAGE_MODELS = new Set<string>(['one-pillar-pagoda', 'nha-san-bac-ho']);
+
+const TRADITIONAL_HERITAGE_MODELS = new Set<string>([
+  'khue-van-cac',
+  'van-mieu-mon',
+  'van-mieu-gate',
+  'van-mieu-hall',
+  'nha-thai-hoc',
+  'hanoi-flag-tower',
+  'doan-mon',
+  'thap-rua',
+  'den-ngoc-son',
+  'o-quan-chuong',
+  'chua-quan-su',
+  'chua-phuc-khanh',
+  'traditional-pagoda',
+  'chua-tran-quoc',
+  'den-quan-thanh',
+  'phu-tay-ho',
+  'den-hai-ba-trung',
+  'traditional-temple',
+  'traditional-mausoleum',
+  'lang-lua-van-phuc',
+  'bac-mon',
+  'dien-kinh-thien',
+  'hau-lau',
+  'co-loa-citadel',
+  'thap-hoa-phong',
+  'nha-co-ma-may',
+  'mountain-pagoda-complex',
+  'ancient-communal-house',
+  'ancient-village-gate',
+]);
+
+const COLONIAL_HERITAGE_MODELS = new Set<string>([
+  'presidential-palace',
+  'hanoi-opera-house',
+  'trang-tien-plaza',
+  'cho-dong-xuan',
+  'hoa-lo-prison',
+  'national-history-museum',
+  'party-central-hq',
+  'bac-bo-phu',
+  'ministry-palace',
+  'traditional-market-hall',
+  'ga-ha-noi',
+  'french-colonial-university',
+  'fine-arts-museum',
+  'metropole-hotel',
+]);
+
+const STONE_MONUMENT_MODELS = new Set<string>([
+  'ho-chi-minh-mausoleum',
+  'bac-son-memorial',
+  'st-joseph-cathedral',
+  'church-hall',
+  'tuong-dai-hoa-binh',
+  'city-gate-stele',
+  'nha-tho-cua-bac',
+  'nha-tho-ham-long',
+  'al-noor-mosque',
+  'statue-monument-plaza',
+  'thap-nuoc-hang-dau',
+]);
+
+/** Maps generic building surfaces to realistic architectural surfaces for landmarks & monuments. */
+export function landmarkSurfaceMap(model?: string): Partial<Record<Surface, Surface>> | null {
+  if (!model) return null;
+  if (WOOD_HERITAGE_MODELS.has(model)) {
+    return { wall: 'wood', roof: 'heritage-roof', walk: 'stone', metal: 'bronze' };
+  }
+  if (TRADITIONAL_HERITAGE_MODELS.has(model)) {
+    return { wall: 'heritage-wall', roof: 'heritage-roof', walk: 'stone', metal: 'bronze' };
+  }
+  if (COLONIAL_HERITAGE_MODELS.has(model)) {
+    return { wall: 'heritage-wall', roof: 'heritage-roof', walk: 'stone', glass: 'tower-glass' };
+  }
+  if (STONE_MONUMENT_MODELS.has(model)) {
+    return { wall: 'stone', roof: 'heritage-roof', walk: 'stone', metal: 'bronze' };
+  }
+  if (model === 'bao-tang-dan-toc-hoc') {
+    return { wall: 'stone', roof: 'wood', walk: 'stone', metal: 'bronze', glass: 'tower-glass' };
+  }
+  return { glass: 'tower-glass', walk: 'stone' };
+}
+
 export function drawLandmarkBuilding(B: Batch, b: Building, level: Detail): boolean {
+  return B.withSurfaceMap(landmarkSurfaceMap(b.model), () => drawLandmarkBuildingInner(B, b, level));
+}
+
+function drawLandmarkBuildingInner(B: Batch, b: Building, level: Detail): boolean {
   switch (b.model) {
     case 'one-pillar-pagoda':
       drawOnePillarPagoda(B, b, level);
@@ -2197,6 +2287,14 @@ function drawTraditionalMausoleum(B: Batch, b: Building, level: Detail) {
 // 36. BESPOKE 3D MONUMENT & HERITAGE STATUES (Tượng đài Lý Thái Tổ, Quang Trung, Lê-nin, B52…)
 // ============================================================================
 export function drawMonumentFeature(B: Batch, f: Feature) {
+  const name = f.name ?? '';
+  const map: Partial<Record<Surface, Surface>> = /B52/i.test(name)
+    ? { wall: 'stone', walk: 'stone' }
+    : { wall: 'stone', walk: 'stone', roof: 'heritage-roof', metal: 'bronze' };
+  B.withSurfaceMap(map, () => drawMonumentFeatureInner(B, f));
+}
+
+function drawMonumentFeatureInner(B: Batch, f: Feature) {
   const [x, y] = f.at;
   const name = f.name ?? '';
   const oct = (cx: number, cy: number, r: number, n = 8, rot = Math.PI / 8): Vec2[] =>

@@ -109,18 +109,18 @@ export function drawTraditionalCurvedRoof(
 ) {
   const eaveW = hw + 1.15;
   const eaveD = hd + 1.15;
-  B.solid(localRect(ob, -eaveW, eaveW, -eaveD, eaveD), zBase, zBase + roofH * 0.26, () => 'roof', 'roof', ownerId);
-  B.solid(localRect(ob, -hw * 0.86, hw * 0.86, -hd * 0.82, hd * 0.82), zBase + roofH * 0.26, zBase + roofH * 0.58, () => 'roof', 'roof', ownerId);
-  B.solid(localRect(ob, -hw * 0.66, hw * 0.66, -hd * 0.52, hd * 0.52), zBase + roofH * 0.58, zBase + roofH * 0.86, () => 'roof', 'roof', ownerId);
+  B.solid(localRect(ob, -eaveW, eaveW, -eaveD, eaveD), zBase, zBase + roofH * 0.26, () => 'heritage-roof', 'heritage-roof', ownerId);
+  B.solid(localRect(ob, -hw * 0.86, hw * 0.86, -hd * 0.82, hd * 0.82), zBase + roofH * 0.26, zBase + roofH * 0.58, () => 'heritage-roof', 'heritage-roof', ownerId);
+  B.solid(localRect(ob, -hw * 0.66, hw * 0.66, -hd * 0.52, hd * 0.52), zBase + roofH * 0.58, zBase + roofH * 0.86, () => 'heritage-roof', 'heritage-roof', ownerId);
   const ridgeW = Math.max(0.8, hw * 0.54);
   const ridgeD = Math.min(0.42, hd * 0.24);
-  B.solid(localRect(ob, -ridgeW, ridgeW, -ridgeD, ridgeD), zBase + roofH * 0.86, zBase + roofH + 0.28, () => 'metal', 'metal', ownerId);
+  B.solid(localRect(ob, -ridgeW, ridgeW, -ridgeD, ridgeD), zBase + roofH * 0.86, zBase + roofH + 0.28, () => 'bronze', 'bronze', ownerId);
 
   if (!ornate) return;
   for (const su of [-1, 1] as const) {
-    B.solid(localRect(ob, su * (ridgeW - 0.22), su * (ridgeW + 0.18), -ridgeD * 1.1, ridgeD * 1.1), zBase + roofH + 0.28, zBase + roofH + 0.72, () => 'metal', 'metal', ownerId);
+    B.solid(localRect(ob, su * (ridgeW - 0.22), su * (ridgeW + 0.18), -ridgeD * 1.1, ridgeD * 1.1), zBase + roofH + 0.28, zBase + roofH + 0.72, () => 'bronze', 'bronze', ownerId);
   }
-  B.solid(regPoly(ob.c, Math.min(0.45, ridgeD * 1.25), 8), zBase + roofH + 0.28, zBase + roofH + 0.82, () => 'metal', 'metal', ownerId);
+  B.solid(regPoly(ob.c, Math.min(0.45, ridgeD * 1.25), 8), zBase + roofH + 0.28, zBase + roofH + 0.82, () => 'bronze', 'bronze', ownerId);
 
   for (const su of [-1, 1] as const) {
     for (const sv of [-1, 1] as const) {
@@ -129,7 +129,7 @@ export function drawTraditionalCurvedRoof(
       const pMid = localPt(ob, su * (hw * 0.66), sv * (hd * 0.52));
       B.line(V(pMid[0], pMid[1], zBase + roofH * 0.84), V(pCorner[0], pCorner[1], zBase + roofH * 0.26), 'crease');
       B.line(V(pCorner[0], pCorner[1], zBase + roofH * 0.26), V(pTip[0], pTip[1], zBase + roofH * 0.62), 'crease');
-      B.solid(regPoly(pTip, 0.24, 6), zBase + roofH * 0.22, zBase + roofH * 0.65, () => 'metal', 'metal', ownerId);
+      B.solid(regPoly(pTip, 0.24, 6), zBase + roofH * 0.22, zBase + roofH * 0.65, () => 'bronze', 'bronze', ownerId);
     }
   }
 }

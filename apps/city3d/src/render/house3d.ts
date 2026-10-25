@@ -256,7 +256,7 @@ export function buildHouse(B: Batch, b: Building, spec: HouseSpec, level: 2 | 3,
     if (level === 3) roofItems(base, spec.topRoom ? -spec.topSetback - 0.3 : oh - 0.3, spec.topRoom ? Math.max(back + 0.6, -spec.topSetback - Math.max(3, d * 0.5)) + 0.3 : back + 0.4);
   } else {
     // pitched: a gable with its triangle to the street (metal2, tile), or one slope falling to the street (metal1)
-    const s0 = oh + 0.3, s1 = back - 0.3, rise = spec.roof === 'metal1' ? 1.2 : Math.max(1.2, w * 0.3), surf: Surface = spec.roof === 'tile' ? 'roof' : 'metal';
+    const s0 = oh + 0.3, s1 = back - 0.3, rise = spec.roof === 'metal1' ? 1.2 : Math.max(1.2, w * 0.3), surf: Surface = spec.roof === 'tile' ? 'heritage-roof' : 'metal';
     if (spec.roof === 'metal1') {
       panel(surf, [[-0.2, s0, top + 0.2], [w + 0.2, s0, top + 0.2], [w + 0.2, s1, top + rise], [-0.2, s1, top + rise]], up);
     } else {

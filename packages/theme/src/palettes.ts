@@ -39,3 +39,21 @@ export function accentCss(accents: readonly Accent[]): string {
 :root[data-accent="${k}"][data-theme="light"] { ${vars(la, lh, false)} }`;
   }).join('\n');
 }
+
+export type MapPaletteId = '0' | '1' | '2' | '3';
+
+export type MapPaletteSwatch = readonly [
+  id: MapPaletteId,
+  /** 4 representative swatch colors: [water, foliage, heritageRoof, heritageWall] */
+  swatches: readonly [string, string, string, string],
+];
+
+/** Visual swatch definitions for the 4 map surface color palettes (0 = Monochrome, 1..3 = Tonal Realistic). */
+export const MAP_PALETTES: readonly MapPaletteSwatch[] = [
+  ['0', ['#1b1d1f', '#3d4144', '#6a6f73', '#c3c6c8']],
+  ['1', ['#1578a8', '#2d9448', '#c93824', '#ebb844']],
+  ['2', ['#0e8f84', '#d9822b', '#941b2f', '#f5c78e']],
+  ['3', ['#2b4cc2', '#12a68d', '#a82468', '#b892e6']],
+] as const;
+
+

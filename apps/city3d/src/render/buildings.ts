@@ -24,6 +24,7 @@ import {
   isFlagVisibleAtSpan,
   landmarkBeaconsOf,
   landmarkFlagsOf,
+  landmarkSurfaceMap,
   registerFlagPainter,
   stepSharedWavingFlags,
   stepWavingFlag,
@@ -148,22 +149,24 @@ export function buildBuildings(B: Batch, city: City, list: readonly Building[], 
       buildHouse(B, b, b.house.spec, level as 2 | 3, { neighbourAt: end => neighbour(b, probe(end > 0 ? w + 0.6 : -0.6)), heightAt: pt => neighbour(b, pt) });
       continue;
     }
-    for (const part of b.parts) {
-      const glass = part.facade === 'glass';
-      B.solid(part.footprint, part.z0, partTop(part), () => (glass ? 'glass' : 'wall'), 'roof', b.id);
-      if (!b.model && part.roof === 'pitched') {
-        const pc = centroid(part.footprint), pz = partTop(part);
-        B.solid(scaleRing(part.footprint, pc, 1.04), pz, pz + 0.45, () => 'roof', 'roof', b.id);
-        B.solid(scaleRing(part.footprint, pc, 0.72), pz + 0.45, pz + 1.45, () => 'roof', 'roof', b.id);
+    B.withSurfaceMap(landmarkSurfaceMap(b.model), () => {
+      for (const part of b.parts) {
+        const glass = part.facade === 'glass';
+        B.solid(part.footprint, part.z0, partTop(part), () => (glass ? 'glass' : 'wall'), 'roof', b.id);
+        if (!b.model && part.roof === 'pitched') {
+          const pc = centroid(part.footprint), pz = partTop(part);
+          B.solid(scaleRing(part.footprint, pc, 1.04), pz, pz + 0.45, () => 'heritage-roof', 'heritage-roof', b.id);
+          B.solid(scaleRing(part.footprint, pc, 0.72), pz + 0.45, pz + 1.45, () => 'heritage-roof', 'heritage-roof', b.id);
+        }
+        if (level === 0) continue;
+        const style: Style = glass ? 'curtain' : b.model === 'viet-tower' || (level >= 2 && b.kind === 'office') ? 'ribbon' : 'punched';
+        windows(B, b, part, style, level, neighbour, !b.model && !b.house && part.id === b.id ? shopEdge(b) : -1);
       }
-      if (level === 0) continue;
-      const style: Style = glass ? 'curtain' : b.model === 'viet-tower' || (level >= 2 && b.kind === 'office') ? 'ribbon' : 'punched';
-      windows(B, b, part, style, level, neighbour, !b.model && !b.house && part.id === b.id ? shopEdge(b) : -1);
-    }
-    if (b.model === 'vpbank-tower') drawVpbankTower(B, b, level);
-    else if (b.model === 'national-cinema') drawNationalCinema(B, b, level);
-    else if (b.model && drawLandmarkBuilding(B, b, level)) { /* drawn by landmark builder */ }
-    else if (level === 3 && !b.house && !b.model && b.kind !== 'kiosk') roofTanks(B, b);
+      if (b.model === 'vpbank-tower') drawVpbankTower(B, b, level);
+      else if (b.model === 'national-cinema') drawNationalCinema(B, b, level);
+      else if (b.model && drawLandmarkBuilding(B, b, level)) { /* drawn by landmark builder */ }
+      else if (level === 3 && !b.house && !b.model && b.kind !== 'kiosk') roofTanks(B, b);
+    });
   }
 }
 

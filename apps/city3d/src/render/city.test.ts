@@ -73,9 +73,9 @@ describe('city geometry', () => {
     const vt = city.buildings.find(b => b.model === 'viet-tower')!, c = vt.parts[0]!.footprint[0]!;
     expect(g.floorAt(vt.id, new THREE.Vector3(c[0], 0.5, c[1]))).toBe(floorId(vt, 1));
     expect(g.floorAt(vt.id, new THREE.Vector3(c[0], 66, c[1]))).toBe(floorId(vt, 18));
-    // every building can be clicked: some of its wall (or glass) triangles map back to it
+    // every building can be clicked: some of its surface triangles map back to it
     const owners = new Set<string>();
-    for (const s of ['wall', 'glass', 'roof'] as const) {
+    for (const s of g.surfaces.keys()) {
       const n = g.surfaces.get(s)!.getAttribute('position').count / 3;
       for (let f = 0; f < n; f++) { const o = g.ownerOf(s, f); if (o) owners.add(o); }
     }

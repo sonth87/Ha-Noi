@@ -10,6 +10,11 @@ export const STORAGE_KEYS = {
   STREET_LABELS: 'city3d-street-labels',
   PLACE_INFO: 'city3d-place-info',
   LOCALE: 'city3d-locale',
+  MAP_PALETTE: 'city3d-map-palette',
+  ACCENT: 'city3d-accent',
+  UI_GLASS_MODE: 'city3d-ui-glass-mode',
+  UI_OPACITY: 'city3d-ui-opacity',
+  UI_LENS_SCALE: 'city3d-ui-lens-scale',
 } as const;
 
 /** Bumped when quality defaults change in a way a saved setting should not outlive */
@@ -129,20 +134,29 @@ export const MOVE_KEYS: Readonly<Record<string, [number, number]>> = {
 };
 
 export const SURFACE_TOKEN: Record<Surface, string> = {
-  ground: '--body',
-  wall: '--body',
-  roof: '--deck',
-  glass: '--glass',
-  road: '--recess',
-  walk: '--deck',
-  marking: '--line',
-  grass: '--panel',
-  water: '--glass',
-  pitch: '--recess',
-  plaza: '--deck',
-  metal: '--deck',
-  awning: '--deck',
-  plant: '--panel',
+  ground: '--surf-ground',
+  wall: '--surf-wall',
+  roof: '--surf-roof',
+  glass: '--surf-glass',
+  road: '--surf-road',
+  walk: '--surf-walk',
+  marking: '--surf-marking',
+  grass: '--surf-grass',
+  water: '--surf-water',
+  pitch: '--surf-pitch',
+  plaza: '--surf-plaza',
+  metal: '--surf-metal',
+  awning: '--surf-awning',
+  plant: '--surf-plant',
+  'plant-mid': '--surf-plant-mid',
+  'plant-dark': '--surf-plant-dark',
+  'tree-trunk': '--surf-tree-trunk',
+  'heritage-roof': '--surf-heritage-roof',
+  'heritage-wall': '--surf-heritage-wall',
+  wood: '--surf-wood',
+  stone: '--surf-stone',
+  bronze: '--surf-bronze',
+  'tower-glass': '--surf-tower-glass',
 };
 
 export const SHELL_VERT = `uniform vec2 res;

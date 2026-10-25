@@ -26,27 +26,39 @@ pnpm dev:3d        # http://localhost:5190
 | `Q` / `E` | Xoay 90° sang trái / phải |
 | Click một tòa | Bật / tắt đèn **tầng** được click |
 | `Space` | Bật hết / tắt hết |
-| `N` hoặc `T`, nút **Ngày / Đêm** | **Ngày** (giao diện sáng, đèn tắt) ↔ **Đêm** (giao diện tối, cửa sổ sáng dần lên, đèn đường và đèn vườn sáng, xung sáng chạy dọc dây điện, xe bật đèn, đèn báo trên ăng-ten Việt Tower nhấp nháy). Mặc định là Ngày; lựa chọn được nhớ. Từng loại đèn vẫn chỉnh riêng ở bảng **Đèn** |
-| `G` | Mở / đóng bảng **Đèn · chất lượng** |
+| `N` hoặc `T`, nút **Ngày / Đêm** | **Ngày** (giao diện sáng, đèn tắt) ↔ **Đêm** (giao diện tối, cửa sổ sáng dần lên, đèn đường và đèn vườn sáng, xung sáng chạy dọc dây điện, xe bật đèn, đèn báo trên ăng-ten Việt Tower nhấp nháy). Mặc định là Ngày; lựa chọn được nhớ. Từng loại đèn vẫn chỉnh riêng ở tab **Ánh sáng** |
+| 4 ô màu trên thanh công cụ phải | Đổi nhanh giữa **Đơn sắc** (mặc định `iso-glow`) và **3 tông màu thực tế** (`Màu 1`, `Màu 2`, `Màu 3`) phủ màu cho đường xá, hồ nước, công viên, cây xanh và vật liệu kiến trúc thực tế của các công trình lớn, di tích, đền chùa, nhà thờ, tượng đài |
+| `G`, nút **Tùy chỉnh** | Mở / đóng Drawer cài đặt nổi bên phải gồm 3 tab: **Giao diện**, **Ánh sáng**, **Đồ họa** |
 
 Trên màn hình cảm ứng (điện thoại / máy tính bảng): **một ngón** để di chuyển, **hai ngón** ở chế độ 2D để vừa chụm phóng to/thu nhỏ vừa kéo, ở chế độ 3D để chụm phóng và xoay/nghiêng; **chạm đúp** để bay tới vị trí chạm, **chạm đơn** vào tòa nhà để bật/tắt đèn tầng. Trên điện thoại, ứng dụng tự chọn mức chất lượng *Trung bình* và thu gọn bảng cài đặt lúc mở để ưu tiên không gian cảm ứng mượt 60 fps.
 
 ## Khu phố & Công trình trên đế
 
-- **Bản đồ mở rộng**: bao phủ **Thái Hà, Tây Sơn, Ngã Tư Sở, Chùa Bộc – Phạm Ngọc Thạch, Nguyễn Lương Bằng, Ô Chợ Dừa, Xã Đàn, Hoàng Cầu (và Hồ Hoàng Cầu), Láng Hạ**. Dọc trục Hoàng Cầu – Hào Nam có **tuyến metro 2A trên cao** cùng **ga Thái Hà** và **ga La Thành**: tàu 4 toa chạy hai chiều, dừng ở ga khoảng 25 giây (cửa toa và mép sân ga sáng lên).
-- **Công trình trên đế (`iso-glow`)**: chọn một mục trong dropdown **Công trình** ở thanh trên để đặt riêng công trình đó lên đế mô hình vát góc có đường trước nhà, vỉa hè, cột đèn và cây xanh (vẫn xoay 2D/3D, đổi Ngày/Đêm và click bật đèn từng tầng).
+- **Bản đồ mở rộng**: bao phủ 6 khu vực trung tâm Hà Nội (**Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân**) với danh mục 208 công trình biểu tượng thuộc 13 nhóm. Dọc trục Hoàng Cầu – Hào Nam có **tuyến metro 2A trên cao** cùng **ga Thái Hà** và **ga La Thành**: tàu 4 toa chạy hai chiều, dừng ở ga khoảng 25 giây (cửa toa và mép sân ga sáng lên).
+- **Công trình trên đế (`iso-glow`)**: chọn một mục trong dropdown **Công trình** ở thanh nổi phía trên trái để đặt riêng công trình đó lên đế mô hình vát góc có đường trước nhà, vỉa hè, cột đèn và cây xanh (vẫn xoay 2D/3D, đổi bảng màu, đổi Ngày/Đêm và click bật đèn từng tầng).
 
-Xe chạy theo đèn tín hiệu ở các nút có đèn: chân trang hiện màu đèn và số giây còn lại của Tây Sơn và Thái Hà. Ô tô lên cầu vượt, xe máy chạy hai mép làn.
+Xe chạy theo đèn tín hiệu ở các nút có đèn: viên thuốc trạng thái góc dưới trái hiện fps, màu đèn và số giây còn lại của Tây Sơn và Thái Hà. Ô tô lên cầu vượt, xe máy chạy hai mép làn.
 
-## Bảng Đèn
+## Bảng Tùy chỉnh (3 Tab: Giao diện · Ánh sáng · Đồ họa)
 
-Nút **Đèn · chất lượng** (phím `G`) mở bảng bên phải. Mục **Đèn**:
+Nút **Tùy chỉnh** (phím `G`) mở Drawer nổi bên phải:
+
+### 1. Tab Giao diện
+- **Nền thanh công cụ (UI)**:
+  - **Tắt (Đặc)** *(Mặc định)*: nền thanh công cụ đặc 100%, hoàn toàn không trong suốt.
+  - **Mờ (Tint)**: nền kính mờ trong suốt, có thanh trượt chỉnh **Độ trong suốt (10%–90%)**.
+  - **Kính (Lens)**: hiệu ứng kính khúc xạ thấu kính quang học Apple Optical Lens (`sonth87/liquid-glass`), có thanh trượt chỉnh **Độ trong suốt (10%–90%)** và **Khúc xạ thấu kính (0–180)**.
+- **Màu bản đồ**: chọn trực tiếp bằng 4 thẻ ô màu trực quan (**Đơn sắc**, **Màu 1**, **Màu 2**, **Màu 3**).
+- **Màu đèn nhấn**: chọn 6 tông màu đèn nhấn ban đêm (`Sodium`, `Tungsten`, `Neon`, `Signal`, `Dusk`, `Moon`).
+- **Hiển thị trên bản đồ**: chỉnh kiểu **Tên đường**, **Thông tin địa điểm**, và công tắc bật/tắt **Nhìn xuyên (`X`)**.
+
+### 2. Tab Ánh sáng
 - **Đèn nhà**: *Tự động* (tối mới bật), *Bật* (sáng cả ban ngày), *Tắt*. **Cửa sáng** 0–100%: tỉ lệ cửa sổ có đèn, rải đều trên mọi tòa (tòa nào cũng lốm đốm); kéo lên thì thêm cửa, kéo xuống thì bớt; 100% là tất cả. Cửa sáng không đều: có cửa rất sáng, cửa mờ. Click một tầng để bật cả tầng đó.
 - **Đèn xe**: *Tự động* (tối mới bật), *Bật*, *Tắt*: đèn pha, đèn hậu, hộp đèn taxi và vệt đèn pha trên đường.
 - **Đèn đường**: *Tự động* (tối mới bật, mặc định), *Bật*, *Tắt*: bóng đèn và vùng sáng trên mặt đường (vùng sáng chỉ ở theme tối).
 - **Độ glow**: quầng sáng quanh thứ đang sáng (chỉ ở theme tối); 0% là không glow.
 
-## Bảng chất lượng
+### 3. Tab Đồ họa
 
 Chọn một mức (Thấp → Rất cao) hoặc chỉnh từng tùy chọn:
 - **Chi tiết nhà**: L0 chỉ khối · L1 có cửa sổ · L2 nhà đủ hình (tầng trệt, mái hiên, biển, ban công, mái) · L3 mọi chi tiết nhỏ (chậu cây, cục nóng, bồn nước, ăng-ten…).

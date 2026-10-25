@@ -8,6 +8,15 @@
   --glass:#0f1011; --glass-on:#1a1410; --recess:#0e0f10;
   --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
   --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+  --surf-ground:var(--body); --surf-wall:var(--body); --surf-roof:var(--deck);
+  --surf-glass:var(--glass); --surf-road:var(--recess); --surf-walk:var(--deck);
+  --surf-marking:var(--line); --surf-grass:var(--panel); --surf-water:var(--glass);
+  --surf-pitch:var(--recess); --surf-plaza:var(--deck); --surf-metal:var(--deck);
+  --surf-awning:var(--deck); --surf-plant:var(--panel); --surf-plant-mid:var(--body);
+  --surf-plant-dark:var(--recess); --surf-tree-trunk:var(--body);
+  --surf-heritage-roof:var(--deck); --surf-heritage-wall:var(--body);
+  --surf-wood:var(--body); --surf-stone:var(--deck); --surf-bronze:var(--deck);
+  --surf-tower-glass:var(--glass);
 }
 @media (prefers-color-scheme: light) { :root:not([data-theme="dark"]) {
   color-scheme: light;
@@ -22,6 +31,85 @@
   --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
   --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
   --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+}
+
+/* ---------- Map Color Palettes (ADR-056: 0 = Mono default, 1 / 2 / 3 = Distinct Tonal Palettes) ---------- */
+/* Palette 1: Natural Daylight Hanoi — Cerulean water, Emerald foliage, Terracotta roofs, Imperial ochre & warm sandstone */
+:root[data-map-palette="1"] {
+  --bg:#091017; --panel:#111a24; --edge:#1f2f40; --line:#3a5068; --detail:#293a4d; --body:#1c2530; --deck:#24303d;
+  --surf-ground:#121922; --surf-road:#1a2430; --surf-walk:#283442; --surf-marking:#6c8299;
+  --surf-water:#0d4f78; --surf-grass:#154226; --surf-pitch:#1b5732; --surf-plaza:#2d3036;
+  --surf-plant:#2d8548; --surf-plant-mid:#216937; --surf-plant-dark:#164d27; --surf-tree-trunk:#4a3222;
+  --surf-wall:#242b33; --surf-roof:#2f3842; --surf-glass:#14283d; --surf-metal:#526478; --surf-awning:#8f3d2b;
+  --surf-heritage-roof:#b53322; --surf-heritage-wall:#c79632; --surf-wood:#633d26; --surf-stone:#68707a; --surf-bronze:#bd9238; --surf-tower-glass:#1a5280;
+}
+@media (prefers-color-scheme: light) { :root[data-map-palette="1"]:not([data-theme="dark"]) {
+  --bg:#dde5eb; --panel:#f4f6f8; --edge:#c8d3dc; --line:#6e7d8c; --detail:#aebbc7; --body:#ede7dc; --deck:#e0d6c5;
+  --surf-ground:#dce3de; --surf-road:#525d69; --surf-walk:#d6cfc2; --surf-marking:#f7f8f9;
+  --surf-water:#1578a8; --surf-grass:#62ab6a; --surf-pitch:#489652; --surf-plaza:#d9cfc0;
+  --surf-plant:#2d9448; --surf-plant-mid:#227839; --surf-plant-dark:#185c2b; --surf-tree-trunk:#6e4b34;
+  --surf-wall:#f2eadc; --surf-roof:#d6c8b4; --surf-glass:#8cb8d6; --surf-metal:#7b8a99; --surf-awning:#cc583f;
+  --surf-heritage-roof:#c93824; --surf-heritage-wall:#ebb844; --surf-wood:#804e30; --surf-stone:#b8b2a6; --surf-bronze:#c79838; --surf-tower-glass:#2e82b8;
+} }
+:root[data-map-palette="1"][data-theme="light"] {
+  --bg:#dde5eb; --panel:#f4f6f8; --edge:#c8d3dc; --line:#6e7d8c; --detail:#aebbc7; --body:#ede7dc; --deck:#e0d6c5;
+  --surf-ground:#dce3de; --surf-road:#525d69; --surf-walk:#d6cfc2; --surf-marking:#f7f8f9;
+  --surf-water:#1578a8; --surf-grass:#62ab6a; --surf-pitch:#489652; --surf-plaza:#d9cfc0;
+  --surf-plant:#2d9448; --surf-plant-mid:#227839; --surf-plant-dark:#185c2b; --surf-tree-trunk:#6e4b34;
+  --surf-wall:#f2eadc; --surf-roof:#d6c8b4; --surf-glass:#8cb8d6; --surf-metal:#7b8a99; --surf-awning:#cc583f;
+  --surf-heritage-roof:#c93824; --surf-heritage-wall:#ebb844; --surf-wood:#804e30; --surf-stone:#b8b2a6; --surf-bronze:#c79838; --surf-tower-glass:#2e82b8;
+}
+
+/* Palette 2: Warm Sunset & Autumn — Jade-Turquoise water, Golden-Amber foliage, Burgundy roofs, Apricot-Clay blocks */
+:root[data-map-palette="2"] {
+  --bg:#140d0a; --panel:#211612; --edge:#38261f; --line:#634538; --detail:#473128; --body:#2b1e18; --deck:#382720;
+  --surf-ground:#1c130f; --surf-road:#261a15; --surf-walk:#3b2921; --surf-marking:#997663;
+  --surf-water:#0b5752; --surf-grass:#383318; --surf-pitch:#4a431d; --surf-plaza:#402d24;
+  --surf-plant:#b86f20; --surf-plant-mid:#8f5316; --surf-plant-dark:#663a0f; --surf-tree-trunk:#4d2d1b;
+  --surf-wall:#33231b; --surf-roof:#452f24; --surf-glass:#183336; --surf-metal:#73584b; --surf-awning:#9e4726;
+  --surf-heritage-roof:#8c192b; --surf-heritage-wall:#cc7e24; --surf-wood:#6b3b20; --surf-stone:#7a6457; --surf-bronze:#cc882b; --surf-tower-glass:#185956;
+}
+@media (prefers-color-scheme: light) { :root[data-map-palette="2"]:not([data-theme="dark"]) {
+  --bg:#ede0d1; --panel:#faf3eb; --edge:#decab4; --line:#8c6e58; --detail:#c7b099; --body:#f7dec4; --deck:#e3bea0;
+  --surf-ground:#ebd9c5; --surf-road:#634a3d; --surf-walk:#e3c8b0; --surf-marking:#fff8f0;
+  --surf-water:#0e8f84; --surf-grass:#b8a44c; --surf-pitch:#9e8e38; --surf-plaza:#e6c9ad;
+  --surf-plant:#d9822b; --surf-plant-mid:#b8681d; --surf-plant-dark:#8f4e14; --surf-tree-trunk:#6e4128;
+  --surf-wall:#f7e1ca; --surf-roof:#deb595; --surf-glass:#8cc4bf; --surf-metal:#947665; --surf-awning:#d15c34;
+  --surf-heritage-roof:#941b2f; --surf-heritage-wall:#f09d38; --surf-wood:#874928; --surf-stone:#c9b19c; --surf-bronze:#d48c32; --surf-tower-glass:#24827b;
+} }
+:root[data-map-palette="2"][data-theme="light"] {
+  --bg:#ede0d1; --panel:#faf3eb; --edge:#decab4; --line:#8c6e58; --detail:#c7b099; --body:#f7dec4; --deck:#e3bea0;
+  --surf-ground:#ebd9c5; --surf-road:#634a3d; --surf-walk:#e3c8b0; --surf-marking:#fff8f0;
+  --surf-water:#0e8f84; --surf-grass:#b8a44c; --surf-pitch:#9e8e38; --surf-plaza:#e6c9ad;
+  --surf-plant:#d9822b; --surf-plant-mid:#b8681d; --surf-plant-dark:#8f4e14; --surf-tree-trunk:#6e4128;
+  --surf-wall:#f7e1ca; --surf-roof:#deb595; --surf-glass:#8cc4bf; --surf-metal:#947665; --surf-awning:#d15c34;
+  --surf-heritage-roof:#941b2f; --surf-heritage-wall:#f09d38; --surf-wood:#874928; --surf-stone:#c9b19c; --surf-bronze:#d48c32; --surf-tower-glass:#24827b;
+}
+
+/* Palette 3: Cool Indigo & Cyber-Mint — Royal Cobalt water, Aqua-Mint foliage, Berry-Plum roofs, Periwinkle blocks */
+:root[data-map-palette="3"] {
+  --bg:#080b18; --panel:#10152b; --edge:#1f2852; --line:#3b4b8c; --detail:#283466; --body:#172040; --deck:#202c57;
+  --surf-ground:#0c1124; --surf-road:#141c38; --surf-walk:#212e59; --surf-marking:#6377b8;
+  --surf-water:#1c338f; --surf-grass:#0f3838; --surf-pitch:#134a4a; --surf-plaza:#1e294f;
+  --surf-plant:#148f7b; --surf-plant-mid:#0f6e5f; --surf-plant-dark:#0a4f44; --surf-tree-trunk:#362838;
+  --surf-wall:#1b2547; --surf-roof:#263463; --surf-glass:#132b59; --surf-metal:#4c5d94; --surf-awning:#78285c;
+  --surf-heritage-roof:#8f1d58; --surf-heritage-wall:#8c68bd; --surf-wood:#4f324a; --surf-stone:#55628f; --surf-bronze:#8c6ec2; --surf-tower-glass:#165c9e;
+}
+@media (prefers-color-scheme: light) { :root[data-map-palette="3"]:not([data-theme="dark"]) {
+  --bg:#d5dff2; --panel:#f0f4fc; --edge:#bdcce8; --line:#60739c; --detail:#9eb0d4; --body:#dce6f7; --deck:#c3d2ed;
+  --surf-ground:#d2ddf2; --surf-road:#3d4a6e; --surf-walk:#c5d2eb; --surf-marking:#f2f6ff;
+  --surf-water:#2b4cc2; --surf-grass:#56b8a6; --surf-pitch:#3da390; --surf-plaza:#c3d0e8;
+  --surf-plant:#12a68d; --surf-plant-mid:#0d8570; --surf-plant-dark:#096353; --surf-tree-trunk:#5c455e;
+  --surf-wall:#dee7f7; --surf-roof:#bdcde8; --surf-glass:#8ab4e6; --surf-metal:#6e80ab; --surf-awning:#9e3b78;
+  --surf-heritage-roof:#a82468; --surf-heritage-wall:#b892e6; --surf-wood:#6b4668; --surf-stone:#a8b6d4; --surf-bronze:#9b78cf; --surf-tower-glass:#1890db;
+} }
+:root[data-map-palette="3"][data-theme="light"] {
+  --bg:#d5dff2; --panel:#f0f4fc; --edge:#bdcce8; --line:#60739c; --detail:#9eb0d4; --body:#dce6f7; --deck:#c3d2ed;
+  --surf-ground:#d2ddf2; --surf-road:#3d4a6e; --surf-walk:#c5d2eb; --surf-marking:#f2f6ff;
+  --surf-water:#2b4cc2; --surf-grass:#56b8a6; --surf-pitch:#3da390; --surf-plaza:#c3d0e8;
+  --surf-plant:#12a68d; --surf-plant-mid:#0d8570; --surf-plant-dark:#096353; --surf-tree-trunk:#5c455e;
+  --surf-wall:#dee7f7; --surf-roof:#bdcde8; --surf-glass:#8ab4e6; --surf-metal:#6e80ab; --surf-awning:#9e3b78;
+  --surf-heritage-roof:#a82468; --surf-heritage-wall:#b892e6; --surf-wood:#6b4668; --surf-stone:#a8b6d4; --surf-bronze:#9b78cf; --surf-tower-glass:#1890db;
 }
 
 /* ---------- shared figure vocabulary (inside .stage) ---------- */

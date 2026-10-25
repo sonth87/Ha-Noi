@@ -301,6 +301,32 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
      - Lập đầy đủ hồ sơ dữ liệu (tên chính thức, tên gọi khác/aliases, phân nhóm 1–13, địa chỉ, quận/huyện/phường, kích thước mặt bằng, cấu trúc tầng, chất liệu mặt đứng, mã mô hình 3D riêng `model`, thuyết minh lịch sử – kiến trúc) cho toàn bộ **208 công trình** thuộc 13 nhóm tại Hà Nội.
      - Tự động gắn mô hình 3D chuyên biệt (`catEntry.model`) và thuyết minh (`catEntry.description`) cho mọi tòa nhà OSM khớp nguồn hoặc khớp tên/alias trong `importArea`, đồng thời đưa toàn bộ 208 công trình vào danh mục **3D Diorama Showcase** (`catalog:<id>`) phân theo đúng 13 nhóm để người dùng có thể chọn xem riêng từng công trình trên đế `iso-glow`.
 
+### ADR-056 · Hệ thống Bảng màu Bản đồ Chọn lọc (Đơn sắc + 3 Tông màu), Thiết kế lại Giao diện Mẫu 1 Tràn viền và Hiệu ứng Kính Khúc xạ `sonth87/liquid-glass` (`Off → Tint → Glass`)
+- **Trạng thái**: Đã chốt (2026-10-25, người dùng yêu cầu: phủ màu cho đường xá, hồ nước, công viên, cây xanh và chỉ tô màu thực tế cho các công trình lớn, di tích, đền chùa, miếu mạo, tượng đài trong khi giữ nhà phố bình thường trung tính; chọn trực tiếp bằng ô màu không đặt tên hoa mỹ kiểu AI; thiết kế lại toàn bộ UI theo Mẫu 1 kèm thư viện `sonth87/liquid-glass` có cấu hình từ `Off` mặc định không trong suốt sang `Tint` và `Glass`)
+- **Quyết định**:
+  1. **Hệ thống 23 bề mặt ngữ nghĩa (`Surface`) & Ánh xạ Vật liệu Kiến trúc Chọn lọc (`batch.ts`, `landmarks.ts`, `buildings.ts`, `furniture.ts`)**:
+     - Mở rộng kiểu `Surface` trong `apps/city3d/src/render/batch.ts` thêm 9 bề mặt vật liệu chuyên biệt: `'plant-mid'`, `'plant-dark'`, `'tree-trunk'`, `'heritage-roof'` (mái ngói mũi hài / ngói lưu ly), `'heritage-wall'` (tường vàng hoàng thổ / vôi truyền thống / kiến trúc Pháp), `'wood'` (gỗ lim / nhà sàn / cột gỗ), `'stone'` (đá xanh / đá hoa cương tượng đài, nhà thờ, lăng tẩm), `'bronze'` (đồng / chi tiết kim loại di tích), và `'tower-glass'` (vách kính tháp cao tầng hiện đại).
+     - Bổ sung `Batch.withSurfaceMap(map, fn)` để ánh xạ tự động các bề mặt cơ sở (`wall`, `roof`, `deck`, `glass`, `metal`) sang vật liệu thực tế **chỉ khi dựng các công trình biểu tượng, di tích lịch sử, đền chùa, đình, phủ, nhà thờ, lăng tẩm, tượng đài và tòa tháp lớn (`landmarkSurfaceMap(model)`)**, trong khi toàn bộ nhà phố/nhà ống thông thường giữ tông nền trung tính để bản đồ không rối mắt và hiệu ứng đèn cửa sổ `iso-glow` ban đêm luôn nổi bật.
+     - Cây xanh (`furniture.ts`) tách riêng thân/cành (`tree-trunk`) và 3 tầng sắc độ vòm lá (`plant`, `plant-mid`, `plant-dark`).
+     - Chi phí GPU bổ sung khi đổi bảng màu: **0 lần dựng lại hình học** — `CityView.applyTheme()` chỉ đọc lại 23 biến CSS `--surf-*` từ `@my-city/theme` và cập nhật `material.color` tức thì (`< 1 ms`).
+  2. **4 Bảng màu Bản đồ (`MAP_PALETTES` trong `@my-city/theme`) — Hiển thị bằng Ô màu Trực quan**:
+     - Hỗ trợ 4 lựa chọn bảng màu (`MapPaletteId = '0' | '1' | '2' | '3'`, lưu trong `localStorage` khóa `city3d-map-palette`, đồng bộ qua `:root[data-map-palette]` cho cả chế độ Sáng và Tối):
+       - `'0'` (`Đơn sắc`, mặc định): Tông đơn sắc nguyên bản `iso-glow` (`--surf-*` trỏ trực tiếp về `--body`, `--deck`, `--glass`, `--recess`, `--line`, `--panel`).
+       - `'1'` (`Màu 1`), `'2'` (`Màu 2`), `'3'` (`Màu 3`): 3 tông màu thực tế khác nhau cho mặt nước hồ/sông, thảm cỏ công viên, 3 sắc độ tán cây + thân gỗ, lòng đường/vỉa hè, ngói cổ, tường di tích/Pháp cổ, gỗ, đá và kính tháp cao tầng.
+     - Tuân thủ yêu cầu người dùng: **không gắn tên gọi hoa mỹ kiểu AI**; hiển thị trực tiếp bằng lưới 4 ô màu mẫu (`swatch-quad` trên thanh công cụ trên phải và `palette-card` trong Drawer cài đặt).
+  3. **Thiết kế lại Toàn bộ Giao diện theo Mẫu 1 (Floating Split Bar + Slide-over Tabbed Settings Drawer)**:
+     - Khung cảnh 3D tràn viền `100vw × 100dvh`; thay thế thanh header/footer cố định và cột phải cũ bằng các cụm nổi gọn gàng:
+       - **Thanh nổi Góc Trên Trái (`.top-left-bar`)**: Thương hiệu `My City · 3D`, menu tìm kiếm **Khu vực**, menu tìm kiếm **Công trình (208)**, menu **Trải nghiệm POV (`P`)**, và nút **Trung tâm (`H`)**.
+       - **Thanh nổi Góc Trên Phải (`.top-right-bar`)**: Bộ 4 ô màu chuyển nhanh màu bản đồ (`MAP_PALETTES`), nút **Nhìn xuyên (`X`)**, nút **Ngày/Đêm (`N`)**, nút **Ngôn ngữ (`VI/EN`)**, và nút **Tùy chỉnh (`G`)**.
+       - **Drawer Cài đặt Nổi Bên Phải Phân 3 Tab (`.panel`)**: Chia thành 3 tab ngang gọn gàng: **Giao diện** (Nền thanh công cụ UI, Màu bản đồ, Màu đèn nhấn, Hiển thị trên bản đồ), **Ánh sáng** (`LightsPanel`), và **Đồ họa** (`QualityPanel` dùng công tắc gạt `.switch-input`).
+       - **Viên thuốc Trạng thái Góc Dưới Trái (`.status-pill`)**: Hiển thị huy hiệu `{fps} fps`, thông số rút gọn và dòng ghi nguồn `© OpenStreetMap contributors` (Rule A15).
+  4. **Tích hợp Thư viện `sonth87/liquid-glass` (Apple Optical Lens) với 3 Chế độ Nền UI (`Off → Tint → Glass`)**:
+     - Triển khai `apps/city3d/src/ui/liquidGlass.ts` chuyển thể thuật toán thấu kính quang học từ `https://github.com/sonth87/liquid-glass` (vẽ normal map bo góc bằng Canvas 2D + bộ lọc SVG `<filter>` gồm 3 kênh `<feDisplacementMap>` R/G/B lệch sắc sai ghép bằng `<feBlend mode="screen">` và tự động cập nhật theo kích thước thực của từng phần tử `.ui-surface` qua `ResizeObserver`).
+     - Hỗ trợ 3 chế độ nền cho toàn bộ thanh công cụ và bảng nổi (`UiGlassMode = 'off' | 'tint' | 'glass'`, lưu `localStorage`):
+       - **`Off` (`Tắt (Đặc)` — MẶC ĐỊNH)**: Nền đặc `100%` (`var(--panel)`), hoàn toàn **không trong suốt** và không dùng `backdrop-filter`.
+       - **`Tint` (`Mờ (Tint)`)**: Kính mờ trong suốt vừa phải (`backdrop-filter: blur(16px) saturate(145%)`), cho phép chỉnh thanh trượt **Độ trong suốt (`10%–90%`)**.
+       - **`Glass` (`Kính (Lens)`)**: Hiệu ứng khúc xạ thấu kính quang học Apple Optical Lens (`sonth87/liquid-glass`), cho phép chỉnh cả **Độ trong suốt (`10%–90%`)** và **Khúc xạ thấu kính (`0–180`)**.
+
 ---
 
 ## Câu hỏi mở

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { roadNetwork, streetFurniture } from '@my-city/core';
 import { loadCitySkeletonAsync, loadCityStreamingInitAsync } from '@my-city/osm-import';
+import { MAP_PALETTES, PALETTES, accentKey } from '@my-city/theme';
 import { CityView, type PegmanDropPreview } from '@view/CityView';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
@@ -14,6 +15,13 @@ import { frameForCity, parseUrlState } from '@view/urlState';
 import { LightsPanel } from './LightsPanel';
 import { LoadingScreen, type LoadingProgress } from './LoadingScreen';
 import { QualityPanel } from './QualityPanel';
+import {
+  applyUiGlassToRoot,
+  loadUiGlassSettings,
+  saveUiGlassSettings,
+  type UiGlassMode,
+  type UiGlassSettings,
+} from './liquidGlass';
 
 let shared: CityView | null = null;
 let sharedPromise: Promise<CityView> | null = null;
@@ -361,7 +369,10 @@ function AppShell({ view: v }: { view: CityView }) {
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
   const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState(() => !isMobileDevice());
+  const [drawerTab, setDrawerTab] = useState<'appearance' | 'lights' | 'quality'>('appearance');
+  const [uiGlass, setUiGlass] = useState<UiGlassSettings>(() => loadUiGlassSettings());
   const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | 'pov' | null>(null);
   const [scSearch, setScSearch] = useState('');
   const [scCat, setScCat] = useState<string>('ALL');
@@ -375,10 +386,32 @@ function AppShell({ view: v }: { view: CityView }) {
   } | null>(null);
   const menuWrapRef = useRef<HTMLDivElement>(null);
 
+  const updateUiGlass = (patch: Partial<UiGlassSettings>) => {
+    setUiGlass(prev => {
+      const next = { ...prev, ...patch };
+      saveUiGlassSettings(next);
+      return next;
+    });
+  };
+
   useEffect(() => {
     v.mount(host.current!);
     return () => v.unmount();
   }, [v]);
+
+  useEffect(() => {
+    applyUiGlassToRoot(shellRef.current, uiGlass);
+  }, [uiGlass, panel, drawerTab, openMenu, s.showcase, s.povMode]);
+
+  useEffect(() => {
+    const el = shellRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => {
+      applyUiGlassToRoot(el, uiGlass);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [uiGlass]);
 
   useEffect(() => {
     const onDownOutside = (e: PointerEvent) => {
@@ -444,329 +477,535 @@ function AppShell({ view: v }: { view: CityView }) {
   const placeNames = PLACE_INFO_NAMES_I18N[loc];
 
   return (
-    <div className="shell">
-      <header className="top" ref={menuWrapRef}>
-        <b className="brand"><i className="dot" />My City · 3D</b>
+    <div className="shell" ref={shellRef}>
+      <main>
+        <div className="stage" ref={host} aria-label={t('stage.aria', { mode: s.mode }, loc)}>
+          {/* Floating Top-Left Navigation Pill & Top-Right Quick Actions Pill */}
+          <header className="floating-top" ref={menuWrapRef} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+            <div className="top-left-anchor">
+              <div className="top-left-bar ui-surface">
+                <b className="brand"><i className="dot" />My City · 3D</b>
+                <span className="bar-sep" aria-hidden="true" />
 
-        {/* Searchable & Categorized Popover for Công trình (Showcases) */}
-        <div className="popover-wrap">
-          <button
-            type="button"
-            className="picker-trigger"
-            aria-expanded={openMenu === 'showcase'}
-            aria-label={t('top.showcases.aria', undefined, loc)}
-            onClick={() => setOpenMenu(m => (m === 'showcase' ? null : 'showcase'))}
-          >
-            <IconBox />
-            <span className="picker-label">
-              {currentShowcase ? currentShowcase.name : t('top.showcases', { count: v.showcases.length }, loc)}
-            </span>
-            <IconChevronDown />
-          </button>
-          {openMenu === 'showcase' && (
-            <div className="popover-panel" role="dialog" aria-label={t('top.showcases.dialog', undefined, loc)}>
-              <div className="popover-search">
-                <IconSearch />
-                <input
-                  type="search"
-                  placeholder={t('top.showcases.search', undefined, loc)}
-                  value={scSearch}
-                  onChange={e => setScSearch(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="popover-tabs">
-                <button
-                  type="button"
-                  aria-pressed={scCat === 'ALL'}
-                  onClick={() => setScCat('ALL')}
-                >
-                  {t('top.showcases.all', { count: v.showcases.length }, loc)}
-                </button>
-                {scGroups.map(g => (
+                {/* Searchable & Categorized Popover Trigger for Khu vực */}
+                <div className="popover-wrap">
                   <button
-                    key={g}
                     type="button"
-                    aria-pressed={scCat === g}
-                    onClick={() => setScCat(g)}
+                    className="picker-trigger"
+                    aria-expanded={openMenu === 'place'}
+                    aria-label={t('top.places.aria', undefined, loc)}
+                    onClick={() => setOpenMenu(m => (m === 'place' ? null : 'place'))}
                   >
-                    {g}
+                    <IconMapPin />
+                    <span className="picker-label">{currentPlace.name}</span>
+                    <IconChevronDown />
                   </button>
-                ))}
-              </div>
-              <div className="popover-list">
+                </div>
+
+                {/* Searchable & Categorized Popover Trigger for Công trình (Showcases) */}
+                <div className="popover-wrap">
+                  <button
+                    type="button"
+                    className="picker-trigger"
+                    aria-expanded={openMenu === 'showcase'}
+                    aria-label={t('top.showcases.aria', undefined, loc)}
+                    onClick={() => setOpenMenu(m => (m === 'showcase' ? null : 'showcase'))}
+                  >
+                    <IconBox />
+                    <span className="picker-label">
+                      {currentShowcase ? currentShowcase.name : t('top.showcases', { count: v.showcases.length }, loc)}
+                    </span>
+                    <IconChevronDown />
+                  </button>
+                </div>
+
+                {currentShowcase && (
+                  <button type="button" className="icon-btn" onClick={() => v.setShowcase(null)} title={t('top.backToMap.title', undefined, loc)}>
+                    <IconArrowLeft />
+                    <span className="btn-text">{t('top.backToMap', undefined, loc)}</span>
+                  </button>
+                )}
+
+                {/* POV & Interactive Driving Picker Trigger */}
+                <div className="popover-wrap">
+                  <button
+                    type="button"
+                    className="picker-trigger"
+                    aria-expanded={openMenu === 'pov'}
+                    aria-pressed={s.povMode !== 'map'}
+                    title={t('pov.button.title', undefined, loc)}
+                    onClick={() => setOpenMenu(m => (m === 'pov' ? null : 'pov'))}
+                  >
+                    <IconPov />
+                    <span className="picker-label">
+                      {s.povMode === 'map'
+                        ? t('pov.button', undefined, loc)
+                        : t(POV_MODE_I18N[s.povMode].label, undefined, loc)}
+                    </span>
+                    <kbd>P</kbd>
+                    <IconChevronDown />
+                  </button>
+                </div>
+
                 <button
                   type="button"
-                  className={`popover-item ${!s.showcase ? 'active' : ''}`}
+                  className="icon-btn"
                   onClick={() => {
-                    v.setShowcase(null);
-                    setOpenMenu(null);
+                    setActivePlaceId('home');
+                    v.flyTo([0, 0]);
                   }}
+                  title={t('top.home.title', undefined, loc)}
+                  aria-label={t('top.home', undefined, loc)}
                 >
-                  <div className="popover-item-main">
-                    <b>{t('top.showcases.mapTitle', undefined, loc)}</b>
-                    <span>{t('top.showcases.mapSub', undefined, loc)}</span>
+                  <IconHome />
+                  <span className="btn-text">{t('top.home', undefined, loc)}</span>
+                  <kbd>H</kbd>
+                </button>
+              </div>
+
+              {openMenu === 'place' && (
+                <div className="popover-panel ui-surface" role="dialog" aria-label={t('top.places.dialog', undefined, loc)}>
+                  <div className="popover-search">
+                    <IconSearch />
+                    <input
+                      type="search"
+                      placeholder={t('top.places.search', undefined, loc)}
+                      value={plSearch}
+                      onChange={e => setPlSearch(e.target.value)}
+                      autoFocus
+                    />
                   </div>
-                  <em className="popover-tag">{t('top.showcases.mapTag', undefined, loc)}</em>
-                </button>
-                {filteredShowcases.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    className={`popover-item ${s.showcase === item.id ? 'active' : ''}`}
-                    onClick={() => {
-                      v.setShowcase(item.id);
-                      setOpenMenu(null);
-                    }}
-                  >
-                    <div className="popover-item-main">
-                      <b>{item.name}</b>
-                      <span>{item.subtitle}</span>
-                    </div>
-                    <em className="popover-tag">{item.group}</em>
-                  </button>
-                ))}
-                {filteredShowcases.length === 0 && (
-                  <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {currentShowcase && (
-          <button type="button" className="icon-btn" onClick={() => v.setShowcase(null)} title={t('top.backToMap.title', undefined, loc)}>
-            <IconArrowLeft />
-            <span>{t('top.backToMap', undefined, loc)}</span>
-          </button>
-        )}
-
-        {/* Searchable & Categorized Popover for Khu vực (Places / Districts / Metro Stations) */}
-        <div className="popover-wrap">
-          <button
-            type="button"
-            className="picker-trigger"
-            aria-expanded={openMenu === 'place'}
-            aria-label={t('top.places.aria', undefined, loc)}
-            onClick={() => setOpenMenu(m => (m === 'place' ? null : 'place'))}
-          >
-            <IconMapPin />
-            <span className="picker-label">{currentPlace.name}</span>
-            <IconChevronDown />
-          </button>
-          {openMenu === 'place' && (
-            <div className="popover-panel" role="dialog" aria-label={t('top.places.dialog', undefined, loc)}>
-              <div className="popover-search">
-                <IconSearch />
-                <input
-                  type="search"
-                  placeholder={t('top.places.search', undefined, loc)}
-                  value={plSearch}
-                  onChange={e => setPlSearch(e.target.value)}
-                  autoFocus
-                />
-              </div>
-              <div className="popover-tabs">
-                <button
-                  type="button"
-                  aria-pressed={plCat === 'ALL'}
-                  onClick={() => setPlCat('ALL')}
-                >
-                  {t('top.places.all', { count: v.places.length }, loc)}
-                </button>
-                {plGroups.map(g => (
-                  <button
-                    key={g}
-                    type="button"
-                    aria-pressed={plCat === g}
-                    onClick={() => setPlCat(g)}
-                  >
-                    {g}
-                  </button>
-                ))}
-              </div>
-              <div className="popover-list">
-                {filteredPlaces.map(p => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`popover-item ${activePlaceId === p.id ? 'active' : ''}`}
-                    onClick={() => {
-                      setActivePlaceId(p.id);
-                      v.flyTo(p.at);
-                      setOpenMenu(null);
-                    }}
-                  >
-                    <div className="popover-item-main">
-                      <b>{p.name}</b>
-                    </div>
-                    <em className="popover-tag">{p.group}</em>
-                  </button>
-                ))}
-                {filteredPlaces.length === 0 && (
-                  <div className="popover-empty">{t('top.places.empty', undefined, loc)}</div>
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* POV & Interactive Driving Picker */}
-        <div className="popover-wrap">
-          <button
-            type="button"
-            className="picker-trigger"
-            aria-expanded={openMenu === 'pov'}
-            aria-pressed={s.povMode !== 'map'}
-            title={t('pov.button.title', undefined, loc)}
-            onClick={() => setOpenMenu(m => (m === 'pov' ? null : 'pov'))}
-          >
-            <IconPov />
-            <span className="picker-label">
-              {s.povMode === 'map'
-                ? t('pov.button', undefined, loc)
-                : t(POV_MODE_I18N[s.povMode].label, undefined, loc)}
-            </span>
-            <kbd>P</kbd>
-            <IconChevronDown />
-          </button>
-          {openMenu === 'pov' && (
-            <div className="popover-panel" role="dialog" aria-label={t('pov.button', undefined, loc)}>
-              <div className="popover-list">
-                {POV_MODES.map(pm => {
-                  const meta = POV_MODE_I18N[pm];
-                  return (
+                  <div className="popover-tabs">
                     <button
-                      key={pm}
                       type="button"
-                      className={`popover-item ${s.povMode === pm ? 'active' : ''}`}
+                      aria-pressed={plCat === 'ALL'}
+                      onClick={() => setPlCat('ALL')}
+                    >
+                      {t('top.places.all', { count: v.places.length }, loc)}
+                    </button>
+                    {plGroups.map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        aria-pressed={plCat === g}
+                        onClick={() => setPlCat(g)}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="popover-list">
+                    {filteredPlaces.map(p => (
+                      <button
+                        key={p.id}
+                        type="button"
+                        className={`popover-item ${activePlaceId === p.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActivePlaceId(p.id);
+                          v.flyTo(p.at);
+                          setOpenMenu(null);
+                        }}
+                      >
+                        <div className="popover-item-main">
+                          <b>{p.name}</b>
+                        </div>
+                        <em className="popover-tag">{p.group}</em>
+                      </button>
+                    ))}
+                    {filteredPlaces.length === 0 && (
+                      <div className="popover-empty">{t('top.places.empty', undefined, loc)}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {openMenu === 'showcase' && (
+                <div className="popover-panel ui-surface" role="dialog" aria-label={t('top.showcases.dialog', undefined, loc)}>
+                  <div className="popover-search">
+                    <IconSearch />
+                    <input
+                      type="search"
+                      placeholder={t('top.showcases.search', undefined, loc)}
+                      value={scSearch}
+                      onChange={e => setScSearch(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                  <div className="popover-tabs">
+                    <button
+                      type="button"
+                      aria-pressed={scCat === 'ALL'}
+                      onClick={() => setScCat('ALL')}
+                    >
+                      {t('top.showcases.all', { count: v.showcases.length }, loc)}
+                    </button>
+                    {scGroups.map(g => (
+                      <button
+                        key={g}
+                        type="button"
+                        aria-pressed={scCat === g}
+                        onClick={() => setScCat(g)}
+                      >
+                        {g}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="popover-list">
+                    <button
+                      type="button"
+                      className={`popover-item ${!s.showcase ? 'active' : ''}`}
                       onClick={() => {
-                        v.setPovMode(pm);
+                        v.setShowcase(null);
                         setOpenMenu(null);
                       }}
                     >
                       <div className="popover-item-main">
-                        <b>{t(meta.label, undefined, loc)}</b>
-                        {meta.sub && <span>{t(meta.sub, undefined, loc)}</span>}
+                        <b>{t('top.showcases.mapTitle', undefined, loc)}</b>
+                        <span>{t('top.showcases.mapSub', undefined, loc)}</span>
                       </div>
-                      <em className="popover-tag">{meta.tag}</em>
+                      <em className="popover-tag">{t('top.showcases.mapTag', undefined, loc)}</em>
+                    </button>
+                    {filteredShowcases.map(item => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`popover-item ${s.showcase === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          v.setShowcase(item.id);
+                          setOpenMenu(null);
+                        }}
+                      >
+                        <div className="popover-item-main">
+                          <b>{item.name}</b>
+                          <span>{item.subtitle}</span>
+                        </div>
+                        <em className="popover-tag">{item.group}</em>
+                      </button>
+                    ))}
+                    {filteredShowcases.length === 0 && (
+                      <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {openMenu === 'pov' && (
+                <div className="popover-panel ui-surface" role="dialog" aria-label={t('pov.button', undefined, loc)}>
+                  <div className="popover-list">
+                    {POV_MODES.map(pm => {
+                      const meta = POV_MODE_I18N[pm];
+                      return (
+                        <button
+                          key={pm}
+                          type="button"
+                          className={`popover-item ${s.povMode === pm ? 'active' : ''}`}
+                          onClick={() => {
+                            v.setPovMode(pm);
+                            setOpenMenu(null);
+                          }}
+                        >
+                          <div className="popover-item-main">
+                            <b>{t(meta.label, undefined, loc)}</b>
+                            {meta.sub && <span>{t(meta.sub, undefined, loc)}</span>}
+                          </div>
+                          <em className="popover-tag">{meta.tag}</em>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Top-Right Quick Actions Pill: Visual Map Color Swatches + X-ray + Day/Night + Locale + Settings Drawer */}
+            <div className="top-right-bar ui-surface">
+              <div className="palette-swatch-bar" role="group" aria-label={t('drawer.mapColors', undefined, loc)}>
+                {MAP_PALETTES.map(([id, swatches]) => {
+                  const titleKey = `top.palette.${id}` as TranslationKey;
+                  const active = s.mapPalette === id;
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`swatch-pill-btn ${active ? 'active' : ''}`}
+                      aria-pressed={active}
+                      title={t(titleKey, undefined, loc)}
+                      aria-label={t(titleKey, undefined, loc)}
+                      onClick={() => v.setMapPalette(id)}
+                    >
+                      <span className="swatch-quad" aria-hidden="true">
+                        {swatches.map((c, idx) => (
+                          <i key={idx} style={{ background: c }} />
+                        ))}
+                      </span>
                     </button>
                   );
                 })}
               </div>
+
+              <span className="bar-sep" aria-hidden="true" />
+
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => v.toggleSeeThrough()}
+                aria-pressed={s.seeThrough}
+                title={t('top.seeThrough.title', undefined, loc)}
+                aria-label={t('top.seeThrough', undefined, loc)}
+              >
+                <IconSeeThrough />
+                <span className="btn-text">{t('top.seeThrough', undefined, loc)}</span>
+                <kbd>X</kbd>
+              </button>
+
+              <button
+                type="button"
+                className="icon-only-btn"
+                onClick={() => v.toggleDayNight()}
+                aria-pressed={s.night}
+                aria-label={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
+                title={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
+              >
+                {s.night ? <IconMoon /> : <IconSun />}
+                <kbd>N</kbd>
+              </button>
+
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => v.toggleLocale()}
+                title={t('top.locale.title', undefined, loc)}
+                aria-label={t('top.locale.title', undefined, loc)}
+              >
+                <IconGlobe />
+                <span>{LOCALE_LABELS[loc]}</span>
+              </button>
+
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => setPanel(p => !p)}
+                aria-pressed={panel}
+                title={t('top.settings.title', undefined, loc)}
+                aria-label={t('top.settings', undefined, loc)}
+              >
+                <IconSliders />
+                <span className="btn-text">{t('top.settings', undefined, loc)}</span>
+                <kbd>G</kbd>
+              </button>
             </div>
+          </header>
+
+          {/* Floating Right Tabbed Settings Drawer */}
+          {panel && (
+            <aside className="panel ui-surface" onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+              <div className="drawer-header">
+                <div className="drawer-tabs" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={drawerTab === 'appearance'}
+                    aria-pressed={drawerTab === 'appearance'}
+                    onClick={() => setDrawerTab('appearance')}
+                  >
+                    {t('drawer.tab.appearance', undefined, loc)}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={drawerTab === 'lights'}
+                    aria-pressed={drawerTab === 'lights'}
+                    onClick={() => setDrawerTab('lights')}
+                  >
+                    {t('drawer.tab.lights', undefined, loc)}
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={drawerTab === 'quality'}
+                    aria-pressed={drawerTab === 'quality'}
+                    onClick={() => setDrawerTab('quality')}
+                  >
+                    {t('drawer.tab.quality', undefined, loc)}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  className="drawer-close"
+                  onClick={() => setPanel(false)}
+                  aria-label="Close"
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="drawer-body">
+                {drawerTab === 'appearance' && (
+                  <>
+                    <section>
+                      <h2>{t('drawer.uiSurface', undefined, loc)}</h2>
+                      <div className="ui-mode-seg" role="group" aria-label={t('drawer.uiSurface', undefined, loc)}>
+                        {(['off', 'tint', 'glass'] as const).map((m: UiGlassMode) => {
+                          const key = `drawer.uiMode.${m}` as TranslationKey;
+                          return (
+                            <button
+                              key={m}
+                              type="button"
+                              aria-pressed={uiGlass.mode === m}
+                              onClick={() => updateUiGlass({ mode: m })}
+                            >
+                              {t(key, undefined, loc)}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {uiGlass.mode !== 'off' && (
+                        <label className="opt slider-row">
+                          <span>{t('drawer.uiTransparency', undefined, loc)}</span>
+                          <input
+                            type="range"
+                            min={10}
+                            max={90}
+                            step={5}
+                            value={uiGlass.transparency}
+                            onChange={e => updateUiGlass({ transparency: +e.target.value })}
+                          />
+                          <strong className="slider-val">{uiGlass.transparency}%</strong>
+                        </label>
+                      )}
+
+                      {uiGlass.mode === 'glass' && (
+                        <label className="opt slider-row">
+                          <span>{t('drawer.uiLensScale', undefined, loc)}</span>
+                          <input
+                            type="range"
+                            min={0}
+                            max={180}
+                            step={10}
+                            value={uiGlass.lensScale}
+                            onChange={e => updateUiGlass({ lensScale: +e.target.value })}
+                          />
+                          <strong className="slider-val">{uiGlass.lensScale}</strong>
+                        </label>
+                      )}
+                    </section>
+
+                    <section>
+                      <h2>{t('drawer.mapColors', undefined, loc)}</h2>
+                      <div className="palette-grid" role="group" aria-label={t('drawer.mapColors', undefined, loc)}>
+                        {MAP_PALETTES.map(([id, swatches]) => {
+                          const labelKey = `top.palette.${id}` as TranslationKey;
+                          const active = s.mapPalette === id;
+                          return (
+                            <button
+                              key={id}
+                              type="button"
+                              className={`palette-card ${active ? 'active' : ''}`}
+                              aria-pressed={active}
+                              onClick={() => v.setMapPalette(id)}
+                            >
+                              <div className="palette-bars" aria-hidden="true">
+                                {swatches.map((c, idx) => (
+                                  <i key={idx} style={{ background: c }} />
+                                ))}
+                              </div>
+                              <span className="palette-card-label">{t(labelKey, undefined, loc)}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2>{t('drawer.accentColors', undefined, loc)}</h2>
+                      <div className="accent-grid" role="group" aria-label={t('drawer.accentColors', undefined, loc)}>
+                        {PALETTES.city.map(a => {
+                          const key = accentKey(a);
+                          const [name, , darkHi, lightAccent] = a;
+                          const active = s.accent === key;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              className={`accent-swatch ${active ? 'active' : ''}`}
+                              aria-pressed={active}
+                              title={name}
+                              aria-label={name}
+                              onClick={() => v.setAccent(key)}
+                            >
+                              <span
+                                className="accent-dot"
+                                style={{ background: s.night ? darkHi : lightAccent }}
+                              />
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2>{t('drawer.mapDisplay', undefined, loc)}</h2>
+                      <label className="opt" title={t('top.streetLabels.title', undefined, loc)}>
+                        <IconSignpost />
+                        <span>{t('top.streetLabels', undefined, loc)}</span>
+                        <select
+                          aria-label={t('top.streetLabels', undefined, loc)}
+                          value={s.streetLabels}
+                          onChange={e => v.setStreetLabels(e.target.value as StreetLabelMode)}
+                        >
+                          {STREET_LABEL_MODES.map(m => (
+                            <option key={m} value={m}>{streetNames[m]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="opt" title={t('top.placeInfo.title', undefined, loc)}>
+                        <IconInfo />
+                        <span>{t('top.placeInfo', undefined, loc)}</span>
+                        <select
+                          aria-label={t('top.placeInfo', undefined, loc)}
+                          value={s.placeInfo}
+                          onChange={e => v.setPlaceInfo(e.target.value as PlaceInfoMode)}
+                        >
+                          {PLACE_INFO_MODES.map(m => (
+                            <option key={m} value={m}>{placeNames[m]}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="opt switch-row" title={t('top.seeThrough.title', undefined, loc)}>
+                        <span>{t('top.seeThrough', undefined, loc)} <kbd>X</kbd></span>
+                        <input
+                          type="checkbox"
+                          className="switch-input"
+                          checked={s.seeThrough}
+                          onChange={e => v.setSeeThrough(e.target.checked)}
+                        />
+                      </label>
+                    </section>
+                  </>
+                )}
+
+                {drawerTab === 'lights' && (
+                  <LightsPanel lights={s.lights} locale={loc} onChange={p => v.setLights(p)} />
+                )}
+
+                {drawerTab === 'quality' && (
+                  <QualityPanel
+                    quality={s.quality}
+                    locale={loc}
+                    stats={s.stats}
+                    detail={s.detail}
+                    pending={s.pending}
+                    lowered={s.lowered}
+                    onChange={q => v.setQuality(q)}
+                  />
+                )}
+              </div>
+            </aside>
           )}
-        </div>
 
-        <label className="pick" title={t('top.streetLabels.title', undefined, loc)}>
-          <IconSignpost />
-          <span className="pick-title">{t('top.streetLabels', undefined, loc)}</span>
-          <select
-            aria-label={t('top.streetLabels', undefined, loc)}
-            value={s.streetLabels}
-            onChange={e => v.setStreetLabels(e.target.value as StreetLabelMode)}
-          >
-            {STREET_LABEL_MODES.map(m => (
-              <option key={m} value={m}>{streetNames[m]}</option>
-            ))}
-          </select>
-        </label>
-
-        <label className="pick" title={t('top.placeInfo.title', undefined, loc)}>
-          <IconInfo />
-          <span className="pick-title">{t('top.placeInfo', undefined, loc)}</span>
-          <select
-            aria-label={t('top.placeInfo', undefined, loc)}
-            value={s.placeInfo}
-            onChange={e => v.setPlaceInfo(e.target.value as PlaceInfoMode)}
-          >
-            {PLACE_INFO_MODES.map(m => (
-              <option key={m} value={m}>{placeNames[m]}</option>
-            ))}
-          </select>
-        </label>
-
-        <div className="top-actions">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => {
-              setActivePlaceId('home');
-              v.flyTo([0, 0]);
-            }}
-            title={t('top.home.title', undefined, loc)}
-            aria-label={t('top.home', undefined, loc)}
-          >
-            <IconHome />
-            <span className="btn-text">{t('top.home', undefined, loc)}</span>
-            <kbd>H</kbd>
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => v.toggleMode()}
-            aria-pressed={s.mode === '3d'}
-            title={t('top.mode.title', undefined, loc)}
-          >
-            <span>{s.mode === '2d' ? '2D' : '3D'}</span>
-            <kbd>V</kbd>
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => v.toggleSeeThrough()}
-            aria-pressed={s.seeThrough}
-            title={t('top.seeThrough.title', undefined, loc)}
-            aria-label={t('top.seeThrough', undefined, loc)}
-          >
-            <IconSeeThrough />
-            <span className="btn-text">{t('top.seeThrough', undefined, loc)}</span>
-            <kbd>X</kbd>
-          </button>
-
-          <button
-            type="button"
-            className="icon-only-btn"
-            onClick={() => v.toggleDayNight()}
-            aria-pressed={s.night}
-            aria-label={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
-            title={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
-          >
-            {s.night ? <IconMoon /> : <IconSun />}
-            <kbd>N</kbd>
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => v.toggleLocale()}
-            title={t('top.locale.title', undefined, loc)}
-            aria-label={t('top.locale.title', undefined, loc)}
-          >
-            <IconGlobe />
-            <span>{LOCALE_LABELS[loc]}</span>
-          </button>
-
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setPanel(p => !p)}
-            aria-pressed={panel}
-            title={t('top.settings.title', undefined, loc)}
-            aria-label={t('top.settings', undefined, loc)}
-          >
-            <IconSliders />
-            <span className="btn-text">{t('top.settings', undefined, loc)}</span>
-            <kbd>G</kbd>
-          </button>
-        </div>
-      </header>
-      <main>
-        <div className="stage" ref={host} aria-label={t('stage.aria', { mode: s.mode }, loc)}>
           {currentShowcase && (
-            <div className="plaque">
+            <div className="plaque ui-surface">
               <b>{currentShowcase.name}</b>
               <span>{currentShowcase.subtitle}</span>
             </div>
@@ -774,7 +1013,7 @@ function AppShell({ view: v }: { view: CityView }) {
 
           {s.povMode !== 'map' && (
             <>
-              <div className="pov-hud" onPointerDown={e => e.stopPropagation()}>
+              <div className="pov-hud ui-surface" onPointerDown={e => e.stopPropagation()}>
                 <div className="pov-hud-top">
                   <div className="pov-speed">
                     <strong>{s.povSpeedKmh}</strong>
@@ -865,7 +1104,7 @@ function AppShell({ view: v }: { view: CityView }) {
                   className="pov-minimap-canvas"
                 />
                 {s.povLocationName && (
-                  <div className="pov-minimap-label">{s.povLocationName}</div>
+                  <div className="pov-minimap-label ui-surface">{s.povLocationName}</div>
                 )}
               </div>
             </>
@@ -873,7 +1112,7 @@ function AppShell({ view: v }: { view: CityView }) {
 
           {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
             <div className="drive-touch-pad" onPointerDown={e => e.stopPropagation()}>
-              <div className="drive-steer-group">
+              <div className="drive-steer-group ui-surface">
                 <button
                   type="button"
                   className="drive-pad-btn"
@@ -897,7 +1136,7 @@ function AppShell({ view: v }: { view: CityView }) {
                   D ►
                 </button>
               </div>
-              <div className="drive-pedal-group">
+              <div className="drive-pedal-group ui-surface">
                 <button
                   type="button"
                   className="drive-pad-btn brake"
@@ -973,7 +1212,7 @@ function AppShell({ view: v }: { view: CityView }) {
               >
                 <button
                   type="button"
-                  className="dock-btn compass-btn"
+                  className="dock-btn compass-btn ui-surface"
                   onClick={() => v.resetNorth()}
                   title={t(
                     'cam.compass',
@@ -994,7 +1233,7 @@ function AppShell({ view: v }: { view: CityView }) {
 
                 <button
                   type="button"
-                  className="dock-btn rot90-btn"
+                  className="dock-btn rot90-btn ui-surface"
                   onClick={e => v.rotate(e.shiftKey ? -1 : 1)}
                   title={t('cam.rot90', undefined, loc)}
                   aria-label={t('cam.rot90', undefined, loc)}
@@ -1006,7 +1245,7 @@ function AppShell({ view: v }: { view: CityView }) {
                 {!s.showcase && (
                   <button
                     type="button"
-                    className="dock-btn loc-btn"
+                    className="dock-btn loc-btn ui-surface"
                     onClick={() => v.goToMyLocation()}
                     title={t('cam.myLocation', undefined, loc)}
                     aria-label={t('cam.myLocation', undefined, loc)}
@@ -1015,7 +1254,7 @@ function AppShell({ view: v }: { view: CityView }) {
                   </button>
                 )}
 
-                <div className="dock-zoom-pill">
+                <div className="dock-zoom-pill ui-surface">
                   <button
                     type="button"
                     className="dock-zoom-btn"
@@ -1039,18 +1278,18 @@ function AppShell({ view: v }: { view: CityView }) {
 
                 <button
                   type="button"
-                  className="dock-btn mode3d-btn"
+                  className="dock-btn mode3d-btn ui-surface"
                   onClick={() => v.toggleMode()}
                   aria-pressed={s.mode === '3d'}
                   title={t('top.mode.title', undefined, loc)}
                 >
-                  3D
+                  {s.mode === '2d' ? '2D' : '3D'}
                 </button>
 
                 {!s.showcase && (
                   <button
                     type="button"
-                    className={`dock-btn pegman-btn${pegmanDrag ? ' is-dragging' : ''}`}
+                    className={`dock-btn pegman-btn ui-surface${pegmanDrag ? ' is-dragging' : ''}`}
                     title={t('cam.pegman', undefined, loc)}
                     aria-label={t('cam.pegman', undefined, loc)}
                     onPointerDown={e => {
@@ -1095,50 +1334,25 @@ function AppShell({ view: v }: { view: CityView }) {
               </div>
             </>
           )}
+
+          {/* Bottom-Left Compact Status Pill with OSM Credit (A15) */}
+          <footer className="status-pill ui-surface" onPointerDown={e => e.stopPropagation()}>
+            <span className="fps-badge">{s.fps} fps</span>
+            <span className="read">
+              {currentShowcase
+                ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
+                : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
+              · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode.toUpperCase()} · ${t(`cam.dir.${s.view}` as TranslationKey, undefined, loc)} (${s.heading}°)`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
+              {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
+              {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
+              {!currentShowcase
+                ? ` · ${s.vehicles} ${t('footer.vehicles', undefined, loc)} · X:${signalLabel[s.signals.x]}${s.signals.xLeft}s Y:${signalLabel[s.signals.y]}${s.signals.yLeft}s`
+                : ''}
+            </span>
+            <span className="credit">© OpenStreetMap contributors</span>
+          </footer>
         </div>
-        {panel && (
-          <aside className="panel">
-            <LightsPanel lights={s.lights} locale={loc} onChange={p => v.setLights(p)} />
-            <QualityPanel
-              quality={s.quality}
-              streetLabels={s.streetLabels}
-              placeInfo={s.placeInfo}
-              seeThrough={s.seeThrough}
-              locale={loc}
-              stats={s.stats}
-              detail={s.detail}
-              pending={s.pending}
-              lowered={s.lowered}
-              onChange={q => v.setQuality(q)}
-              onStreetLabels={m => v.setStreetLabels(m)}
-              onPlaceInfo={m => v.setPlaceInfo(m)}
-              onSeeThrough={on => v.setSeeThrough(on)}
-            />
-          </aside>
-        )}
       </main>
-      <footer>
-        <span className="hint">
-          {s.povMode === 'metro-cab' || s.povMode === 'metro-passenger'
-            ? t('pov.hint.metro', undefined, loc)
-            : s.povMode === 'drive-cabin' || s.povMode === 'drive-top'
-              ? t('pov.hint.drive', undefined, loc)
-              : t(s.mode === '3d' ? 'footer.hint.3d' : 'footer.hint.2d', undefined, loc)}
-        </span>
-        <span className="read">
-          {currentShowcase
-            ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
-            : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
-          · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode} · ${t('footer.angle', undefined, loc)} ${t(`cam.dir.${s.view}` as TranslationKey, undefined, loc)} (${s.heading}°)`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
-          {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
-          {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
-          {!currentShowcase
-            ? ` · ${s.vehicles} ${t('footer.vehicles', undefined, loc)} · X ${signalLabel[s.signals.x]} ${s.signals.xLeft}s · Y ${signalLabel[s.signals.y]} ${s.signals.yLeft}s`
-            : ''}{' '}
-          · {s.fps} fps
-        </span>
-        <span className="credit">© OpenStreetMap contributors</span>
-      </footer>
     </div>
   );
 }

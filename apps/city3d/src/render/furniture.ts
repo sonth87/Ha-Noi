@@ -161,7 +161,7 @@ function pushShellTri(B: Batch, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vec
 }
 
 /** a tapered 3D tube segment (for trunks, root flares and main limbs) with smooth silhouette shell */
-function taperedTube(B: Batch, c0: [number, number, number], r0: number, c1: [number, number, number], r1: number, sides = 8, flare = 0, surf: Surface = 'wall') {
+function taperedTube(B: Batch, c0: [number, number, number], r0: number, c1: [number, number, number], r1: number, sides = 8, flare = 0, surf: Surface = 'tree-trunk') {
   const ring = (c: [number, number, number], r: number, fl: number) =>
     Array.from({ length: sides }, (_, i) => {
       const a = (i * 2 * Math.PI) / sides, k = fl ? 1 + fl * (i % 2 ? -0.16 : 0.20) : 1;
@@ -179,8 +179,8 @@ function taperedTube(B: Batch, c0: [number, number, number], r0: number, c1: [nu
 }
 
 /** One smooth 3D foliage cushion/lobe with zero internal sketch lines:
-    - 3-tone vertical shading: dark shaded underside ('road'), mid-tone side belt ('wall'), bright
-      sunlit upper dome ('plant');
+    - 3-tone vertical shading: dark shaded underside ('plant-dark'), mid-tone side belt ('plant-mid'),
+      bright sunlit upper dome ('plant');
     - smooth convex ellipsoid normals in B.shell so overlapping lobes merge into a clean outer
       silhouette without pencil-like line clutter. */
 function foliageLobe(
@@ -205,15 +205,15 @@ function foliageLobe(
       return { pt: V(x, y, b.z), nrm };
     }),
   );
-  // underside cap ('road' = --recess, deep shade under the canopy)
+  // underside cap ('plant-dark' = --recess in mono, deep foliage shade under the canopy)
   const botCenter = V(cx, cy, cz - rzBot), botNrm = new THREE.Vector3(0, -1, 0), R0 = rings[0]!;
   for (let i = 0; i < N; i++) {
     const j = (i + 1) % N;
-    B.tri('road', botCenter, R0[j]!.pt, R0[i]!.pt, botNrm);
+    B.tri('plant-dark', botCenter, R0[j]!.pt, R0[i]!.pt, botNrm);
     pushShellTri(B, botCenter, R0[j]!.pt, R0[i]!.pt, botNrm, R0[j]!.nrm, R0[i]!.nrm);
   }
-  // 4 elevation belts: underside ('road'), lower rim ('wall'), upper dome ('plant', 'plant')
-  const beltSurf: [Surface, Surface, Surface, Surface] = ['road', 'wall', 'plant', 'plant'];
+  // 4 elevation belts: underside ('plant-dark'), lower rim ('plant-mid'), upper dome ('plant', 'plant')
+  const beltSurf: [Surface, Surface, Surface, Surface] = ['plant-dark', 'plant-mid', 'plant', 'plant'];
   for (let b = 0; b < 4; b++) {
     const A = rings[b]!, C = rings[b + 1]!, s = beltSurf[b]!;
     for (let i = 0; i < N; i++) {
@@ -250,9 +250,9 @@ export function tree(B: Batch, p: Prop, full: boolean) {
     const r = (habit === 1 ? 2.3 : 1.9) * scale, zBase = z0 + 2.0 * scale, h = (habit === 1 ? 2.6 : 3.1) * scale;
     const disc = (ox: number, oy: number, rr: number): Vec2[] =>
       Array.from({ length: 10 }, (_, i) => [cx + ox + rr * Math.cos((i * Math.PI) / 5 + rot), cy + oy + rr * Math.sin((i * Math.PI) / 5 + rot)] as const);
-    B.flatSolid(disc(0, 0, 0.18 * scale), z0, zBase + 0.3, 'wall');
-    B.flatSolid(disc(0, 0, r * 0.96), zBase, zBase + h * 0.45, 'road');
-    B.flatSolid(disc(Math.cos(rot) * r * 0.18, Math.sin(rot) * r * 0.18, r * 0.88), zBase + h * 0.35, zBase + h * 0.78, 'plant');
+    B.flatSolid(disc(0, 0, 0.18 * scale), z0, zBase + 0.3, 'tree-trunk');
+    B.flatSolid(disc(0, 0, r * 0.96), zBase, zBase + h * 0.45, 'plant-dark');
+    B.flatSolid(disc(Math.cos(rot) * r * 0.18, Math.sin(rot) * r * 0.18, r * 0.88), zBase + h * 0.35, zBase + h * 0.78, 'plant-mid');
     B.flatSolid(disc(-Math.cos(rot) * r * 0.14, -Math.sin(rot) * r * 0.14, r * 0.62), zBase + h * 0.68, zBase + h, 'plant');
     return;
   }
