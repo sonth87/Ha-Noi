@@ -571,9 +571,12 @@ export class CityView {
     const q = this.snap.quality;
     const renderer = new THREE.WebGLRenderer({ antialias: !isMobileDevice() || q.msaa, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
-    host.appendChild(renderer.domElement);
     renderer.domElement.style.display = 'block';
+    renderer.domElement.style.position = 'absolute';
+    renderer.domElement.style.inset = '0';
+    renderer.domElement.style.zIndex = '0';
     renderer.domElement.style.touchAction = 'none';
+    host.insertBefore(renderer.domElement, host.firstChild);
     const onLost = (e: Event) => e.preventDefault();
     renderer.domElement.addEventListener('webglcontextlost', onLost);
 

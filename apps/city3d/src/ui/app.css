@@ -6,60 +6,147 @@ body { background:var(--bg); color:var(--ink); font:12px/1.45 var(--mono); -webk
 main { flex:1; display:flex; min-height:0; position:relative; }
 .stage { flex:1; min-width:0; position:relative; overflow:hidden; outline:none; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
 
-/* UI Surface Transparency Modes:
-   - 'off' (DEFAULT): 100% opaque solid var(--panel), zero blur/refraction
-   - 'tint': Translucent frosted blur controlled by --ui-fill-alpha
-   - 'glass': Apple Optical Lens SVG refraction (sonth87/liquid-glass OpticalGlass) applied by liquidGlass.ts */
+/* UI Surface Transparency Modes (matching pmp-mindmap.vercel.app & sonth87/liquid-glass OpticalGlass):
+   - 'off'  : 100% opaque solid var(--panel), zero blur/refraction
+   - 'tint' : High-opacity frosted blur (~88%–90% opaque by default, much more opaque/frosted than 'glass')
+   - 'glass': Crystal-clear (~35%–38% opaque by default) Apple Optical Lens SVG refraction + 3D specular rim */
+:root {
+  --glass-tint:#0e0e16;
+  --glass-tint-opacity:var(--ui-glass-alpha, 0.35);
+  --glass-border:rgba(255, 255, 255, 0.22);
+  --glass-highlight:rgba(255, 255, 255, 0.48);
+  --glass-shadow:0 24px 60px rgba(0, 0, 0, 0.45);
+}
+:root[data-theme="light"] {
+  --glass-tint:#ffffff;
+  --glass-tint-opacity:var(--ui-glass-alpha, 0.38);
+  --glass-border:rgba(255, 255, 255, 0.75);
+  --glass-highlight:rgba(255, 255, 255, 0.95);
+  --glass-shadow:0 16px 45px rgba(15, 23, 42, 0.14);
+}
+:root[data-ui-glass="tint"] {
+  --glass-tint:color-mix(in srgb, var(--panel) 75%, #11172a);
+  --glass-tint-opacity:var(--ui-tint-alpha, 0.90);
+}
+:root[data-theme="light"][data-ui-glass="tint"] {
+  --glass-tint:color-mix(in srgb, var(--panel) 75%, #ffffff);
+  --glass-tint-opacity:var(--ui-tint-alpha, 0.88);
+}
+:root[data-ui-glass="off"] {
+  --glass-tint:var(--panel);
+  --glass-tint-opacity:1;
+}
+
 .ui-surface {
+  position:relative;
   background:var(--panel);
   border:1px solid var(--edge);
   box-shadow:0 8px 26px color-mix(in srgb, var(--bg) 72%, transparent);
   transition:border-color .16s ease, box-shadow .16s ease, background .16s ease;
 }
+:root[data-ui-glass="off"] .ui-surface {
+  background:var(--panel);
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
 :root[data-ui-glass="tint"] .ui-surface {
-  background:color-mix(in srgb, var(--panel) var(--ui-fill-alpha, 24%), transparent);
-  backdrop-filter:blur(16px) saturate(150%);
-  -webkit-backdrop-filter:blur(16px) saturate(150%);
-  border-color:color-mix(in srgb, var(--ink-hi) 22%, var(--edge));
+  background-color:color-mix(in srgb, var(--glass-tint) calc(var(--glass-tint-opacity) * 100%), transparent);
+  backdrop-filter:blur(12px) saturate(1.5);
+  -webkit-backdrop-filter:blur(12px) saturate(1.5);
+  border:1px solid var(--glass-border);
   box-shadow:
-    0 14px 36px rgba(0, 0, 0, 0.34),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24);
+    var(--glass-shadow),
+    inset 0 1px 1px var(--glass-highlight),
+    inset 0 -8px 20px rgba(255, 255, 255, 0.05);
 }
 :root[data-ui-glass="glass"] .ui-surface {
   background:
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.24) 0%,
-      rgba(255, 255, 255, 0.04) 36%,
-      rgba(255, 255, 255, 0.11) 100%
+      color-mix(in srgb, var(--accent-hi) 16%, transparent) 0%,
+      color-mix(in srgb, var(--accent) 6%, transparent) 100%
     ),
-    color-mix(in srgb, var(--panel) var(--ui-fill-alpha, 24%), transparent);
-  backdrop-filter:blur(3px) saturate(165%);
-  -webkit-backdrop-filter:blur(3px) saturate(165%);
-  border:1px solid rgba(255, 255, 255, 0.30);
+    color-mix(in srgb, var(--glass-tint) calc(var(--glass-tint-opacity) * 100%), transparent);
+  backdrop-filter:blur(16px) saturate(1.8);
+  -webkit-backdrop-filter:blur(16px) saturate(1.8);
+  border:1px solid var(--glass-border);
   box-shadow:
-    0 20px 50px rgba(0, 0, 0, 0.44),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.65),
-    inset 0 -8px 20px rgba(255, 255, 255, 0.10),
-    inset 0 0 16px rgba(255, 255, 255, 0.24),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+    var(--glass-shadow),
+    inset 0 1px 1px var(--glass-highlight),
+    inset 0 -8px 20px rgba(255, 255, 255, 0.06),
+    inset 0 0 12px rgba(255, 255, 255, 0.16),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.14);
 }
 :root[data-theme="light"][data-ui-glass="glass"] .ui-surface {
-  background:
-    linear-gradient(
-      135deg,
-      rgba(255, 255, 255, 0.52) 0%,
-      rgba(255, 255, 255, 0.12) 38%,
-      rgba(255, 255, 255, 0.26) 100%
-    ),
-    color-mix(in srgb, var(--panel) var(--ui-fill-alpha, 24%), transparent);
-  border:1px solid rgba(255, 255, 255, 0.72);
   box-shadow:
-    0 18px 44px rgba(15, 23, 42, 0.18),
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.92),
-    inset 0 -8px 20px rgba(255, 255, 255, 0.30),
-    inset 0 0 16px rgba(255, 255, 255, 0.44),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+    var(--glass-shadow),
+    inset 0 1.5px 1px var(--glass-highlight),
+    inset 0 -8px 20px rgba(255, 255, 255, 0.25),
+    inset 0 0 14px rgba(255, 255, 255, 0.38),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.45);
+}
+
+/* Specular Highlight Layer (exact match to OpticalGlass.tsx & pmp-mindmap.vercel.app Ps) */
+:root[data-ui-glass="glass"] .ui-surface::before,
+:root[data-ui-glass="tint"] .ui-surface::before {
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  z-index:0;
+  background:linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.036) 18%,
+    rgba(255, 255, 255, 0) 35%
+  );
+}
+:root[data-theme="light"][data-ui-glass="glass"] .ui-surface::before,
+:root[data-theme="light"][data-ui-glass="tint"] .ui-surface::before {
+  background:linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.36) 0%,
+    rgba(255, 255, 255, 0.08) 18%,
+    rgba(255, 255, 255, 0) 35%
+  );
+}
+
+/* 3D Optical Lens Prismatic Bezel Rim (ensures curved Apple Lens rim on both Chromium & Safari iOS) */
+:root[data-ui-glass="glass"] .ui-surface::after {
+  content:"";
+  position:absolute;
+  inset:0;
+  border-radius:inherit;
+  pointer-events:none;
+  z-index:0;
+  padding:1.5px;
+  background:linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.58) 0%,
+    rgba(56, 189, 248, 0.26) 28%,
+    rgba(255, 255, 255, 0.05) 55%,
+    rgba(129, 140, 248, 0.22) 80%,
+    rgba(255, 255, 255, 0.38) 100%
+  );
+  -webkit-mask:linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;
+  mask-composite:exclude;
+}
+:root[data-ui-glass="glass"] .ui-surface.lg-fallback::after {
+  padding:2.5px;
+  background:linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.72) 0%,
+    rgba(56, 189, 248, 0.34) 26%,
+    rgba(255, 255, 255, 0.08) 54%,
+    rgba(129, 140, 248, 0.30) 78%,
+    rgba(255, 255, 255, 0.48) 100%
+  );
+}
+:root[data-ui-glass="glass"] :where(.ui-surface > *),
+:root[data-ui-glass="tint"] :where(.ui-surface > *) {
+  z-index:1;
 }
 
 /* Keep child controls inside .ui-surface translucent in 'tint' and 'glass' modes
