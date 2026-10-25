@@ -373,6 +373,9 @@ function AppShell({ view: v }: { view: CityView }) {
   const [drawerTab, setDrawerTab] = useState<'appearance' | 'lights' | 'quality'>('appearance');
   const [uiGlass, setUiGlass] = useState<UiGlassSettings>(() => loadUiGlassSettings());
   const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | 'pov' | null>(null);
+  const [scCountry, setScCountry] = useState<string>('vn');
+  const [scCity, setScCity] = useState<string>('vn/ha-noi');
+  const [scDistrict, setScDistrict] = useState<string>('ALL');
   const [scSearch, setScSearch] = useState('');
   const [scCat, setScCat] = useState<string>('ALL');
   const [plSearch, setPlSearch] = useState('');
@@ -443,19 +446,81 @@ function AppShell({ view: v }: { view: CityView }) {
     return () => { removeEventListener('keydown', onKey); removeEventListener('keyup', onUp); removeEventListener('blur', onBlur); };
   }, [v, openMenu]);
 
-  const scGroups = useMemo(() => Array.from(new Set(v.showcases.map(x => x.group))), [v.showcases]);
+  const scCountries = useMemo(() => {
+    const map = new Map<string, { code: string; name: string; count: number }>();
+    for (const x of v.showcases) {
+      const cur = map.get(x.countryCode);
+      if (cur) cur.count++;
+      else map.set(x.countryCode, { code: x.countryCode, name: x.countryName, count: 1 });
+    }
+    return Array.from(map.values());
+  }, [v.showcases]);
+
+  const scCities = useMemo(() => {
+    const map = new Map<string, { id: string; name: string; count: number }>();
+    for (const x of v.showcases) {
+      if (x.countryCode !== scCountry) continue;
+      const cur = map.get(x.cityId);
+      if (cur) cur.count++;
+      else map.set(x.cityId, { id: x.cityId, name: x.cityName, count: 1 });
+    }
+    return Array.from(map.values());
+  }, [v.showcases, scCountry]);
+
+  const scDistricts = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const x of v.showcases) {
+      if (x.countryCode !== scCountry || x.cityId !== scCity) continue;
+      const d = x.district?.trim();
+      if (!d) continue;
+      map.set(d, (map.get(d) ?? 0) + 1);
+    }
+    return Array.from(map.entries())
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'vi'));
+  }, [v.showcases, scCountry, scCity]);
+
+  const scGeoFiltered = useMemo(() => {
+    const q = scSearch.trim().toLowerCase();
+    return v.showcases.filter(item => {
+      if (item.countryCode !== scCountry) return false;
+      if (item.cityId !== scCity) return false;
+      if (scDistrict !== 'ALL' && item.district !== scDistrict) return false;
+      if (!q) return true;
+      return (
+        item.name.toLowerCase().includes(q) ||
+        item.subtitle.toLowerCase().includes(q) ||
+        item.group.toLowerCase().includes(q) ||
+        (item.district?.toLowerCase().includes(q) ?? false) ||
+        (item.address?.toLowerCase().includes(q) ?? false)
+      );
+    });
+  }, [v.showcases, scCountry, scCity, scDistrict, scSearch]);
+
+  const scCategories = useMemo(() => {
+    const map = new Map<string, { id: string; title: string; count: number }>();
+    for (const item of scGeoFiltered) {
+      const cur = map.get(item.categoryId);
+      if (cur) cur.count++;
+      else map.set(item.categoryId, { id: item.categoryId, title: item.group, count: 1 });
+    }
+    return Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
+  }, [scGeoFiltered]);
+
+  const groupedShowcases = useMemo(() => {
+    const list = scCat === 'ALL' ? scGeoFiltered : scGeoFiltered.filter(x => x.categoryId === scCat);
+    const groups = new Map<string, { categoryId: string; title: string; items: typeof list }>();
+    for (const item of list) {
+      const g = groups.get(item.categoryId);
+      if (g) g.items.push(item);
+      else groups.set(item.categoryId, { categoryId: item.categoryId, title: item.group, items: [item] });
+    }
+    return Array.from(groups.values()).sort((a, b) => a.categoryId.localeCompare(b.categoryId));
+  }, [scGeoFiltered, scCat]);
+
   const plGroups = useMemo(() => Array.from(new Set(v.places.map(x => x.group))), [v.places]);
   const currentShowcase = s.showcase ? v.showcases.find(x => x.id === s.showcase) ?? null : null;
   const currentPlace = v.places.find(x => x.id === activePlaceId) ?? v.places[0]!;
-
-  const filteredShowcases = useMemo(() => {
-    const q = scSearch.trim().toLowerCase();
-    return v.showcases.filter(item => {
-      if (scCat !== 'ALL' && item.group !== scCat) return false;
-      if (!q) return true;
-      return item.name.toLowerCase().includes(q) || item.subtitle.toLowerCase().includes(q) || item.group.toLowerCase().includes(q);
-    });
-  }, [v.showcases, scSearch, scCat]);
 
   const filteredPlaces = useMemo(() => {
     const q = plSearch.trim().toLowerCase();
@@ -619,71 +684,180 @@ function AppShell({ view: v }: { view: CityView }) {
               )}
 
               {openMenu === 'showcase' && (
-                <div className="popover-panel ui-surface" role="dialog" aria-label={t('top.showcases.dialog', undefined, loc)}>
-                  <div className="popover-search">
-                    <IconSearch />
-                    <input
-                      type="search"
-                      placeholder={t('top.showcases.search', undefined, loc)}
-                      value={scSearch}
-                      onChange={e => setScSearch(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                  <div className="popover-tabs">
-                    <button
-                      type="button"
-                      aria-pressed={scCat === 'ALL'}
-                      onClick={() => setScCat('ALL')}
-                    >
-                      {t('top.showcases.all', { count: v.showcases.length }, loc)}
-                    </button>
-                    {scGroups.map(g => (
-                      <button
-                        key={g}
-                        type="button"
-                        aria-pressed={scCat === g}
-                        onClick={() => setScCat(g)}
+                <div
+                  className="popover-panel showcase-explorer ui-surface"
+                  role="dialog"
+                  aria-label={t('top.showcases.dialog', undefined, loc)}
+                >
+                  {/* 1. Hierarchical Location Bar: Quốc gia → Tỉnh/Thành phố → Quận/Huyện */}
+                  <div className="showcase-geo-bar">
+                    <div className="showcase-geo-group">
+                      <span className="showcase-geo-label">{t('top.showcases.country', undefined, loc)}</span>
+                      <div className="showcase-geo-pills">
+                        {scCountries.map(c => (
+                          <button
+                            key={c.code}
+                            type="button"
+                            className="showcase-geo-pill"
+                            aria-pressed={scCountry === c.code}
+                            onClick={() => {
+                              setScCountry(c.code);
+                              setScDistrict('ALL');
+                              setScCat('ALL');
+                            }}
+                          >
+                            <span className="geo-code">{c.code.toUpperCase()}</span>
+                            <b>{c.name}</b>
+                            <em>{c.count}</em>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <span className="showcase-geo-sep" aria-hidden="true">/</span>
+
+                    <div className="showcase-geo-group">
+                      <span className="showcase-geo-label">{t('top.showcases.city', undefined, loc)}</span>
+                      <div className="showcase-geo-pills">
+                        {scCities.map(ct => (
+                          <button
+                            key={ct.id}
+                            type="button"
+                            className="showcase-geo-pill"
+                            aria-pressed={scCity === ct.id}
+                            onClick={() => {
+                              setScCity(ct.id);
+                              setScDistrict('ALL');
+                              setScCat('ALL');
+                            }}
+                          >
+                            <b>{ct.name}</b>
+                            <em>{ct.count}</em>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="showcase-geo-group showcase-district-group">
+                      <span className="showcase-geo-label">{t('top.showcases.district', undefined, loc)}</span>
+                      <select
+                        className="showcase-district-select"
+                        value={scDistrict}
+                        aria-label={t('top.showcases.district', undefined, loc)}
+                        onChange={e => setScDistrict(e.target.value)}
                       >
-                        {g}
-                      </button>
-                    ))}
+                        <option value="ALL">
+                          {t('top.showcases.allDistricts', { count: scDistricts.length }, loc)}
+                        </option>
+                        {scDistricts.map(d => (
+                          <option key={d.name} value={d.name}>
+                            {d.name} ({d.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div className="popover-list">
+
+                  {/* 2. Search Bar & Quick Return-to-Map Action */}
+                  <div className="showcase-search-row">
+                    <div className="popover-search showcase-search-box">
+                      <IconSearch />
+                      <input
+                        type="search"
+                        placeholder={t('top.showcases.search', undefined, loc)}
+                        value={scSearch}
+                        onChange={e => setScSearch(e.target.value)}
+                        autoFocus
+                      />
+                    </div>
                     <button
                       type="button"
-                      className={`popover-item ${!s.showcase ? 'active' : ''}`}
+                      className={`showcase-map-btn ${!s.showcase ? 'active' : ''}`}
                       onClick={() => {
                         v.setShowcase(null);
                         setOpenMenu(null);
                       }}
+                      title={t('top.showcases.mapSub', undefined, loc)}
                     >
-                      <div className="popover-item-main">
-                        <b>{t('top.showcases.mapTitle', undefined, loc)}</b>
-                        <span>{t('top.showcases.mapSub', undefined, loc)}</span>
-                      </div>
-                      <em className="popover-tag">{t('top.showcases.mapTag', undefined, loc)}</em>
+                      <IconGlobe />
+                      <span>{t('top.showcases.mapTitle', undefined, loc)}</span>
                     </button>
-                    {filteredShowcases.map(item => (
+                  </div>
+
+                  {/* 3. Two-Column Split Explorer: Left Category Sidebar + Right Grouped Landmark Cards */}
+                  <div className="showcase-body">
+                    <aside className="showcase-sidebar" aria-label={t('top.showcases.categories', undefined, loc)}>
                       <button
-                        key={item.id}
                         type="button"
-                        className={`popover-item ${s.showcase === item.id ? 'active' : ''}`}
-                        onClick={() => {
-                          v.setShowcase(item.id);
-                          setOpenMenu(null);
-                        }}
+                        className="showcase-cat-btn"
+                        aria-pressed={scCat === 'ALL'}
+                        onClick={() => setScCat('ALL')}
                       >
-                        <div className="popover-item-main">
-                          <b>{item.name}</b>
-                          <span>{item.subtitle}</span>
-                        </div>
-                        <em className="popover-tag">{item.group}</em>
+                        <span className="cat-title">{t('top.showcases.allCategories', undefined, loc)}</span>
+                        <em className="cat-count">{scGeoFiltered.length}</em>
                       </button>
-                    ))}
-                    {filteredShowcases.length === 0 && (
-                      <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
-                    )}
+                      {scCategories.map(cat => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          className="showcase-cat-btn"
+                          aria-pressed={scCat === cat.id}
+                          onClick={() => setScCat(cat.id)}
+                        >
+                          <span className="cat-title">{cat.title}</span>
+                          <em className="cat-count">{cat.count}</em>
+                        </button>
+                      ))}
+                    </aside>
+
+                    <div className="showcase-content">
+                      {groupedShowcases.map(group => (
+                        <section key={group.categoryId} className="showcase-cat-section">
+                          <header className="showcase-cat-header">
+                            <b>{group.title}</b>
+                            <em>{t('top.showcases.resultCount', { count: group.items.length }, loc)}</em>
+                          </header>
+                          <div className="showcase-grid">
+                            {group.items.map(item => {
+                              const cleanTitle = item.name.replace(/\s*\(\d+\s*tầng\)$/i, '');
+                              return (
+                                <button
+                                  key={item.id}
+                                  type="button"
+                                  className={`showcase-card ${s.showcase === item.id ? 'active' : ''}`}
+                                  onClick={() => {
+                                    v.setShowcase(item.id);
+                                    setOpenMenu(null);
+                                  }}
+                                >
+                                  <div className="showcase-card-top">
+                                    <b className="showcase-card-title">{cleanTitle}</b>
+                                    <div className="showcase-badges">
+                                      {item.district && (
+                                        <span className="sc-badge sc-badge-district">{item.district}</span>
+                                      )}
+                                      {item.levels !== undefined && item.heightM !== undefined && (
+                                        <span className="sc-badge sc-badge-dim">
+                                          {t(
+                                            'top.showcases.floorsHeight',
+                                            { levels: item.levels, height: item.heightM },
+                                            loc,
+                                          )}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <span className="showcase-card-sub">{item.subtitle}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </section>
+                      ))}
+                      {groupedShowcases.length === 0 && (
+                        <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

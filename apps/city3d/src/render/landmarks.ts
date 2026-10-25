@@ -85,13 +85,17 @@ interface OrientedBox {
 
 function orientedBoxOf(ring: readonly Vec2[], frontIdx = 0): OrientedBox {
   const n = ring.length;
-  // Find longest edge or use frontIdx if valid
-  let bestI = frontIdx >= 0 && frontIdx < n ? frontIdx : 0;
-  let bestL = 0;
-  for (let i = 0; i < n; i++) {
-    const p = ring[i]!, q = ring[(i + 1) % n]!;
-    const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
-    if (L > bestL) { bestL = L; bestI = i; }
+  const fIdx = frontIdx >= 0 && frontIdx < n ? frontIdx : 0;
+  const fp0 = ring[fIdx]!, fp1 = ring[(fIdx + 1) % n]!;
+  const isShowcaseFront = Math.abs(fp1[1] - fp0[1]) < 1e-3 && fp0[0] - fp1[0] >= 2.0;
+  let bestI = fIdx;
+  if (!isShowcaseFront) {
+    let bestL = 0;
+    for (let i = 0; i < n; i++) {
+      const p = ring[i]!, q = ring[(i + 1) % n]!;
+      const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (L > bestL) { bestL = L; bestI = i; }
+    }
   }
   const p0 = ring[bestI]!, p1 = ring[(bestI + 1) % n]!;
   const L = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]) || 1;
@@ -470,6 +474,8 @@ const TRADITIONAL_HERITAGE_MODELS = new Set<string>([
   'mountain-pagoda-complex',
   'ancient-communal-house',
   'ancient-village-gate',
+  'cau-the-huc',
+  'thap-but',
 ]);
 
 const COLONIAL_HERITAGE_MODELS = new Set<string>([
@@ -500,6 +506,8 @@ const STONE_MONUMENT_MODELS = new Set<string>([
   'nha-tho-ham-long',
   'al-noor-mosque',
   'statue-monument-plaza',
+  'tuong-dai-cam-tu',
+  'tuong-dai-quang-trung',
   'thap-nuoc-hang-dau',
 ]);
 
@@ -1800,84 +1808,133 @@ function drawThapRua(B: Batch, b: Building, level: Detail) {
 }
 
 // ============================================================================
-// 22. ĐỀN NGỌC SƠN, CẦU THÊ HÚC, ĐẮC NGUYỆT LÂU, THÁP BÚT & ĐÌNH TRẤN BA (Hồ Gươm)
+// 22. ĐỀN NGỌC SƠN, CẦU THÊ HÚC, ĐẮC NGUYỆT LÂU, ĐÀI NGHIÊN, THÁP BÚT & ĐÌNH TRẤN BA (Hồ Gươm)
 // ============================================================================
 function drawDenNgocSon(B: Batch, b: Building, level: Detail) {
-  const ob = orientedBoxOf(b.footprint, b.front);
-  const hw = Math.max(7.5, ob.hw), hd = Math.max(9.5, ob.hd);
+  const rawOb = orientedBoxOf(b.footprint, b.front);
+  const onRealMap = Math.hypot(rawOb.c[0] - 3813.0, rawOb.c[1] - 1494.1) < 80;
+  // True geographic orientation of Đền Ngọc Sơn & Cầu Thê Húc on the real map:
+  // +u points East along Cầu Thê Húc toward Phố Đinh Tiên Hoàng; +v points South toward Đình Trấn Ba & Tháp Rùa.
+  // On the standalone Showcase diorama plate (!onRealMap), align +v with the front street (+y) and +u along +x.
+  const uEast: Vec2 = onRealMap ? [0.3725, 0.9280] : [-rawOb.u[0], -rawOb.u[1]];
+  const vSouth: Vec2 = onRealMap ? [-0.9280, 0.3725] : [-rawOb.v[0], -rawOb.v[1]];
+  const ob: OrientedBox = {
+    c: rawOb.c,
+    u: uEast,
+    v: vSouth,
+    hw: 8.2,
+    hd: 10.6,
+  };
   const lamp1 = floorId(b, 1), lamp2 = floorId(b, 2);
 
-  // 1. Đảo Ngọc (Jade Island stone embankment on Hồ Hoàn Kiếm)
-  B.solid(localRect(ob, -hw - 3.5, hw + 3.5, -hd - 3.5, hd + 3.5), 0, 0.55, () => 'wall', 'walk', b.id);
-
-  // 2. Cầu Thê Húc ("Nơi đậu ánh mặt trời ban mai" — Iconic arched vermilion wooden bridge spanning 22 m East)
-  const bridgeDirU = 1;
-  const bridgeSegments = 9;
-  for (let i = 0; i < bridgeSegments; i++) {
-    const t0 = i / bridgeSegments, t1 = (i + 1) / bridgeSegments;
-    const u0 = (hw + 2.5) + t0 * 21.0, u1 = (hw + 2.5) + t1 * 21.0;
-    const arch0 = Math.sin(t0 * Math.PI) * 1.45;
-    const arch1 = Math.sin(t1 * Math.PI) * 1.45;
-    const zDeck = 0.65 + (arch0 + arch1) * 0.5;
-    // Vermilion bridge deck & side railings
-    B.solid(localRect(ob, bridgeDirU * u0, bridgeDirU * u1, -1.65, 1.65), zDeck - 0.22, zDeck, () => 'roof', 'walk', b.id);
-    B.solid(localRect(ob, bridgeDirU * u0, bridgeDirU * u1, -1.78, -1.52), zDeck, zDeck + 0.88, () => 'roof', 'roof', b.id);
-    B.solid(localRect(ob, bridgeDirU * u0, bridgeDirU * u1, 1.52, 1.78), zDeck, zDeck + 0.88, () => 'roof', 'roof', b.id);
-    // Double wooden bridge piles in the lake water
-    const uMid = (u0 + u1) * 0.5;
-    for (const sv of [-1.25, 1.25] as const) {
-      B.solid(regPoly(localPt(ob, uMid, sv), 0.18, 6), 0, zDeck - 0.15, () => 'roof', 'roof', b.id);
-    }
+  if (!onRealMap) {
+    B.flat('water', localRect(ob, -14.5, 38.5, -15.5, 23.0), 0.06, 'detail', b.id);
   }
 
-  // 3. Tháp Bút ("Tả Thanh Thiên" — 5-storey stone brush tower on Núi Ngọc Bội at the bridge entrance)
-  const thapButPos = localPt(ob, hw + 25.5, 0);
-  B.solid(regPoly(thapButPos, 3.8, 8), 0, 1.85, () => 'wall', 'walk', b.id);
-  B.solid(regPoly(thapButPos, 2.4, 8), 1.85, 3.2, () => 'wall', 'walk', b.id);
-  for (let st = 0; st < 5; st++) {
-    const z0 = 3.2 + st * 1.45;
-    const r = 1.15 - st * 0.1;
-    B.solid(localRect({ c: thapButPos, u: ob.u, v: ob.v, hw: r, hd: r }, -r, r, -r, r), z0, z0 + 1.25, () => 'wall', 'roof', b.id);
-    B.solid(localRect({ c: thapButPos, u: ob.u, v: ob.v, hw: r, hd: r }, -r - 0.16, r + 0.16, -r - 0.16, r + 0.16), z0 + 1.25, z0 + 1.45, () => 'metal', 'metal', b.id);
-  }
-  // Stone brush tip finial (Ngọn bút lông đá vươn lên trời xanh)
-  B.solid(regPoly(thapButPos, 0.52, 8), 10.45, 11.4, () => 'metal', 'metal', b.id);
-  B.solid(regPoly(thapButPos, 0.22, 8), 11.4, 12.35, () => 'metal', 'metal', b.id);
-
-  // 4. Đắc Nguyệt Lâu (2-storey Moon-Gazing Gate Pavilion at the island end of Cầu Thê Húc)
-  const gateOb: OrientedBox = { c: localPt(ob, hw + 0.8, 0), u: ob.v, v: ob.u, hw: 2.8, hd: 2.2 };
-  B.solid(localRect(gateOb, -2.6, 2.6, -2.0, 2.0), 0.55, 3.85, () => 'wall', 'roof', b.id);
-  drawTraditionalCurvedRoof(B, gateOb, 2.8, 2.2, 3.8, 1.35, b.id, true);
-  B.solid(localRect(gateOb, -1.9, 1.9, -1.5, 1.5), 5.0, 6.85, () => 'wall', 'roof', b.id);
-  drawTraditionalCurvedRoof(B, gateOb, 2.1, 1.7, 6.8, 1.45, b.id, true);
-
-  // 5. Điện thờ Chính Đền Ngọc Sơn (Tiền tế – Trung đường – Hậu cung)
-  const hallW = hw * 0.78, hallD = hd * 0.58;
+  // 1. Nền đá Đảo Ngọc & Điện thờ Chính Đền Ngọc Sơn (Tiền tế – Trung đường – Hậu cung nhìn về hướng Nam)
+  B.solid(localRect(ob, -10.5, 10.5, -12.5, 12.5), 0, 0.55, () => 'stone', 'stone', b.id);
+  const hallW = 7.4, hallD = 8.8;
   const hallRing = localRect(ob, -hallW, hallW, -hallD, hallD);
   B.solid(hallRing, 0.55, 4.65, () => 'wall', 'roof', b.id);
   if (level >= 1) {
     addBandWindows(B, hallRing, 1.35, 4.15, lamp1, 2.2);
   }
-  drawTraditionalCurvedRoof(B, ob, hallW + 0.45, hallD + 0.45, 4.55, 2.25, b.id, true);
+  drawTraditionalCurvedRoof(B, ob, hallW + 0.5, hallD + 0.5, 4.55, 2.35, b.id, true);
 
-  // 6. Đình Trấn Ba (Square 8-roof wave-calming pavilion looking south toward Tháp Rùa)
-  const tranBaOb: OrientedBox = { c: localPt(ob, 0, hd * 0.82), u: ob.u, v: ob.v, hw: 3.2, hd: 3.2 };
-  B.solid(localRect(tranBaOb, -3.4, 3.4, -3.4, 3.4), 0.55, 0.95, () => 'wall', 'walk', b.id);
+  // 2. Đình Trấn Ba (Phương đình 2 tầng 8 mái đao cong ở mũi Nam Đảo Ngọc nhìn thẳng ra Tháp Rùa)
+  const tranBaPos: Vec2 = onRealMap ? [3792.2, 1511.2] : localPt(ob, 0, 17.5);
+  const tranBaOb: OrientedBox = { c: tranBaPos, u: uEast, v: vSouth, hw: 3.6, hd: 3.6 };
+  B.solid(localRect(tranBaOb, -4.2, 4.2, -4.2, 4.2), 0, 0.85, () => 'stone', 'stone', b.id);
   for (const su of [-1, 1] as const) {
     for (const sv of [-1, 1] as const) {
-      B.solid(regPoly(localPt(tranBaOb, su * 2.4, sv * 2.4), 0.26, 8), 0.95, 3.75, () => 'roof', 'roof', b.id);
+      B.solid(regPoly(localPt(tranBaOb, su * 2.5, sv * 2.5), 0.28, 8), 0.85, 3.85, () => 'heritage-roof', 'heritage-roof', b.id);
     }
   }
   if (level >= 1) {
-    addBandWindows(B, localRect(tranBaOb, -1.8, 1.8, -1.8, 1.8), 3.2, 3.7, lamp2, 1.6);
+    addBandWindows(B, localRect(tranBaOb, -2.0, 2.0, -2.0, 2.0), 3.15, 3.75, lamp2, 1.6);
   }
-  drawTraditionalCurvedRoof(B, tranBaOb, 3.2, 3.2, 3.7, 1.35, b.id, true);
-  drawTraditionalCurvedRoof(B, tranBaOb, 2.2, 2.2, 4.95, 1.35, b.id, true);
+  drawTraditionalCurvedRoof(B, tranBaOb, 3.5, 3.5, 3.75, 1.4, b.id, true);
+  drawTraditionalCurvedRoof(B, tranBaOb, 2.35, 2.35, 5.05, 1.4, b.id, true);
 
-  // Festive flagpole mast at Đền Ngọc Sơn courtyard
-  const fPos = localPt(ob, -hw - 2.2, -hd - 2.2);
-  B.solid(regPoly(fPos, 0.65, 8), 0, 0.85, () => 'wall', 'walk', b.id);
-  B.solid(regPoly(fPos, 0.16, 8), 0.85, 9.2, () => 'metal', 'metal', b.id);
+  // 3. Đắc Nguyệt Lâu (Lầu Đắc Nguyệt 2 tầng mái cong cổ kính tại đầu Tây Cầu Thê Húc bên mép Đông Đảo Ngọc)
+  const bridgeStart: Vec2 = onRealMap ? [3827.98, 1508.09] : localPt(ob, 13.2, 2.2);
+  const bridgeEnd: Vec2 = onRealMap ? [3845.21, 1551.02] : localPt(ob, 37.2, 2.2);
+  const bDx = bridgeEnd[0] - bridgeStart[0], bDy = bridgeEnd[1] - bridgeStart[1];
+  const bridgeLen = Math.hypot(bDx, bDy) || 24.0;
+  const bu: Vec2 = [bDx / bridgeLen, bDy / bridgeLen];
+  const bv: Vec2 = [-bu[1], bu[0]];
+  const bridgeOb: OrientedBox = { c: bridgeStart, u: bu, v: bv, hw: bridgeLen * 0.5, hd: 2.0 };
+
+  const gatePos: Vec2 = localPt(bridgeOb, -1.6, 0);
+  const gateOb: OrientedBox = { c: gatePos, u: bv, v: bu, hw: 3.1, hd: 2.3 };
+  B.solid(localRect(gateOb, -3.4, 3.4, -2.6, 2.6), 0, 0.65, () => 'stone', 'stone', b.id);
+  B.solid(localRect(gateOb, -2.8, -0.95, -2.1, 2.1), 0.65, 3.9, () => 'wall', 'roof', b.id);
+  B.solid(localRect(gateOb, 0.95, 2.8, -2.1, 2.1), 0.65, 3.9, () => 'wall', 'roof', b.id);
+  B.solid(localRect(gateOb, -2.8, 2.8, -2.1, 2.1), 2.85, 3.9, () => 'wall', 'roof', b.id);
+  drawTraditionalCurvedRoof(B, gateOb, 3.0, 2.3, 3.85, 1.35, b.id, true);
+  B.solid(localRect(gateOb, -2.0, 2.0, -1.55, 1.55), 5.05, 6.95, () => 'wall', 'roof', b.id);
+  drawTraditionalCurvedRoof(B, gateOb, 2.25, 1.75, 6.85, 1.45, b.id, true);
+
+  // 4. Cầu Thê Húc ("Nơi đậu ánh mặt trời buổi sớm" — Cầu gỗ sơn son 15 nhịp cong hình con tôm bắc từ Đảo Ngọc sang bờ Đông Đinh Tiên Hoàng)
+  const bridgeSegments = 11;
+  for (let i = 0; i < bridgeSegments; i++) {
+    const t0 = i / bridgeSegments, t1 = (i + 1) / bridgeSegments;
+    const u0 = t0 * bridgeLen, u1 = t1 * bridgeLen;
+    const arch0 = Math.sin(t0 * Math.PI) * 1.65;
+    const arch1 = Math.sin(t1 * Math.PI) * 1.65;
+    const zDeck = 0.72 + (arch0 + arch1) * 0.5;
+    // Sàn cầu gỗ sơn son & hai dải thành cầu đỏ thắm
+    B.solid(localRect(bridgeOb, u0, u1, -1.75, 1.75), zDeck - 0.24, zDeck, () => 'heritage-roof', 'heritage-roof', b.id);
+    B.solid(localRect(bridgeOb, u0, u1, -1.92, -1.62), zDeck, zDeck + 0.92, () => 'heritage-roof', 'heritage-roof', b.id);
+    B.solid(localRect(bridgeOb, u0, u1, 1.62, 1.92), zDeck, zDeck + 0.92, () => 'heritage-roof', 'heritage-roof', b.id);
+    // Hàng trụ đèn & cọc gỗ tròn sơn đỏ cắm xuống mặt hồ Hoàn Kiếm
+    const uMid = (u0 + u1) * 0.5;
+    for (const sv of [-1.35, 1.35] as const) {
+      B.solid(regPoly(localPt(bridgeOb, uMid, sv), 0.2, 8), 0, zDeck - 0.15, () => 'heritage-roof', 'heritage-roof', b.id);
+    }
+    for (const sv of [-1.77, 1.77] as const) {
+      B.solid(regPoly(localPt(bridgeOb, uMid, sv), 0.14, 6), zDeck + 0.92, zDeck + 1.35, () => 'bronze', 'bronze', b.id);
+    }
+  }
+
+  // 5. Cổng Đài Nghiên (Nghi môn trụ biểu & Đài Nghiên đá xanh 3 chân cóc đội tại đầu Đông Cầu Thê Húc)
+  const daiNghienPos: Vec2 = localPt(bridgeOb, bridgeLen + 1.8, 0);
+  const dnOb: OrientedBox = { c: daiNghienPos, u: bv, v: bu, hw: 3.8, hd: 1.6 };
+  B.solid(localRect(dnOb, -4.2, 4.2, -1.8, 1.8), 0, 0.55, () => 'stone', 'stone', b.id);
+  for (const [uCol, hCol] of [[-3.4, 4.6], [-1.45, 5.4], [1.45, 5.4], [3.4, 4.6]] as const) {
+    B.solid(localRect(dnOb, uCol - 0.42, uCol + 0.42, -0.45, 0.45), 0.55, hCol, () => 'stone', 'stone', b.id);
+    B.solid(regPoly(localPt(dnOb, uCol, 0), 0.48, 8), hCol, hCol + 0.75, () => 'bronze', 'bronze', b.id);
+  }
+  B.solid(localRect(dnOb, -1.85, 1.85, -0.65, 0.65), 3.4, 4.45, () => 'wall', 'roof', b.id);
+  // Đài Nghiên bằng đá xanh hình nửa quả đào trên đỉnh cổng cuốn
+  B.solid(regPoly(daiNghienPos, 0.78, 10), 4.45, 5.25, () => 'stone', 'bronze', b.id);
+
+  // 6. Tháp Bút ("Tả Thanh Thiên" — Bảo tháp đá 5 tầng trên núi Độc Tôn / Núi Ngọc Bội bên đường Đinh Tiên Hoàng)
+  const thapButPos: Vec2 = onRealMap ? [3852.82, 1592.02] : localPt(bridgeOb, bridgeLen + 8.5, 6.2);
+  const tbOb: OrientedBox = { c: thapButPos, u: bv, v: bu, hw: 4.5, hd: 4.5 };
+  // Núi Ngọc Bội (Gò đá hộc ghép bậc 3 tầng cao ~3.4m)
+  B.solid(regPoly(thapButPos, 4.4, 10), 0, 1.35, () => 'stone', 'stone', b.id);
+  B.solid(regPoly(thapButPos, 3.4, 10), 1.35, 2.45, () => 'stone', 'stone', b.id);
+  B.solid(regPoly(thapButPos, 2.45, 8), 2.45, 3.45, () => 'stone', 'stone', b.id);
+  // 5 tầng thân Tháp Bút bằng đá xanh khắc chữ "Tả Thanh Thiên"
+  for (let st = 0; st < 5; st++) {
+    const z0 = 3.45 + st * 1.48;
+    const r = 1.28 - st * 0.11;
+    B.solid(localRect(tbOb, -r, r, -r, r), z0, z0 + 1.26, () => 'stone', 'stone', b.id);
+    B.solid(localRect(tbOb, -r - 0.18, r + 0.18, -r - 0.18, r + 0.18), z0 + 1.26, z0 + 1.48, () => 'bronze', 'bronze', b.id);
+  }
+  // Ngọn bút lông đá vươn thẳng lên trời xanh ở đỉnh tháp (cao tổng cộng ~12.8 m)
+  B.solid(regPoly(thapButPos, 0.58, 8), 10.85, 11.75, () => 'bronze', 'bronze', b.id);
+  B.solid(regPoly(thapButPos, 0.26, 8), 11.75, 12.85, () => 'bronze', 'bronze', b.id);
+
+  // Cột cờ lễ hội tại sân Đền Ngọc Sơn
+  const fPos = localPt(ob, -hwSafe(ob) - 1.5, 8.5);
+  B.solid(regPoly(fPos, 0.65, 8), 0, 0.85, () => 'stone', 'stone', b.id);
+  B.solid(regPoly(fPos, 0.16, 8), 0.85, 9.2, () => 'bronze', 'bronze', b.id);
+}
+
+function hwSafe(ob: OrientedBox): number {
+  return Math.max(7.0, ob.hw);
 }
 
 // ============================================================================
@@ -2297,6 +2354,9 @@ export function drawMonumentFeature(B: Batch, f: Feature) {
 function drawMonumentFeatureInner(B: Batch, f: Feature) {
   const [x, y] = f.at;
   const name = f.name ?? '';
+  // Tháp Bút (node/5857310193) đã được dựng 3D 5 tầng chi tiết trên núi Ngọc Bội trong drawDenNgocSon
+  if (/Tháp Bút/i.test(name)) return;
+
   const oct = (cx: number, cy: number, r: number, n = 8, rot = Math.PI / 8): Vec2[] =>
     Array.from({ length: n }, (_, i) => [cx + r * Math.cos(rot + (i * 2 * Math.PI) / n), cy + r * Math.sin(rot + (i * 2 * Math.PI) / n)]);
   const box = (x0: number, y0: number, x1: number, y1: number): Vec2[] => [
@@ -2306,35 +2366,55 @@ function drawMonumentFeatureInner(B: Batch, f: Feature) {
     [x + x0, y + y1],
   ];
 
-  // Case A: Tượng đài Hoàng đế Quang Trung (Gò Đống Đa) — grand stepped plaza, curved heroic relief wall & tall statue
+  // Case A: Tượng đài Hoàng đế Quang Trung (Gò Đống Đa) — quảng trường 3 cấp, phù điêu cánh cung hoành tráng & tượng Vua Quang Trung áo bào tung bay vung kiếm chỉ huy
   if (/Quang Trung/i.test(name)) {
-    B.solid(oct(x, y, 11.5, 12), 0, 0.65, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 8.6, 12), 0.65, 1.45, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 5.8, 12), 1.45, 2.35, () => 'wall', 'walk', f.id);
-    // Curved heroic bas-relief wall (Bức phù điêu chiến thắng Đống Đa) behind the statue
-    for (let k = -3; k <= 3; k++) {
-      const ang = Math.PI * 0.5 + k * 0.24;
-      const rx = x + Math.cos(ang) * 6.8, ry = y + Math.sin(ang) * 6.8;
-      B.solid(oct(rx, ry, 1.35, 6), 2.35, 7.6 - Math.abs(k) * 0.45, () => 'wall', 'roof', f.id);
+    B.solid(oct(x, y, 12.2, 12), 0, 0.65, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 9.2, 12), 0.65, 1.45, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 6.2, 12), 1.45, 2.35, () => 'wall', 'walk', f.id);
+    // Hai cánh phù điêu lịch sử hình vòng cung lớn phía sau tượng đài (chiến thắng Ngọc Hồi – Đống Đa)
+    for (let k = -5; k <= 5; k++) {
+      if (k === 0) continue;
+      const ang = Math.PI * 0.5 + k * 0.19;
+      const rx = x + Math.cos(ang) * 7.8, ry = y + Math.sin(ang) * 6.8;
+      const hRel = 8.4 - Math.abs(k) * 0.55;
+      B.solid(oct(rx, ry, 1.35, 6, ang), 1.45, hRel, () => 'wall', 'roof', f.id);
+      B.solid(oct(rx, ry, 1.48, 6, ang), hRel - 0.35, hRel + 0.15, () => 'roof', 'roof', f.id);
     }
-    // Tall granite pedestal & heroic Emperor Quang Trung statue with flowing cloak
-    B.solid(box(-2.1, -2.1, 2.1, 2.1), 2.35, 7.4, () => 'wall', 'roof', f.id);
-    B.solid(box(-1.5, -1.2, 1.5, 1.2), 7.4, 11.8, () => 'metal', 'metal', f.id);
-    B.solid(oct(x, y, 0.72, 8), 11.8, 13.6, () => 'metal', 'metal', f.id);
+    // Bệ tượng đá hoa cương vững chãi có diềm đồng chạm khắc
+    B.solid(box(-2.4, -2.2, 2.4, 2.2), 2.35, 3.2, () => 'wall', 'walk', f.id);
+    B.solid(box(-1.85, -1.75, 1.85, 1.75), 3.2, 7.6, () => 'wall', 'roof', f.id);
+    B.solid(box(-2.1, -1.95, 2.1, 1.95), 7.2, 7.85, () => 'metal', 'metal', f.id);
+    // Tượng Hoàng đế Quang Trung: dáng đứng hiên ngang, tà áo bào mở rộng tung bay về phía sau, giáp trụ ngực & vai, đầu đội mũ chiến bào và cánh tay vung thanh kiếm lệnh lên cao
+    B.solid(box(-1.35, -1.1, 1.35, 1.1), 7.85, 9.8, () => 'metal', 'metal', f.id);
+    // Tà áo bào tung bay rộng sang hai bên và phía sau
+    B.solid(box(-2.35, 0.05, 2.35, 1.65), 7.95, 11.4, () => 'metal', 'metal', f.id);
+    B.solid(box(-1.95, -0.85, 1.95, 0.95), 9.6, 11.9, () => 'metal', 'metal', f.id);
+    // Đầu & mũ chiến bào
+    B.solid(oct(x, y - 0.12, 0.78, 8), 11.9, 13.3, () => 'metal', 'metal', f.id);
+    B.solid(box(-0.55, -0.55, 0.55, 0.45), 13.1, 13.75, () => 'metal', 'metal', f.id);
+    // Cánh tay phải vươn cao cầm đốc kiếm & lưỡi kiếm chỉ huy hướng về phía trước
+    B.solid(box(0.85, -1.25, 1.65, -0.25), 11.2, 13.4, () => 'metal', 'metal', f.id);
+    B.solid(box(1.05, -1.75, 1.42, -0.55), 13.2, 15.1, () => 'metal', 'metal', f.id);
+    // Cánh tay trái nắm đai giáp/vạt bào
+    B.solid(box(-1.85, -1.15, -0.95, -0.15), 10.1, 11.6, () => 'metal', 'metal', f.id);
     return;
   }
 
-  // Case B: Tượng đài Vua Lý Thái Tổ (Vườn hoa Lý Thái Tổ bên Hồ Hoàn Kiếm) — 3-stepped octagonal stone plaza, tall octagonal pedestal & Emperor Lý Thái Tổ holding the Chiếu dời đô scroll
+  // Case B: Tượng đài Vua Lý Thái Tổ (Vườn hoa Lý Thái Tổ bên Hồ Hoàn Kiếm) — quảng trường bát giác 3 cấp, bệ bát giác đá & tượng đồng Vua Lý Thái Tổ đội mũ bình thiên, tay nâng Chiếu dời đô
   if (/Lý Thái Tổ/i.test(name)) {
-    B.solid(oct(x, y, 9.8, 8), 0, 0.6, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 7.2, 8), 0.6, 1.25, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 4.8, 8), 1.25, 1.95, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 2.2, 8), 1.95, 5.4, () => 'wall', 'roof', f.id);
-    B.solid(oct(x, y, 2.45, 8), 5.2, 5.75, () => 'metal', 'metal', f.id);
-    // Bronze statue of King Lý Thái Tổ in imperial dragon robe holding the "Chiếu dời đô" scroll (total height ~10.1 m)
-    B.solid(oct(x, y, 1.25, 8), 5.75, 9.4, () => 'metal', 'metal', f.id);
-    B.solid(box(-1.35, -0.85, 1.35, 0.85), 7.2, 9.8, () => 'metal', 'metal', f.id);
-    B.solid(oct(x, y, 0.62, 8), 9.8, 11.2, () => 'metal', 'metal', f.id);
+    B.solid(oct(x, y, 10.2, 8), 0, 0.6, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 7.6, 8), 0.6, 1.25, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 5.1, 8), 1.25, 1.95, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 2.25, 8), 1.95, 5.4, () => 'wall', 'roof', f.id);
+    B.solid(oct(x, y, 2.55, 8), 5.15, 5.75, () => 'metal', 'metal', f.id);
+    // Tượng đồng Vua Lý Thái Tổ: vạt áo long bào xòe rộng ở chân, hai tay áo thụng rộng, tay phải nâng cuộn Chiếu dời đô, đầu đội mũ bình thiên
+    B.solid(oct(x, y, 1.55, 8), 5.75, 7.9, () => 'metal', 'metal', f.id);
+    B.solid(box(-1.85, -1.05, 1.85, 1.05), 7.6, 10.0, () => 'metal', 'metal', f.id);
+    // Tay phải đưa ra phía trước cầm cuộn Chiếu dời đô
+    B.solid(box(0.55, -1.65, 1.55, -0.45), 8.2, 9.7, () => 'metal', 'metal', f.id);
+    // Đầu và mũ bình thiên phẳng ngang đặc trưng
+    B.solid(oct(x, y, 0.68, 8), 10.0, 11.2, () => 'metal', 'metal', f.id);
+    B.solid(box(-0.95, -0.65, 0.95, 0.65), 11.15, 11.55, () => 'metal', 'metal', f.id);
     return;
   }
 
@@ -2355,22 +2435,39 @@ function drawMonumentFeatureInner(B: Batch, f: Feature) {
     return;
   }
 
-  // Case E: Iconic Bronze Statues (V.I. Lê-nin, Lý Tự Trọng, Chu Văn An, Chủ tịch Hồ Chí Minh, Huyền Thiên Trấn Vũ, Cảm Tử…)
-  if (f.kind === 'monument') {
-    B.solid(oct(x, y, 6.2, 8), 0, 0.55, () => 'wall', 'walk', f.id);
-    B.solid(oct(x, y, 4.4, 8), 0.55, 1.25, () => 'wall', 'walk', f.id);
-    B.solid(box(-1.85, -1.85, 1.85, 1.85), 1.25, 2.2, () => 'wall', 'roof', f.id);
-    // Tall granite plinth
-    B.solid(box(-1.35, -1.35, 1.35, 1.35), 2.2, 5.8, () => 'wall', 'roof', f.id);
-    B.solid(box(-1.55, -1.55, 1.55, 1.55), 5.6, 6.05, () => 'metal', 'metal', f.id);
-    // Sculpted bronze statue figure (legs/robe, torso/shoulders, head)
-    B.solid(oct(x, y, 0.92, 8), 6.05, 8.6, () => 'metal', 'metal', f.id);
-    B.solid(box(-1.05, -0.65, 1.05, 0.65), 7.4, 9.2, () => 'metal', 'metal', f.id);
-    B.solid(oct(x, y, 0.48, 8), 9.2, 10.1, () => 'metal', 'metal', f.id);
+  // Case E: Tượng đài Bác Hồ - Bác Tôn (Đảo Thống Nhất) hoặc Cụm tượng đài nhiều nhân vật (Công an Nhân dân, Quyết tử…)
+  if (/Bác Hồ|Hồ Chí Minh|Công an|Cảm [Tt]ử|Quyết [Tt]ử/i.test(name)) {
+    B.solid(oct(x, y, 7.6, 8), 0, 0.6, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 5.4, 8), 0.6, 1.35, () => 'wall', 'walk', f.id);
+    B.solid(box(-2.6, -1.8, 2.6, 1.8), 1.35, 5.2, () => 'wall', 'roof', f.id);
+    B.solid(box(-2.85, -2.0, 2.85, 2.0), 4.95, 5.5, () => 'metal', 'metal', f.id);
+    // Hai hình tượng nhân vật song hành trên bệ lớn + tay vẫy chào
+    for (const dx of [-0.95, 0.95] as const) {
+      B.solid(oct(x + dx, y, 0.82, 8), 5.5, 8.2, () => 'metal', 'metal', f.id);
+      B.solid(box(dx - 0.95, -0.65, dx + 0.95, 0.65), 7.2, 9.1, () => 'metal', 'metal', f.id);
+      B.solid(oct(x + dx, y, 0.48, 8), 9.1, 10.1, () => 'metal', 'metal', f.id);
+    }
+    B.solid(box(-1.65, -1.25, -0.85, -0.35), 8.6, 10.4, () => 'metal', 'metal', f.id);
     return;
   }
 
-  // Case F: Heritage / Archaeological Stelae & Ruins (Đàn Xã Tắc, Rồng đá Điện Kính Thiên, Ô Thụy Chương)
+  // Case F: Các tượng đài đồng biểu tượng khác (V.I. Lê-nin, Lý Tự Trọng, Chu Văn An, Lê Thái Tổ…)
+  if (f.kind === 'monument') {
+    B.solid(oct(x, y, 6.8, 8), 0, 0.55, () => 'wall', 'walk', f.id);
+    B.solid(oct(x, y, 4.8, 8), 0.55, 1.25, () => 'wall', 'walk', f.id);
+    B.solid(box(-2.05, -2.05, 2.05, 2.05), 1.25, 2.25, () => 'wall', 'roof', f.id);
+    // Bệ đá hoa cương cao có gờ viền đồng
+    B.solid(box(-1.48, -1.48, 1.48, 1.48), 2.25, 5.8, () => 'wall', 'roof', f.id);
+    B.solid(box(-1.75, -1.75, 1.75, 1.75), 5.5, 6.05, () => 'metal', 'metal', f.id);
+    // Khối tượng đồng điêu khắc rõ dáng người: chân & vạt áo măng-tô/áo bào xòe rộng, bờ vai & ngực, đầu tượng và cánh tay đưa ra trước
+    B.solid(box(-1.15, -0.95, 1.15, 1.15), 6.05, 8.2, () => 'metal', 'metal', f.id);
+    B.solid(box(-1.45, -0.78, 1.45, 0.85), 7.6, 9.45, () => 'metal', 'metal', f.id);
+    B.solid(box(0.55, -1.35, 1.35, -0.25), 8.0, 9.55, () => 'metal', 'metal', f.id);
+    B.solid(oct(x, y - 0.08, 0.56, 8), 9.45, 10.55, () => 'metal', 'metal', f.id);
+    return;
+  }
+
+  // Case G: Bia di tích / Đàn tế cổ (Đàn Xã Tắc, Rồng đá Điện Kính Thiên, Ô Thụy Chương)
   B.solid(oct(x, y, 5.4, 8), 0, 0.55, () => 'wall', 'walk', f.id);
   B.solid(oct(x, y, 3.6, 8), 0.55, 1.35, () => 'wall', 'walk', f.id);
   B.solid(box(-1.6, -0.65, 1.6, 0.65), 1.35, 3.6, () => 'wall', 'roof', f.id);

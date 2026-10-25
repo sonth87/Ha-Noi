@@ -38,7 +38,11 @@ export const HA_NOI_CATALOG_CUSTOM_MASSING_MODELS = new Set<string>([
   'nha-tho-ham-long',
   'al-noor-mosque',
   'statue-monument-plaza',
+  'tuong-dai-cam-tu',
+  'tuong-dai-quang-trung',
   'b52-huu-tiep-lake',
+  'cau-the-huc',
+  'thap-but',
   'thap-hoa-phong',
   'thap-nuoc-hang-dau',
   'nha-co-ma-may',
@@ -164,6 +168,10 @@ export function haNoiCatalogLandmarkExtraBoundsPts(b: Building): Vec2[] {
         [c[0] + 28, c[1] + 28],
       ];
     case 'statue-monument-plaza':
+    case 'tuong-dai-cam-tu':
+    case 'tuong-dai-quang-trung':
+    case 'cau-the-huc':
+    case 'thap-but':
     case 'b52-huu-tiep-lake':
     case 'dien-kinh-thien':
       return [
@@ -547,33 +555,113 @@ function drawAlNoorMosque(B: Batch, b: Building, level: Detail) {
 // NHÓM 4: ĐÀI TƯỞNG NIỆM, TƯỢNG ĐÀI & DI TÍCH CHIẾN CÔNG
 // ============================================================================
 
-/** 4.1 Quảng trường & Tượng đài Lịch sử (Lý Thái Tổ, Cảm tử, Quyết tử, Quang Trung, Bác Hồ - Bác Tôn, Lênin, CAND, Lê Thái Tổ, Lý Tự Trọng, Khâm Thiên) */
+/** 4.1 Quảng trường & Tượng đài Lịch sử (Lý Thái Tổ, Quyết tử, Bác Hồ - Bác Tôn, Lênin, CAND, Lê Thái Tổ, Lý Tự Trọng, Khâm Thiên) */
 function drawStatueMonumentPlaza(B: Batch, b: Building, level: Detail) {
   const ob = orientedBoxOf(b.footprint, b.front);
   const hw = Math.max(7.5, ob.hw), hd = Math.max(7.5, ob.hd);
-  const totalH = Math.max(10.5, ...b.parts.map(partTop));
+  const totalH = Math.max(11.0, ...b.parts.map(partTop));
   void level;
 
   // Quảng trường bậc đá hoa cương 3 cấp bát giác/chữ nhật
   B.solid(localRect(ob, -hw * 1.15, hw * 1.15, -hd * 1.15, hd * 1.15), 0, 0.55, () => 'wall', 'walk', b.id);
-  B.solid(localRect(ob, -hw * 0.82, hw * 0.82, -hd * 0.82, hd * 0.82), 0.55, 1.25, () => 'wall', 'walk', b.id);
+  B.solid(localRect(ob, -hw * 0.82, hw * 0.82, -hd * 0.82, hd * 1.02), 0.55, 1.25, () => 'wall', 'walk', b.id);
   B.solid(regPoly(ob.c, Math.min(hw, hd) * 0.52, 8), 1.25, 2.2, () => 'wall', 'walk', b.id);
 
-  // Bệ tượng đá cao (Pedestal) và khối tượng đồng trung tâm vươn cao
+  // Bệ tượng đá cao (Pedestal) và khối tượng đồng điêu khắc rõ nét (chân/vạt áo, bờ vai/tay áo, cánh tay đưa ra trước, đầu & mũ)
   const pedH = totalH * 0.52;
-  B.solid(regPoly(ob.c, 2.1, 8), 2.2, pedH, () => 'wall', 'roof', b.id);
-  B.solid(regPoly(ob.c, 2.35, 8), pedH - 0.45, pedH + 0.25, () => 'metal', 'metal', b.id);
-  // Thân tượng đồng
-  B.solid(regPoly(ob.c, 1.35, 10), pedH + 0.25, totalH - 1.2, () => 'metal', 'metal', b.id);
-  B.solid(regPoly(ob.c, 0.78, 10), totalH - 1.2, totalH + 0.6, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(ob.c, 2.15, 8), 2.2, pedH, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(ob.c, 2.45, 8), pedH - 0.45, pedH + 0.25, () => 'metal', 'metal', b.id);
+  // Phần chân & vạt áo bào xòe rộng
+  B.solid(regPoly(ob.c, 1.52, 8), pedH + 0.25, pedH + (totalH - pedH) * 0.48, () => 'metal', 'metal', b.id);
+  // Phần thân trên & bờ vai mở rộng
+  B.solid(localRect(ob, -1.85, 1.85, -0.98, 0.98), pedH + (totalH - pedH) * 0.38, totalH - 1.15, () => 'metal', 'metal', b.id);
+  // Cánh tay phải vươn ra phía trước (cầm Chiếu dời đô / vẫy chào / chỉ huy)
+  B.solid(localRect(ob, 0.65, 1.65, -1.65, -0.35), pedH + (totalH - pedH) * 0.52, totalH - 0.65, () => 'metal', 'metal', b.id);
+  // Đầu tượng & mũ bình thiên
+  B.solid(regPoly(ob.c, 0.72, 8), totalH - 1.15, totalH + 0.35, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -0.92, 0.92, -0.62, 0.62), totalH + 0.25, totalH + 0.65, () => 'metal', 'metal', b.id);
 
   // Bức phù điêu cánh cung bằng đá chạm khắc lịch sử phía sau lưng tượng đài
   for (let k = -2; k <= 2; k++) {
     const u0 = k * (hw * 0.34) - hw * 0.15;
     const u1 = k * (hw * 0.34) + hw * 0.15;
     const vBack = hd * 0.68 - Math.abs(k) * 0.55;
-    B.solid(localRect(ob, u0, u1, vBack, vBack + 1.1), 0.55, 5.2 - Math.abs(k) * 0.45, () => 'wall', 'roof', b.id);
+    B.solid(localRect(ob, u0, u1, vBack, vBack + 1.1), 0.55, 5.4 - Math.abs(k) * 0.45, () => 'wall', 'roof', b.id);
   }
+}
+
+/** 4.1b Tượng đài Cảm tử cho Tổ quốc quyết sinh (Khu vực Đền Bà Kiệu – Đền Ngọc Sơn, bờ Đông Hồ Hoàn Kiếm) */
+function drawTuongDaiCamTu(B: Batch, b: Building, level: Detail) {
+  const ob = orientBoxTowardEast(orientedBoxOf(b.footprint, b.front));
+  const hw = Math.max(7.2, ob.hw), hd = Math.max(5.5, ob.hd);
+  void level;
+
+  // Thềm quảng trường đá hoa cương đỏ/xám 3 cấp trang nghiêm
+  B.solid(localRect(ob, -hw * 1.18, hw * 1.18, -hd * 1.18, hd * 1.18), 0, 0.55, () => 'wall', 'walk', b.id);
+  B.solid(localRect(ob, -hw * 0.9, hw * 0.9, -hd * 0.88, hd * 0.88), 0.55, 1.2, () => 'wall', 'walk', b.id);
+  B.solid(localRect(ob, -hw * 0.62, hw * 0.62, -hd * 0.62, hd * 0.62), 1.2, 1.85, () => 'wall', 'walk', b.id);
+
+  // Trụ biểu đá dựng đứng (Bia "Cảm tử cho Tổ quốc quyết sinh" cao 9.8 m) làm hậu cảnh ở trung tâm
+  B.solid(localRect(ob, -1.65, 1.65, -0.55, 1.35), 1.85, 10.6, () => 'wall', 'roof', b.id);
+  B.solid(localRect(ob, -1.85, 1.85, -0.7, 1.5), 10.2, 11.1, () => 'roof', 'roof', b.id);
+
+  // Hai bức phù điêu đá khắc họa chiến lũy Hà Nội mùa đông 1946 mở rộng hai bên
+  for (const su of [-1, 1] as const) {
+    B.solid(localRect(ob, su * 1.65, su * 4.8, 0.15, 1.45), 1.2, 6.2, () => 'wall', 'roof', b.id);
+    B.solid(localRect(ob, su * 4.4, su * 6.8, 0.45, 1.65), 0.55, 4.4, () => 'wall', 'roof', b.id);
+  }
+
+  // Cụm tượng đồng 2 nhân vật ở tiền cảnh: Chiến sĩ Vệ quốc đoàn lao mình ôm bom ba càng & thiếu nữ Tự vệ Thủ đô
+  B.solid(localRect(ob, -2.1, 2.1, -2.15, 0.25), 1.85, 3.6, () => 'wall', 'roof', b.id);
+  // Chiến sĩ cảm tử quân vươn người về phía trước cùng quả bom ba càng
+  B.solid(localRect(ob, -1.15, 0.65, -1.95, -0.25), 3.6, 7.6, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(localPt(ob, -0.25, -1.15), 0.58, 8), 7.6, 8.75, () => 'metal', 'metal', b.id);
+  // Cánh tay & bom ba càng lao ra phía trước
+  B.solid(localRect(ob, -0.75, 0.35, -3.15, -1.55), 6.1, 7.35, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(localPt(ob, -0.2, -3.35), 0.72, 6), 6.25, 7.55, () => 'metal', 'metal', b.id);
+  // Thiếu nữ tự vệ sát cánh bên phải
+  B.solid(localRect(ob, 0.45, 1.75, -1.45, -0.15), 3.6, 7.1, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(localPt(ob, 1.1, -0.8), 0.52, 8), 7.1, 8.15, () => 'metal', 'metal', b.id);
+}
+
+/** 4.1c Tượng đài Hoàng đế Quang Trung (Gò Đống Đa) — quảng trường lễ hội, bức phù điêu cánh cung lớn & tượng Vua Quang Trung áo bào tung bay vung kiếm */
+function drawTuongDaiQuangTrung(B: Batch, b: Building, level: Detail) {
+  const ob = orientBoxTowardEast(orientedBoxOf(b.footprint, b.front));
+  const hw = Math.max(13.0, ob.hw), hd = Math.max(11.0, ob.hd);
+  void level;
+
+  // Quảng trường lễ hội Gò Đống Đa 3 cấp đá hoa cương
+  B.solid(regPoly(ob.c, Math.max(hw, hd) * 1.05, 12), 0, 0.65, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, Math.max(hw, hd) * 0.8, 12), 0.65, 1.45, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, Math.max(hw, hd) * 0.55, 12), 1.45, 2.35, () => 'wall', 'walk', b.id);
+
+  // Hai bức phù điêu cánh cung đồ sộ phía sau khắc họa thần tốc đại phá quân Thanh
+  for (let k = -5; k <= 5; k++) {
+    if (k === 0) continue;
+    const ang = k * 0.2;
+    const pRel = localPt(ob, Math.sin(ang) * (hw * 0.78), Math.cos(ang) * (hd * 0.45) + hd * 0.22);
+    const hRel = 8.6 - Math.abs(k) * 0.55;
+    B.solid(regPoly(pRel, 1.45, 6, ang), 1.45, hRel, () => 'wall', 'roof', b.id);
+    B.solid(regPoly(pRel, 1.6, 6, ang), hRel - 0.35, hRel + 0.18, () => 'roof', 'roof', b.id);
+  }
+
+  // Bệ đá hoa cương nguyên khối và vành diềm đồng
+  B.solid(localRect(ob, -2.6, 2.6, -2.4, 2.4), 2.35, 3.25, () => 'wall', 'walk', b.id);
+  B.solid(localRect(ob, -1.95, 1.95, -1.85, 1.85), 3.25, 7.8, () => 'wall', 'roof', b.id);
+  B.solid(localRect(ob, -2.25, 2.25, -2.1, 2.1), 7.35, 8.05, () => 'metal', 'metal', b.id);
+
+  // Tượng Hoàng đế Quang Trung: thân giáp trụ, tà áo bào tung bay rộng ra sau, đầu đội mũ chiến bào & tay phải vung kiếm chỉ huy
+  B.solid(localRect(ob, -1.45, 1.45, -1.15, 1.15), 8.05, 10.2, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -2.55, 2.55, 0.05, 1.85), 8.15, 11.8, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -2.1, 2.1, -0.95, 1.05), 9.9, 12.3, () => 'metal', 'metal', b.id);
+  // Đầu & mũ chiến bào
+  B.solid(regPoly(localPt(ob, 0, -0.15), 0.82, 8), 12.3, 13.7, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, -0.6, 0.6, -0.6, 0.45), 13.5, 14.2, () => 'metal', 'metal', b.id);
+  // Tay phải giơ cao đốc kiếm & thanh kiếm lệnh
+  B.solid(localRect(ob, 0.9, 1.75, -1.35, -0.25), 11.5, 13.8, () => 'metal', 'metal', b.id);
+  B.solid(localRect(ob, 1.1, 1.5, -1.9, -0.6), 13.6, 15.6, () => 'metal', 'metal', b.id);
+  // Tay trái nắm đai giáp
+  B.solid(localRect(ob, -1.95, -1.0, -1.2, -0.15), 10.4, 11.9, () => 'metal', 'metal', b.id);
 }
 
 /** 4.2 Di tích Hồ Hữu Tiệp – Xác máy bay B-52 rơi tại làng hoa Ngọc Hà */
@@ -609,6 +697,81 @@ function drawB52HuuTiepLake(B: Batch, b: Building, level: Detail) {
 // ============================================================================
 // NHÓM 5: CỤM DANH THẮNG HỒ HOÀN KIẾM, PHỐ CỔ & DI TÍCH ĐÔ THỊ
 // ============================================================================
+
+/** 5.0a Cầu Thê Húc (Cầu gỗ sơn son thếp vàng 15 nhịp cong như con tôm dẫn vào Đền Ngọc Sơn) */
+function drawCauTheHuc(B: Batch, b: Building, level: Detail) {
+  const ob = orientBoxTowardEast(orientedBoxOf(b.footprint, b.front));
+  const hw = Math.max(19.5, ob.hw), hd = Math.max(6.5, ob.hd);
+  const lamp1 = floorId(b, 1);
+
+  // Mặt hồ Hoàn Kiếm bên dưới nhịp cầu Thê Húc
+  B.flat('water', localRect(ob, -hw * 1.15, hw * 1.15, -hd * 1.6, hd * 1.6), 0.08, 'detail', b.id);
+
+  // Đầu Tây: Mố đảo Ngọc & Lầu Đắc Nguyệt 2 tầng 8 mái cổ kính
+  B.solid(localRect(ob, -hw * 1.15, -hw * 0.72, -hd * 1.1, hd * 1.1), 0, 0.75, () => 'wall', 'walk', b.id);
+  const gateOb: OrientedBox = { c: localPt(ob, -hw * 0.9, 0), u: ob.v, v: [-ob.u[0], -ob.u[1]], hw: 3.1, hd: 2.4 };
+  B.solid(localRect(gateOb, -3.0, 3.0, -2.2, 2.2), 0.75, 4.2, () => 'wall', 'roof', b.id);
+  drawTraditionalCurvedRoof(B, gateOb, 3.1, 2.3, 4.05, 1.35, b.id, true);
+  B.solid(localRect(gateOb, -2.1, 2.1, -1.55, 1.55), 5.2, 7.6, () => 'wall', 'roof', b.id);
+  if (level >= 1) addBandWindows(B, localRect(gateOb, -2.1, 2.1, -1.55, 1.55), 5.6, 7.1, lamp1, 1.8);
+  drawTraditionalCurvedRoof(B, gateOb, 2.35, 1.75, 7.45, 1.45, b.id, true);
+
+  // Nhịp cầu gỗ sơn đỏ 15 khoang uốn vòm cong trên 16 hàng cọc tròn
+  const segs = 12;
+  const uStart = -hw * 0.74, uEnd = hw * 0.74;
+  for (let i = 0; i < segs; i++) {
+    const t0 = i / segs, t1 = (i + 1) / segs, tm = (t0 + t1) * 0.5;
+    const u0 = uStart + (uEnd - uStart) * t0;
+    const u1 = uStart + (uEnd - uStart) * t1;
+    const archZ = 0.8 + Math.sin(tm * Math.PI) * 1.55;
+    B.solid(localRect(ob, u0, u1, -2.2, 2.2), archZ, archZ + 0.36, () => 'roof', 'roof', b.id);
+    B.solid(localRect(ob, u0, u1, -2.28, -1.9), archZ + 0.36, archZ + 1.32, () => 'roof', 'roof', b.id);
+    B.solid(localRect(ob, u0, u1, 1.9, 2.28), archZ + 0.36, archZ + 1.32, () => 'roof', 'roof', b.id);
+    for (const sv of [-1.6, 1.6] as const) {
+      B.solid(regPoly(localPt(ob, (u0 + u1) * 0.5, sv), 0.22, 8), 0, archZ, () => 'roof', 'roof', b.id);
+    }
+  }
+
+  // Đầu Đông: Mố bờ hồ & Cổng Đài Nghiên (3 trái đào đội nghiên mực đá)
+  B.solid(localRect(ob, hw * 0.72, hw * 1.12, -hd * 0.95, hd * 0.95), 0, 0.7, () => 'wall', 'walk', b.id);
+  for (const sv of [-2.4, 2.4] as const) {
+    const pCol = localPt(ob, hw * 0.84, sv);
+    B.solid(regPoly(pCol, 0.56, 4, Math.PI / 4), 0.7, 5.2, () => 'wall', 'roof', b.id);
+    B.solid(regPoly(pCol, 0.38, 8), 5.2, 6.1, () => 'metal', 'metal', b.id);
+  }
+  B.solid(localRect(ob, hw * 0.76, hw * 0.92, -2.1, 2.1), 0.7, 3.8, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(localPt(ob, hw * 0.84, 0), 0.75, 10), 3.8, 4.75, () => 'metal', 'metal', b.id);
+}
+
+/** 5.0b Tháp Bút & Đài Nghiên (Tháp đá 5 tầng khắc "Tả Thanh Thiên" trên núi Ngọc Bội bên Hồ Hoàn Kiếm) */
+function drawThapBut(B: Batch, b: Building, level: Detail) {
+  const ob = orientBoxTowardEast(orientedBoxOf(b.footprint, b.front));
+  void level;
+
+  // Bậc thềm đá xanh & Gò núi đá tai mèo Độc Tôn (Núi Ngọc Bội cao 4 m)
+  B.solid(regPoly(ob.c, 8.8, 12), 0, 0.55, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, 6.2, 10), 0.55, 1.65, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, 4.6, 9, 0.2), 1.65, 3.0, () => 'wall', 'walk', b.id);
+  B.solid(regPoly(ob.c, 3.3, 8, 0.4), 3.0, 4.1, () => 'wall', 'walk', b.id);
+
+  // 5 tầng Tháp Bút bằng đá vuông thu dần lên cao + ngòi bút lông vươn thẳng lên trời xanh
+  const tiers: [number, number, number][] = [
+    [1.65, 4.1, 6.0],
+    [1.42, 6.0, 7.7],
+    [1.22, 7.7, 9.2],
+    [1.04, 9.2, 10.6],
+    [0.86, 10.6, 11.9],
+  ];
+  for (const [r, z0, z1] of tiers) {
+    B.solid(localRect(ob, -r, r, -r, r), z0, z1, () => 'wall', 'roof', b.id);
+    B.solid(localRect(ob, -r - 0.24, r + 0.24, -r - 0.24, r + 0.24), z1 - 0.24, z1 + 0.08, () => 'roof', 'roof', b.id);
+  }
+  // Cán bút và ngòi bút đá (4.2 m trên đỉnh tầng 5)
+  B.solid(regPoly(ob.c, 0.56, 8), 11.9, 13.4, () => 'wall', 'roof', b.id);
+  B.solid(regPoly(ob.c, 0.72, 10), 13.4, 14.9, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(ob.c, 0.36, 8), 14.9, 16.2, () => 'metal', 'metal', b.id);
+  B.solid(regPoly(ob.c, 0.14, 8), 16.2, 17.0, () => 'metal', 'metal', b.id);
+}
 
 /** 5.1 Tháp Hòa Phong (Di tích chùa Báo Ân cổ bên bờ Đông Hồ Hoàn Kiếm) */
 function drawThapHoaPhong(B: Batch, b: Building, level: Detail) {
@@ -1301,8 +1464,20 @@ export function drawHaNoiCatalogLandmarkBuilding(B: Batch, b: Building, level: D
     case 'statue-monument-plaza':
       drawStatueMonumentPlaza(B, b, level);
       return true;
+    case 'tuong-dai-cam-tu':
+      drawTuongDaiCamTu(B, b, level);
+      return true;
+    case 'tuong-dai-quang-trung':
+      drawTuongDaiQuangTrung(B, b, level);
+      return true;
     case 'b52-huu-tiep-lake':
       drawB52HuuTiepLake(B, b, level);
+      return true;
+    case 'cau-the-huc':
+      drawCauTheHuc(B, b, level);
+      return true;
+    case 'thap-but':
+      drawThapBut(B, b, level);
       return true;
     case 'thap-hoa-phong':
       drawThapHoaPhong(B, b, level);

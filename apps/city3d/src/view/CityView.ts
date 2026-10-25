@@ -2869,11 +2869,15 @@ export class CityView {
       const localFeatures = this.city.features.filter(
         f => f.at[0] >= cx0 - 64 && f.at[0] <= cx1 + 64 && f.at[1] >= cy0 - 64 && f.at[1] >= cy1 + 64,
       );
+      const localAreas = this.city.areas.filter(a =>
+        a.polygon.some(p => p[0] >= cx0 - 128 && p[0] <= cx1 + 128 && p[1] >= cy0 - 128 && p[1] <= cy1 + 128),
+      );
       const subCity: City = {
         ...this.city,
         streets: localStreets,
         buildings: localBuildings,
         features: localFeatures,
+        areas: localAreas,
       };
 
       const chunkLocalTiles = localStreetTilesOf(subCity);
@@ -2902,7 +2906,35 @@ export class CityView {
       for (const fb of chunkBuckets) {
         if (fb.center[0] < cx0 || fb.center[0] >= cx1 || fb.center[1] < cy0 || fb.center[1] >= cy1) continue;
         const ck = `${Math.floor(fb.center[0] / TILE)},${Math.floor(fb.center[1] / TILE)}`;
-        if (!this.cellByKey.has(ck)) {
+        const existingCell = this.cellByKey.get(ck);
+        if (existingCell) {
+          if (this.mounted) {
+            if (existingCell.groups) {
+              this.mounted.furnitureGroup.remove(
+                existingCell.groups.poles,
+                existingCell.groups.fixtures,
+                existingCell.groups.trees,
+                existingCell.groups.simple,
+              );
+            }
+            if (existingCell.wires) this.mounted.furnitureGroup.remove(existingCell.wires);
+            if (existingCell.pulses) this.mounted.furnitureGroup.remove(existingCell.pulses);
+            if (existingCell.pools) this.mounted.furnitureGroup.remove(existingCell.pools);
+          }
+          existingCell.groups = null;
+          existingCell.wires = null;
+          existingCell.pulses = null;
+          existingCell.pools = null;
+          if (existingCell.cell) {
+            for (const l of [existingCell.cell.poles, existingCell.cell.fixtures, existingCell.cell.trees, existingCell.cell.simpleTrees]) {
+              this.disposeLayerObj(l);
+            }
+            existingCell.cell.wires.dispose();
+            existingCell.cell.pools.dispose();
+            existingCell.cell = null;
+          }
+          existingCell.bucket = fb;
+        } else {
           const cs: CellState = { bucket: fb, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 };
           this.cells.push(cs);
           this.cellByKey.set(ck, cs);

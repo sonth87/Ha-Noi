@@ -10,7 +10,7 @@
    the street (negative = into the house), z up. Windows light by floor: ground = <id>/1, upper
    floor k (0-based) = <id>/(k + 2), the roof room = <id>/(storeys + 1). Pure. */
 import * as THREE from 'three';
-import { edgeNormal, floorId, type Building, type FloorSpec, type HouseSpec, type Vec2 } from '@my-city/core';
+import { centroid, edgeNormal, floorId, type Building, type FloorSpec, type HouseSpec, type Vec2 } from '@my-city/core';
 import { V, type Batch, type Surface } from './batch';
 
 /** what may stand on the sidewalk or stick out of the facade (house-spec: REACH) */
@@ -25,7 +25,12 @@ export interface HouseCtx {
 
 export function buildHouse(B: Batch, b: Building, spec: HouseSpec, level: 2 | 3, ctx: HouseCtx) {
   const R = b.footprint, n = R.length, f = b.front;
-  const p0 = R[f]!, p1 = R[(f + 1) % n]!, nrm = edgeNormal(R, f);
+  const c = centroid(R);
+  const p0Raw = R[f]!, p1Raw = R[(f + 1) % n]!, rawNrm = edgeNormal(R, f);
+  const midX = (p0Raw[0] + p1Raw[0]) * 0.5, midY = (p0Raw[1] + p1Raw[1]) * 0.5;
+  const rev = rawNrm[0] * (midX - c[0]) + rawNrm[1] * (midY - c[1]) < 0;
+  const p0 = rev ? p1Raw : p0Raw, p1 = rev ? p0Raw : p1Raw;
+  const nrm: Vec2 = rev ? [-rawNrm[0], -rawNrm[1]] : rawNrm;
   const w = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]), ux = (p1[0] - p0[0]) / w, uy = (p1[1] - p0[1]) / w;
   const P = (a: number, s: number, z: number) => V(p0[0] + ux * a + nrm[0] * s, p0[1] + uy * a + nrm[1] * s, z);
   const out = new THREE.Vector3(nrm[0], 0, nrm[1]), side = new THREE.Vector3(ux, 0, uy), up = new THREE.Vector3(0, 1, 0);

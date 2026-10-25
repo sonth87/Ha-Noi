@@ -92,6 +92,8 @@ export interface Area {
   kind: AreaKind;
   name?: string;
   polygon: Vec2[];
+  /** interior cutout rings (e.g. islands inside lakes or courtyards inside parks) */
+  holes?: Vec2[][];
   /** bordering street or address */
   address?: string;
   /** administrative district / locality name */

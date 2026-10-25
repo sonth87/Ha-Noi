@@ -333,34 +333,67 @@ export function importArea(
 
   const GENERIC_PART_NAME = /^(chung cư|văn phòng.*|toà\s+[a-z0-9]+|tòa\s+[a-z0-9]+|tower\s+[a-z0-9]+|khối\s+[a-z0-9]+|m\d+|s\d+|t\d+)$/iu;
 
+  const normCatalogKey = (s: string) => s.replace(/[“”"']/gu, '').replace(/\s+/gu, ' ').trim().toLowerCase();
   const catalogBySource = new Map<string, CityLandmarkCatalogEntry>();
   const catalogByName = new Map<string, CityLandmarkCatalogEntry>();
   if (cfg.landmarksCatalog) {
     for (const entry of cfg.landmarksCatalog) {
       if (entry.osmSource) catalogBySource.set(entry.osmSource, entry);
-      catalogByName.set(entry.name.trim().toLowerCase(), entry);
+      catalogByName.set(normCatalogKey(entry.name), entry);
       const stripped = entry.name.replace(/\s*\([^)]*\)\s*$/u, '').trim();
-      if (stripped) catalogByName.set(stripped.toLowerCase(), entry);
+      if (stripped) catalogByName.set(normCatalogKey(stripped), entry);
       if (entry.aliases) {
         for (const alias of entry.aliases) {
-          catalogByName.set(alias.trim().toLowerCase(), entry);
+          catalogByName.set(normCatalogKey(alias), entry);
         }
       }
     }
   }
 
-  const buildings: Building[] = keep.map(b => {
+  // Filter out unnamed bridgehead box way/1220021892 and Đình Trấn Ba way/178995271 (both rendered in full 3D detail by drawDenNgocSon)
+  const filteredKeep = keep.filter(b => b.source !== 'osm:way/1220021892' && b.source !== 'osm:way/178995271');
+
+  const buildings: Building[] = filteredKeep.map(b => {
     const c = centroid(b.ring);
     const campusCell = campusGrid.get(`${Math.floor(c[0] / FG)},${Math.floor(c[1] / FG)}`);
     const campus = campusCell?.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
-    const subtype = inferSubtype(b.t) ?? campus?.subtype;
-    const isHeritage = subtype === 'heritage';
+    const raw = partsOf.get(b.id) ?? [];
+    let name = b.t.name;
+    if (!name && raw.length) {
+      const partNames = [...new Set(raw.map(p => p.t.name?.trim()).filter((n): n is string => n !== undefined && n.length > 0 && !GENERIC_PART_NAME.test(n)))];
+      if (partNames.length) name = partNames.slice(0, 2).join(' – ');
+    }
+    if (campus && (!name || /^[A-ZĐ]\d{1,2}$/i.test(name.trim()))) {
+      name = name ? `${campus.name} – Nhà ${name.trim()}` : campus.name;
+    }
+    const nTrim = name?.trim() ?? '';
+    const nNorm = normCatalogKey(nTrim);
+    const catEntry =
+      catalogBySource.get(b.source) ??
+      (nNorm
+        ? catalogByName.get(nNorm) ??
+          cfg.landmarksCatalog?.find(e =>
+            e.aliases?.some(al => {
+              const k = normCatalogKey(al);
+              return k.length >= 4 && nNorm.includes(k);
+            }),
+          )
+        : undefined);
+    const subtype = inferSubtype(b.t) ?? campus?.subtype ?? (catEntry ? 'heritage' : undefined);
+    const isMonumentOrArtwork = Boolean(
+      b.t.historic === 'monument' ||
+        b.t.historic === 'memorial' ||
+        b.t.building === 'monument' ||
+        b.t.artwork_type ||
+        b.t.tourism === 'artwork' ||
+        /^(tượng|tượng đài|đài tưởng niệm|nhà bia|cảm tử|quyết tử)\b/iu.test(nNorm),
+    );
+    const isHeritage = subtype === 'heritage' || isMonumentOrArtwork || Boolean(catEntry?.model);
     const rawKind = guessKind(b.ring, isHeritage ? 'other' : buildingHint(b.t));
     const kind: Building['kind'] = isHeritage && (rawKind === 'tube-house' || rawKind === 'house') ? 'other' : rawKind;
     const own = levelsOf(b.t);
     const baseArea = ringArea(b.ring);
     const levels = own ?? (isHeritage ? (baseArea < 90 ? 1 : 2) : guessLevels(kind, b.source));
-    const raw = partsOf.get(b.id) ?? [];
     const bFacade: BuildingPart['facade'] = b.t['building:material'] === 'glass' ? 'glass' : 'wall';
     const rawParts: BuildingPart[] = raw.map(p => ({
       id: p.id, footprint: p.ring, z0: Number.parseFloat(p.t.min_height ?? '0') || 0,
@@ -389,30 +422,24 @@ export function importArea(
     const house = raw.length || isHeritage ? undefined : houseFor(b.source, kind, levels, w, d, {}, on);
     // a generated house sets its own storey heights (a raised ground floor over a semi-basement…)
     if (house) parts[0] = { ...parts[0]!, floors: houseStoreys(house.spec) };
-    let name = b.t.name;
-    if (!name && raw.length) {
-      const partNames = [...new Set(raw.map(p => p.t.name?.trim()).filter((n): n is string => n !== undefined && n.length > 0 && !GENERIC_PART_NAME.test(n)))];
-      if (partNames.length) name = partNames.slice(0, 2).join(' – ');
-    }
-    if (campus && (!name || /^[A-ZĐ]\d{1,2}$/i.test(name.trim()))) {
-      name = name ? `${campus.name} – Nhà ${name.trim()}` : campus.name;
-    }
-    const nTrim = name?.trim() ?? '';
-    const catEntry = catalogBySource.get(b.source) ?? (nTrim ? catalogByName.get(nTrim.toLowerCase()) : undefined);
     const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
     const district = cfg.districtOf?.(c);
     const description = (name ? cfg.heritageNotes?.[name.trim()] : undefined) ?? catEntry?.description;
     const autoModel =
       catEntry?.model ??
-      (b.t.building === 'church' || b.t.building === 'cathedral' || /^(nhà thờ|giáo xứ|thánh đường)\b/i.test(nTrim)
-        ? 'church-hall'
-        : /^(lăng|lăng mộ)\b/i.test(nTrim)
-          ? 'traditional-mausoleum'
-          : /^(chùa|tổ đình)\b/i.test(nTrim) || (isHeritage && b.t.religion === 'buddhist')
-            ? 'traditional-pagoda'
-            : /^(đền|đình|miếu|phủ)\b/i.test(nTrim) || b.t.building === 'temple' || b.t.building === 'shrine'
-              ? 'traditional-temple'
-              : undefined);
+      (isMonumentOrArtwork
+        ? /cảm tử|quyết tử/iu.test(nNorm)
+          ? 'tuong-dai-cam-tu'
+          : 'statue-monument-plaza'
+        : b.t.building === 'church' || b.t.building === 'cathedral' || /^(nhà thờ|giáo xứ|thánh đường)\b/i.test(nTrim)
+          ? 'church-hall'
+          : /^(lăng|lăng mộ)\b/i.test(nTrim)
+            ? 'traditional-mausoleum'
+            : /^(chùa|tổ đình)\b/i.test(nTrim) || (isHeritage && b.t.religion === 'buddhist')
+              ? 'traditional-pagoda'
+              : /^(đền|đình|miếu|phủ)\b/i.test(nTrim) || b.t.building === 'temple' || b.t.building === 'shrine'
+                ? 'traditional-temple'
+                : undefined);
     return {
       id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
       ...(autoModel ? { model: autoModel, isSignatureLandmark: Boolean(nTrim || catEntry) } : {}),
@@ -426,14 +453,30 @@ export function importArea(
 
   // ---------- 4. areas ----------
   const areas: Area[] = [];
-  const addArea = (id: string, source: string, ring: Vec2[], t: OsmTags) => {
+  const addArea = (id: string, source: string, ring: Vec2[], t: OsmTags, rawHoles?: readonly Vec2[][]) => {
     const kind = areaKind(t);
     if (!kind) return;
-    // clipped to the rectangle holding its middle (or any vertex of it)
-    const nr = normalizeRing(ring), c = centroid(nr), box = region.find(r => inRect(c, r)) ?? region.find(r => nr.some(q => inRect(q, r)));
-    if (!box) return;
-    const clipped = clipRing(nr, box);
+    const nr = normalizeRing(ring);
+    if (nr.length < 3) return;
+    const c = centroid(nr);
+    const touchesRegion = region.some(r => inRect(c, r)) || region.some(r => nr.some(q => inRect(q, r)));
+    if (!touchesRegion) return;
+    // Keep polygons within overall city bounds R completely unclipped so multi-district lakes (Hồ Tây, Hồ Trúc Bạch, etc.)
+    // are never sliced by internal district sub-rectangles; only clip to R if vertices extend outside R.
+    const allInBounds = nr.every(q => inRect(q, R));
+    const clipped = allInBounds ? nr : clipRing(nr, R);
     if (clipped.length < 3) return;
+    const validHoles: Vec2[][] = [];
+    if (rawHoles?.length) {
+      for (const h of rawHoles) {
+        const nh = normalizeRing(h);
+        if (nh.length < 3) continue;
+        const hc = centroid(nh);
+        if (!pointInRing(hc, clipped)) continue;
+        const ch = nh.every(q => inRect(q, R)) ? nh : clipRing(nh, R);
+        if (ch.length >= 3) validHoles.push(ch);
+      }
+    }
     const nearSt = nearStreets(clipped).filter(s => s.name);
     let bestSt: string | undefined;
     let bestD = Infinity;
@@ -451,6 +494,7 @@ export function importArea(
     const description = (name && cfg.heritageNotes?.[name]) ?? (rawName && cfg.heritageNotes?.[rawName]);
     areas.push({
       id, kind, name, polygon: clipped,
+      ...(validHoles.length ? { holes: validHoles } : {}),
       ...(address ? { address } : {}),
       ...(district ? { district } : {}),
       ...(subtype ? { subtype } : {}),
@@ -460,10 +504,11 @@ export function importArea(
   };
   for (const w of ways.values()) if (w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]) addArea(`a${w.id}`, src('way', w.id), path(w), tags(w));
   for (const r of relations) {
+    // Skip rel/6907107 (27km regional Red River relation) because Sông Hồng within Hanoi bounds is already represented cleanly by way/99000000010 & way/1162959477
+    if (r.id === 6907107) continue;
     if (tags(r).type !== 'multipolygon' || !areaKind(tags(r))) continue;
-    const { outer, inner } = rings(r, ways, path);
-    report.droppedHoles += inner;
-    outer.forEach((ring, k) => addArea(`ar${r.id}${outer.length > 1 ? `-${k}` : ''}`, src('relation', r.id), ring, tags(r)));
+    const { outer, innerRings } = rings(r, ways, path);
+    outer.forEach((ring, k) => addArea(`ar${r.id}${outer.length > 1 ? `-${k}` : ''}`, src('relation', r.id), ring, tags(r), innerRings));
   }
 
   // ---------- 5. features and junctions ----------
@@ -679,25 +724,29 @@ function cutProfile(prof: [number, number][], s0: number, s1: number): [number, 
 
 const nearPath = (p: Vec2, path: readonly Vec2[], r: number) => path.some((a, i) => i > 0 && closestOnSegment(p, path[i - 1]!, a).d <= r);
 
-/** outer rings of a multipolygon, joining its member ways end to end; counts inner rings */
-function rings(r: OsmRelation, ways: Map<number, OsmWay>, path: (w: OsmWay) => Vec2[]): { outer: Vec2[][]; inner: number } {
-  const segs = r.members.filter(m => m.type === 'way' && (m.role === 'outer' || m.role === '')).map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w).map(w => [...w.nodes]);
-  const inner = r.members.filter(m => m.type === 'way' && m.role === 'inner').length;
-  const out: Vec2[][] = [];
+/** outer and inner rings of a multipolygon, joining member ways end to end */
+function rings(r: OsmRelation, ways: Map<number, OsmWay>, path: (w: OsmWay) => Vec2[]): { outer: Vec2[][]; innerRings: Vec2[][]; inner: number } {
   const toRing = (ids: number[]) => path({ type: 'way', id: 0, nodes: ids });
-  while (segs.length) {
-    let ring = segs.shift()!;
-    for (let grew = true; grew && ring[0] !== ring[ring.length - 1];) {
-      grew = false;
-      for (let i = 0; i < segs.length; i++) {
-        const s = segs[i]!, end = ring[ring.length - 1];
-        if (s[0] === end) ring = [...ring, ...s.slice(1)];
-        else if (s[s.length - 1] === end) ring = [...ring, ...[...s].reverse().slice(1)];
-        else continue;
-        segs.splice(i, 1); grew = true; break;
+  const stitch = (segs: number[][]): Vec2[][] => {
+    const out: Vec2[][] = [];
+    while (segs.length) {
+      let ring = segs.shift()!;
+      for (let grew = true; grew && ring[0] !== ring[ring.length - 1];) {
+        grew = false;
+        for (let i = 0; i < segs.length; i++) {
+          const s = segs[i]!, end = ring[ring.length - 1];
+          if (s[0] === end) ring = [...ring, ...s.slice(1)];
+          else if (s[s.length - 1] === end) ring = [...ring, ...[...s].reverse().slice(1)];
+          else continue;
+          segs.splice(i, 1); grew = true; break;
+        }
       }
+      if (ring.length >= 4 && ring[0] === ring[ring.length - 1]) out.push(toRing(ring));
     }
-    if (ring.length >= 4 && ring[0] === ring[ring.length - 1]) out.push(toRing(ring));
-  }
-  return { outer: out, inner };
+    return out;
+  };
+  const outerSegs = r.members.filter(m => m.type === 'way' && (m.role === 'outer' || m.role === '')).map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w).map(w => [...w.nodes]);
+  const innerSegs = r.members.filter(m => m.type === 'way' && m.role === 'inner').map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w).map(w => [...w.nodes]);
+  const inner = innerSegs.length;
+  return { outer: stitch(outerSegs), innerRings: stitch(innerSegs), inner };
 }

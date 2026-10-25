@@ -17,14 +17,21 @@ export interface OrientedBox {
 
 export function orientedBoxOf(ring: readonly Vec2[], frontIdx = 0): OrientedBox {
   const n = ring.length;
-  let bestI = frontIdx >= 0 && frontIdx < n ? frontIdx : 0;
-  let bestL = 0;
-  for (let i = 0; i < n; i++) {
-    const p = ring[i]!, q = ring[(i + 1) % n]!;
-    const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
-    if (L > bestL) {
-      bestL = L;
-      bestI = i;
+  const fIdx = frontIdx >= 0 && frontIdx < n ? frontIdx : 0;
+  const fp0 = ring[fIdx]!, fp1 = ring[(fIdx + 1) % n]!;
+  // If edge `fIdx` is an axis-aligned horizontal showcase front edge (facing +y, p0.x > p1.x),
+  // preserve `fIdx` directly so buildings with d > w (churches, mosques, tube houses, halls) never swap width & depth.
+  const isShowcaseFront = Math.abs(fp1[1] - fp0[1]) < 1e-3 && fp0[0] - fp1[0] >= 2.0;
+  let bestI = fIdx;
+  if (!isShowcaseFront) {
+    let bestL = 0;
+    for (let i = 0; i < n; i++) {
+      const p = ring[i]!, q = ring[(i + 1) % n]!;
+      const L = Math.hypot(q[0] - p[0], q[1] - p[1]);
+      if (L > bestL) {
+        bestL = L;
+        bestI = i;
+      }
     }
   }
   const p0 = ring[bestI]!, p1 = ring[(bestI + 1) % n]!;

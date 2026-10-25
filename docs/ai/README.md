@@ -50,7 +50,7 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A13 | **Tòa nhà thật lấy mặt bằng và số tầng từ OpenStreetMap**, không đoán từ ảnh. Giữ đúng tỉ lệ thật. Ảnh của người dùng chỉ để đối chiếu và bổ sung chi tiết. Cách làm ở §5. Ghi id OSM vào dữ liệu và chú thích (ADR-030). |
 | A14 | **`apps/svg` đóng băng** (ADR-032): không sửa, không thêm tính năng. Chỉ được sửa khi người dùng yêu cầu rõ, hoặc khi đổi cấu trúc repo làm nó không chạy được nữa (sửa tối thiểu để chạy lại, và ghi vào checklist). Script chạy app cũ luôn được giữ. |
 | A15 | Dữ liệu OSM theo giấy phép **ODbL**: app hiển thị "© OpenStreetMap contributors"; gói `osm-data` ghi rõ nguồn và ngày tải. |
-| A16 | **Tổ chức thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình Bắt buộc khi mở rộng vùng mới (ADR-054, ADR-055)**: (1) Mỗi quốc gia và thành phố **bắt buộc có thư mục lưu trữ riêng** cho dữ liệu di tích/công trình (`packages/osm-import/src/cities/<country>/<city>/`) và bộ dựng 3D chuyên biệt (`apps/city3d/src/render/landmarks/<country>/<city>/`). (2) **Mỗi khi thêm bất kỳ vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã mới nào**, bắt buộc phải đi rà soát toàn bộ khu vực đó theo **13 nhóm công trình chuẩn** (Cửa ô/cổng thành/thành cổ, Cơ quan Trung ương Đảng/Chính phủ/Bộ ngành/Nhà khách, Nhà thờ & tôn giáo, Đài tưởng niệm & tượng đài, Danh thắng đô thị/phố cổ/chợ cổ, Đền/phủ/đạo quán, Chùa cổ & thiền viện, Đình cổ & cổng làng, Công trình văn hóa/giáo dục/y tế thời kỳ trước, Bảo tàng & trung tâm triển lãm, Cao ốc & trung tâm thương mại, Khách sạn lớn, Cầu lớn & công trình thể thao/hội nghị) để lập dữ liệu và vẽ 3D riêng cẩn thận cho từng công trình — tuyệt đối không để sót hoặc vẽ thành khối hộp sơ sài. |
+| A16 | **Tổ chức thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình + Cầu Biểu tượng + Tượng đài + Hồ/Công viên Bắt buộc khi mở rộng vùng mới (ADR-054, ADR-055, ADR-057)**: (1) Mỗi quốc gia và thành phố **bắt buộc có thư mục lưu trữ riêng** cho dữ liệu di tích/công trình (`packages/osm-import/src/cities/<country>/<city>/`) và bộ dựng 3D chuyên biệt (`apps/city3d/src/render/landmarks/<country>/<city>/`). (2) **Mỗi khi thêm bất kỳ vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã mới nào**, bắt buộc phải đi rà soát toàn bộ khu vực đó theo **13 nhóm công trình chuẩn** (Cửa ô/cổng thành/thành cổ, Cơ quan Trung ương Đảng/Chính phủ/Bộ ngành/Nhà khách, Nhà thờ & tôn giáo, **Đài tưởng niệm & tượng đài điêu khắc 3D**, Danh thắng đô thị/phố cổ/chợ cổ, Đền/phủ/đạo quán, Chùa cổ & thiền viện, Đình cổ & cổng làng, Công trình văn hóa/giáo dục/y tế thời kỳ trước, Bảo tàng & trung tâm triển lãm, Cao ốc & trung tâm thương mại, Khách sạn lớn, **Các cây cầu biểu tượng lớn/nhỏ như Cầu Thê Húc, Cầu Long Biên, Cầu Nhật Tân, Cầu Rồng Đà Nẵng, Cầu Trường Tiền Huế…** & công trình thể thao/hội nghị) cùng **hệ thống hồ nước (giữ đúng bờ hồ & đảo trong hồ), công viên và vườn hoa (thảm cỏ xanh + tán cây 3D)** — tuyệt đối không để sót, không vẽ tượng đài thành ngôi nhà hay cái cọc đơn giản, và không vẽ cầu biểu tượng thành dải đường bê tông phẳng. |
 
 ## 4. Lệnh (ở thư mục gốc)
 
@@ -82,14 +82,14 @@ Bản đồ 3D f4map (`demo.f4map.com/#lat=21.0096812&lon=105.8237414&zoom=20`) 
 4. **OSM thiếu gì ở khu này** (khảo sát 2026-10-21): 121/123 tòa không có số tầng; đường không có `width`; không có vỉa hè; gần như không có cây, cột điện, đèn đường. Những thứ này do luật và generator trong core sinh ra.
 5. **Lô phải chứa đủ tòa thật.** Không thu nhỏ tòa nhà (thu nhỏ làm lệch dáng).
 6. **Đối chiếu** với ảnh của người dùng hoặc f4map. Số tầng OSM khác số liệu chính thức thì theo số chính thức và ghi chỗ lệch (ví dụ Novotel: OSM 26 tầng, khách sạn công bố 27).
-7. **Cấu trúc thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình Bắt buộc (ADR-055)**:
+7. **Cấu trúc thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình Bắt buộc (ADR-055, ADR-057)**:
    - Dữ liệu đô thị và danh mục công trình của mỗi thành phố đặt tại `packages/osm-import/src/cities/<country>/<city>/` (`districts.ts`, `places.ts`, `heritage-notes.ts`, `overrides.ts`, `catalog-part1.ts`, `catalog-part2.ts`, `landmarks-catalog.ts`, `index.ts`).
    - Bộ dựng 3D chuyên biệt đặt tại `apps/city3d/src/render/landmarks/<country>/<city>/` (dùng chung helper hình học tại `apps/city3d/src/render/landmarks/shared.ts`).
    - Mỗi khi thêm bất kỳ **vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã** mới nào, bắt buộc rà soát và lập hồ sơ dữ liệu + mô hình 3D riêng cho đủ **13 nhóm**:
      1. *Cửa Ô, Cổng Thành & Thành Quách Cổ*
      2. *Toà nhà Chính phủ, Cơ quan Trung ương Đảng & Nhà khách Nhà nước*
      3. *Hệ thống Nhà thờ (Công giáo, Tin lành) & Công trình Tôn giáo*
-     4. *Đài Tưởng niệm, Tượng đài & Di tích Chiến công*
+     4. *Đài Tưởng niệm, Tượng đài & Di tích Chiến công* (**bắt buộc tạo hình điêu khắc 3D đa khối kèm phù điêu/quảng trường, tuyệt đối không vẽ thành nhà có cửa sổ hoặc trụ cọc đơn điệu**)
      5. *Cụm danh thắng Đô thị, Phố Cổ & Chợ Truyền thống*
      6. *Tứ Trấn, Đền, Phủ & Đạo Quán*
      7. *Chùa Cổ, Thiền viện & Quần thể Phật giáo*
@@ -98,7 +98,7 @@ Bản đồ 3D f4map (`demo.f4map.com/#lat=21.0096812&lon=105.8237414&zoom=20`) 
      10. *Bảo tàng & Trung tâm Triển lãm*
      11. *Toà nhà Cao tầng, Trung tâm Thương mại & Tổ hợp Hiện đại*
      12. *Khách sạn Sang trọng & Nổi tiếng*
-     13. *Cầu, Hạ tầng, Thể thao & Công trình Văn hoá Quy mô lớn*
+     13. *Cầu Biểu tượng (Cầu Thê Húc, Cầu Long Biên, Cầu Nhật Tân, Cầu Chương Dương, Cầu Rồng Đà Nẵng, Cầu Trường Tiền Huế…), Hạ tầng, Thể thao & Công trình Văn hoá Quy mô lớn* (**cầu biểu tượng kể cả cầu bộ hành lịch sử như Cầu Thê Húc bắt buộc vẽ 3D riêng đúng vị trí/hướng địa lý thật**)
 
 ## 6. Bẫy đã biết
 

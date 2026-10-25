@@ -172,14 +172,34 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
       }
     }
     const ring = park.polygon, L = polylineLength([...ring, ring[0]!]), at = sampler([...ring, ring[0]!]);
+    const waterAreas = city.areas.filter(a => a.kind === 'water' || a.kind === 'pool');
+    const inHoleOrWater = (p: Vec2) => {
+      if (park.holes?.some(h => pointInRing(p, h))) return true;
+      return waterAreas.some(w => pointInRing(p, w.polygon) && !(w.holes?.some(h => pointInRing(p, h))));
+    };
     for (let s = 5; s < L; s += 15) {
       // 3 m inside for lamps (when no paths), 4.8 m inside for park perimeter shade trees
       if (n === 0) {
         const a = at(s, 3).p, b = at(s, -3).p, p = pointInRing(a, ring) ? a : b;
-        if (pointInRing(p, ring) && !onRoad(p)) props.push({ id: `g-${park.id}-ring-${Math.round(s)}`, kind: 'park-lamp', at: p, z0: 0.05, heading: 0, road: park.id });
+        if (pointInRing(p, ring) && !inHoleOrWater(p) && !onRoad(p)) props.push({ id: `g-${park.id}-ring-${Math.round(s)}`, kind: 'park-lamp', at: p, z0: 0.05, heading: 0, road: park.id });
       }
       const ta = at(s + 4, 4.8).p, tb = at(s + 4, -4.8).p, tp = pointInRing(ta, ring) ? ta : tb;
-      addParkTree(`pt-${park.id}-ring-${Math.round(s)}`, tp, true);
+      if (!inHoleOrWater(tp)) addParkTree(`pt-${park.id}-ring-${Math.round(s)}`, tp, true);
+    }
+    const pw = px1 - px0, pd = py1 - py0;
+    if (pw >= 24 && pd >= 24) {
+      const step = pw * pd > 180000 ? 22 : pw * pd > 40000 ? 18 : 14;
+      const PR = rng(hash(`park-grove:${park.id}`));
+      let groveIdx = 0;
+      for (let gx = px0 + step * 0.6; gx < px1 - step * 0.4; gx += step) {
+        for (let gy = py0 + step * 0.6; gy < py1 - step * 0.4; gy += step) {
+          const jx = (PR.next() - 0.5) * step * 0.65;
+          const jy = (PR.next() - 0.5) * step * 0.65;
+          if (PR.chance(0.18)) continue;
+          const pt: Vec2 = [Math.round((gx + jx) * 10) / 10, Math.round((gy + jy) * 10) / 10];
+          if (!inHoleOrWater(pt)) addParkTree(`pt-${park.id}-grove-${groveIdx++}`, pt, PR.chance(0.62));
+        }
+      }
     }
   }
 

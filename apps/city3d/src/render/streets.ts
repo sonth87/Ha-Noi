@@ -495,6 +495,8 @@ function drawRoadGeometry(B: Batch, r: Road, taper: RoadTaper, c: LocalStreetCut
 function drawFootwayGeometry(B: Batch, s: City['streets'][number], metroStations: City['stations']) {
   // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
   if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) return;
+  // Bespoke pedestrian bridges (e.g. Cầu Thê Húc) are rendered in full 3D architectural detail by landmarks
+  if (s.source === 'osm:way/9566542' || (s.name && /thê húc/i.test(s.name))) return;
   if (s.layer > 0 && s.profile.length) bridge(B, s);
   else {
     const fp = smoothPolyline(s.path), h = s.width / 2;
@@ -650,7 +652,7 @@ export function buildAreas(B: Batch, city: City, includeMonuments = true) {
   };
   for (const a of city.areas) {
     const k = SURF[a.kind];
-    if (k) B.flat(k[0], a.polygon, k[1], 'detail', a.name || a.subtype ? a.id : undefined);
+    if (k) B.flat(k[0], a.polygon, k[1], 'detail', a.name || a.subtype ? a.id : undefined, a.holes);
   }
   if (includeMonuments) {
     buildMonumentFeatures(B, city);

@@ -55,16 +55,33 @@ export class Batch {
 
   quad(s: Surface, p: THREE.Vector3[], n: THREE.Vector3, out = this.list(s)) { this.tri(s, p[0]!, p[1]!, p[2]!, n, out); this.tri(s, p[0]!, p[2]!, p[3]!, n, out); }
 
-  /** a flat polygon at height z, facing up */
-  flat(rawS: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail', owner?: string) {
+  /** a flat polygon at height z, facing up, with optional interior cutout holes */
+  flat(rawS: Surface, ring: readonly Vec2[], z: number, outline?: 'crease' | 'detail', owner?: string, holes?: readonly (readonly Vec2[])[]) {
     const s = this.resolveSurface(rawS);
     const R = normalizeRing(ring);
     if (R.length < 3) return;
+    const allPts: Vec2[] = [...R];
+    const holeRings: Vec2[][] = [];
+    const holeVecs: THREE.Vector2[][] = [];
+    if (holes?.length) {
+      for (const h of holes) {
+        const H = normalizeRing(h);
+        if (H.length < 3) continue;
+        holeRings.push(H);
+        holeVecs.push(H.map(p => new THREE.Vector2(p[0], p[1])));
+        allPts.push(...H);
+      }
+    }
     const up = new THREE.Vector3(0, 1, 0);
     const start = this.list(s).length / 9;
-    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(R.map(p => new THREE.Vector2(p[0], p[1])), [])) this.tri(s, V(...R[a!]!, z), V(...R[b!]!, z), V(...R[c!]!, z), up);
+    for (const [a, b, c] of THREE.ShapeUtils.triangulateShape(R.map(p => new THREE.Vector2(p[0], p[1])), holeVecs)) {
+      this.tri(s, V(...allPts[a!]!, z), V(...allPts[b!]!, z), V(...allPts[c!]!, z), up);
+    }
     if (owner) this.owners.push({ surface: s, start, end: this.list(s).length / 9, owner });
-    if (outline) this.loop(R.map(p => V(p[0], p[1], z + 0.01)), outline);
+    if (outline) {
+      this.loop(R.map(p => V(p[0], p[1], z + 0.01)), outline);
+      for (const H of holeRings) this.loop(H.map(p => V(p[0], p[1], z + 0.01)), outline);
+    }
   }
 
   /** Walls and top of a prism over any simple ring; with its silhouette shell and crease lines.

@@ -161,12 +161,13 @@ describe('the house generator in 3D', () => {
 });
 
 describe('standalone showcase dioramas, shared flags & administrative boundaries', () => {
-  it('lists OSM landmarks across all 6 districts, metro stations and Hanoi archetypes, and builds them on iso-glow plates', () => {
+  it('lists hierarchical landmarks across Country -> City -> Category and builds them on iso-glow plates', () => {
     const list = showcasesOf(city);
     expect(list.length).toBeGreaterThan(20);
     expect(list.some(x => x.id.startsWith('bldg:'))).toBe(true);
     expect(list.some(x => x.id.startsWith('station:'))).toBe(true);
-    expect(list.some(x => x.id.startsWith('house:'))).toBe(true);
+    expect(list.some(x => x.id.startsWith('house:'))).toBe(false);
+    expect(list.every(x => x.countryCode === 'vn' && x.cityId === 'vn/ha-noi' && Boolean(x.categoryId))).toBe(true);
 
     const vpbankItem = list.find(x => x.name.includes('VPBank Tower'))!;
     const cinemaItem = list.find(x => x.name.includes('Trung tâm Chiếu phim Quốc gia'))!;

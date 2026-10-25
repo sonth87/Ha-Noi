@@ -56,8 +56,17 @@ export function buildingHint(t: OsmTags): BuildingKind | undefined {
 export function areaKind(t: OsmTags): AreaKind | undefined {
   if (t.man_made === 'bridge') return 'bridge';
   if (t['area:highway'] === 'traffic_island') return 'traffic-island';
-  if (t.leisure === 'park' || t.tourism === 'zoo') return 'park';
-  if (t.leisure === 'garden' || t.landuse === 'grass' || t.landuse === 'village_green') return 'grass';
+  if (
+    t.leisure === 'park' ||
+    t.leisure === 'garden' ||
+    t.leisure === 'nature_reserve' ||
+    t.leisure === 'recreation_ground' ||
+    t.landuse === 'forest' ||
+    t.tourism === 'zoo' ||
+    t.place === 'islet' ||
+    t.place === 'island'
+  ) return 'park';
+  if (t.landuse === 'grass' || t.landuse === 'village_green' || t.landuse === 'meadow') return 'grass';
   if (t.leisure === 'pitch') return 'pitch';
   if (t.leisure === 'swimming_pool') return 'pool';
   if (t.natural === 'water' || t.water) return 'water';
@@ -73,7 +82,16 @@ export function featureKind(t: OsmTags): FeatureKind | undefined {
   if (t.natural === 'tree') return 'tree';
   if (t.highway === 'street_lamp') return 'street-lamp';
   if (t.power === 'pole') return 'power-pole';
-  if ((t.historic === 'monument' || t.historic === 'memorial' || t.artwork_type === 'statue' || t.artwork_type === 'drum') && t.name) return 'monument';
+  if (
+    (t.historic === 'monument' ||
+      t.historic === 'memorial' ||
+      t.artwork_type === 'statue' ||
+      t.artwork_type === 'sculpture' ||
+      t.artwork_type === 'relief' ||
+      t.artwork_type === 'bust' ||
+      t.artwork_type === 'drum') &&
+    t.name
+  ) return 'monument';
   if ((t.historic === 'archaeological_site' || t.historic === 'ruins' || t.historic === 'aircraft') && t.name) return 'heritage';
   return undefined;
 }

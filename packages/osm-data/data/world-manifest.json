@@ -20,7 +20,7 @@
           "bearing": 62.5,
           "chunkSizeMeters": 1024,
           "skeleton": "vn/ha-noi/skeleton.osm.json",
-          "skeletonElements": 36942,
+          "skeletonElements": 38487,
           "chunks": [
             {
               "key": "-1,-1",
