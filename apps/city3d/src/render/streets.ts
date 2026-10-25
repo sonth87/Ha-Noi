@@ -99,8 +99,8 @@ function computeRoadCuts(net: ReturnType<typeof roadNetwork>, roads: Map<string,
       // the arm's right side faces the corner after it, its left the corner before it
       const after = corners[k], before = corners[(k - 1 + node.arms.length) % node.arms.length];
       // a sidewalk on the arm's right is the path's right when the arm runs along the path
-      if (after) (arm.dir > 0 ? c.right : c.left).push(span(after.tA));
-      if (before) (arm.dir > 0 ? c.left : c.right).push(span(before.tB));
+      if (after && (mode !== 'major' || !after.isMinorCorner)) (arm.dir > 0 ? c.right : c.left).push(span(after.tA));
+      if (before && (mode !== 'major' || !before.isMinorCorner)) (arm.dir > 0 ? c.left : c.right).push(span(before.tB));
       const others = Math.max(0, ...node.arms.filter(a => a !== arm).map(a => a.half));
       c.marks.push(span(others + 2));
     }
@@ -117,12 +117,12 @@ function drawRoadGeometry(B: Batch, r: Road, c: LocalStreetCuts, mode: StreetRen
     return;
   }
   if (drawCarriageway) {
-    B.flat('road', strip(r.path, -r.width / 2, r.width / 2), ROAD_Z);
+    B.flat('road', roadStrip(r.path, r.width / 2), ROAD_Z);
     if (mode === 'major' && isArterialRoad(r.kind)) {
       const a = r.width / 2;
       for (const [side, cut] of [[1, c.right], [-1, c.left]] as const) {
         for (const run of pieces(r.path, cut)) {
-          const edge = offsetLine(run, side * a);
+          const edge = offsetSmoothLine(run, side * a);
           for (let i = 1; i < edge.length; i++) {
             const p0 = edge[i - 1]!, p1 = edge[i]!;
             B.line(V(p0[0], p0[1], ROAD_Z + 0.01), V(p1[0], p1[1], ROAD_Z + 0.01), 'crease');
@@ -136,7 +136,7 @@ function drawRoadGeometry(B: Batch, r: Road, c: LocalStreetCuts, mode: StreetRen
     if (w <= 0) continue;
     const a = r.width / 2;
     for (const run of pieces(r.path, cut)) {
-      walkRibbon(B, offsetLine(run, side * a), offsetLine(run, side * (a + w)));
+      walkRibbon(B, offsetSmoothLine(run, side * a), offsetSmoothLine(run, side * (a + w)));
     }
   }
   const offs: number[] = [];
@@ -149,7 +149,7 @@ function drawFootwayGeometry(B: Batch, s: City['streets'][number], metroStations
   // Metro station overpass walkways & entrance stairs are rendered in full architectural detail by buildMetro
   if ((s.layer > 0 || s.kind === 'steps') && s.path.some(p => metroStations.some(st => dist(p, st.at) < 90))) return;
   if (s.layer > 0 && s.profile.length) bridge(B, s);
-  else B.flat('walk', strip(s.path, -s.width / 2, s.width / 2), ROAD_Z * 0.5);
+  else B.flat('walk', roadStrip(s.path, s.width / 2), ROAD_Z * 0.5);
 }
 
 function drawBuildingForecourt(B: Batch, b: City['buildings'][number], grid: Map<string, City['streets']>) {
@@ -162,7 +162,7 @@ function drawBuildingForecourt(B: Batch, b: City['buildings'][number], grid: Map
   // which side of the street the building is on: right is (−dy, dx) along the path
   const i = nearestSeg(S.path, mid), a = S.path[i - 1]!, bb = S.path[i]!;
   const right = (-(bb[1] - a[1])) * (mid[0] - a[0]) + (bb[0] - a[0]) * (mid[1] - a[1]) > 0;
-  const walk = right ? S.sidewalk.right : S.sidewalk.left, edge = offsetLine(S.path, (right ? 1 : -1) * (S.width / 2 + walk));
+  const walk = right ? S.sidewalk.right : S.sidewalk.left, edge = offsetSmoothLine(S.path, (right ? 1 : -1) * (S.width / 2 + walk));
   const p2 = closestOnPath(p, edge).at, q2 = closestOnPath(q, edge).at;
   if (dist(p, p2) > 16 || dist(q, q2) > 16) return;
   B.flat('walk', [p, q, q2, p2], walk > 0 ? WALK_Z : ROAD_Z * 0.6);
@@ -312,7 +312,7 @@ export function buildMonumentFeatures(B: Batch, city: City) {
 
 // ---------- junctions ----------
 
-interface Corner { tA: number; tB: number }
+interface Corner { tA: number; tB: number; isMinorCorner: boolean }
 
 /** Fill the corners of a junction; returns, per pair of neighbouring arms (k, k+1), how far from
     the node the fillet begins on each (or null where there is no corner: arms almost in line). */
@@ -323,44 +323,120 @@ function junction(B: Batch | null, node: NetNode, roads: Map<string, Road>, mode
     const A = node.arms[k]!, Bm = node.arms[(k + 1) % n]!;
     let th = Math.atan2(Bm.u[1], Bm.u[0]) - Math.atan2(A.u[1], A.u[0]);
     if (th <= 0) th += 2 * Math.PI;
-    if (n === 1 || th > Math.PI - 0.15 || th < 0.15) { out.push(null); continue; }
+    if (n === 1 || th < 0.15) { out.push(null); continue; }
+
     // the sector lies on A's right and B's left (y points south: right of u is (−u_y, u_x))
     const rA: Vec2 = [-A.u[1], A.u[0]], lB: Vec2 = [Bm.u[1], -Bm.u[0]];
+    const isMinorCorner = minor(A) || minor(Bm);
+    const drawCornerRoad = mode === 'all' || (mode === 'major' ? !isMinorCorner : isMinorCorner);
+    const drawCornerWalk = mode === 'all' || mode === 'local';
+
+    // Outer (convex / reflex) side of a bend at a node: bridge the sidewalks smoothly around node.at
+    if (th > Math.PI - 0.08) {
+      if (B && th > Math.PI + 0.015 && th < 2 * Math.PI - 0.15) {
+        const a0 = Math.atan2(rA[1], rA[0]), a1 = Math.atan2(lB[1], lB[0]);
+        let dAng = a1 - a0;
+        while (dAng > Math.PI) dAng -= 2 * Math.PI;
+        while (dAng < -Math.PI) dAng += 2 * Math.PI;
+        if (Math.abs(dAng) > 0.015 && Math.abs(dAng) < 1.8) {
+          const steps = Math.max(4, Math.ceil(Math.abs(dAng) / 0.14));
+          if (drawCornerWalk && (A.walkR > 0 || Bm.walkL > 0)) {
+            const kerbArc: Vec2[] = [], backArc: Vec2[] = [];
+            for (let i = 0; i <= steps; i++) {
+              const u = i / steps, s = u * u * (3 - 2 * u), ang = a0 + dAng * u;
+              const rK = A.half * (1 - s) + Bm.half * s;
+              const rB = (A.half + A.walkR) * (1 - s) + (Bm.half + Bm.walkL) * s;
+              kerbArc.push([node.at[0] + rK * Math.cos(ang), node.at[1] + rK * Math.sin(ang)]);
+              backArc.push([node.at[0] + rB * Math.cos(ang), node.at[1] + rB * Math.sin(ang)]);
+            }
+            walkRibbon(B, kerbArc, backArc);
+          }
+        }
+      }
+      out.push(null);
+      continue;
+    }
+
     const pA: Vec2 = [node.at[0] + rA[0] * A.half, node.at[1] + rA[1] * A.half], pB: Vec2 = [node.at[0] + lB[0] * Bm.half, node.at[1] + lB[1] * Bm.half];
     // where the two kerb lines meet: pA + tA·uA = pB + tB·uB
     const det = A.u[0] * -Bm.u[1] - A.u[1] * -Bm.u[0];
     if (Math.abs(det) < 1e-6) { out.push(null); continue; }
     const dx = pB[0] - pA[0], dy = pB[1] - pA[1];
     const tCa = (dx * -Bm.u[1] - dy * -Bm.u[0]) / det, tCb = (A.u[0] * dy - A.u[1] * dx) / det;
-    const isMinorCorner = minor(A) || minor(Bm);
-    const R = isMinorCorner ? 2 : 4, tl = R / Math.tan(th / 2);
-    const tA = tCa + tl, tB = tCb + tl;
-    if (tCa < -1 || tCb < -1 || tA > 30 || tB > 30) { out.push(null); continue; }
+    const maxTl = Math.min(26 - tCa, 26 - tCb);
+    if (tCa < -1.5 || tCb < -1.5 || maxTl < 0.4) { out.push(null); continue; }
+
+    const walkNeed = A.walkR > 0 && Bm.walkL > 0 ? Math.max(A.walkR, Bm.walkL) + 1.5 : 0;
+    const desiredR = Math.max(isMinorCorner ? 3.2 : 5.5, walkNeed);
+    const tanHalf = Math.tan(th / 2);
+    const R = Math.max(0.5, Math.min(desiredR, maxTl * tanHalf));
+    const tl = R / tanHalf;
+    const tA = Math.max(0, tCa + tl), tB = Math.max(0, tCb + tl);
+
     if (B) {
       const TA: Vec2 = [pA[0] + A.u[0] * tA, pA[1] + A.u[1] * tA], TB: Vec2 = [pB[0] + Bm.u[0] * tB, pB[1] + Bm.u[1] * tB];
       const C: Vec2 = [TA[0] + rA[0] * R, TA[1] + rA[1] * R];
-      const arc = (r: number, steps = 8): Vec2[] => {
-        const a0 = Math.atan2(TA[1] - C[1], TA[0] - C[0]), a1 = Math.atan2(TB[1] - C[1], TB[0] - C[0]);
-        let d = a1 - a0;
-        while (d > Math.PI) d -= 2 * Math.PI;
-        while (d < -Math.PI) d += 2 * Math.PI;
-        return Array.from({ length: steps + 1 }, (_, i) => [C[0] + r * Math.cos(a0 + (d * i) / steps), C[1] + r * Math.sin(a0 + (d * i) / steps)] as const);
-      };
-      const drawCornerRoad = mode === 'all' || (mode === 'major' ? !isMinorCorner : isMinorCorner);
-      const drawCornerWalk = mode === 'all' || mode === 'local';
+      const a0 = Math.atan2(TA[1] - C[1], TA[0] - C[0]), a1 = Math.atan2(TB[1] - C[1], TB[0] - C[0]);
+      let dAng = a1 - a0;
+      while (dAng > Math.PI) dAng -= 2 * Math.PI;
+      while (dAng < -Math.PI) dAng += 2 * Math.PI;
+      const steps = 14;
+      const kerbArc: Vec2[] = Array.from({ length: steps + 1 }, (_, i) => [
+        C[0] + R * Math.cos(a0 + (dAng * i) / steps),
+        C[1] + R * Math.sin(a0 + (dAng * i) / steps),
+      ]);
+
       if (drawCornerRoad) {
         // asphalt out to the kerb fillet
-        B.flat('road', [node.at, pA, TA, ...arc(R).slice(1, -1), TB, pB], ROAD_Z);
+        B.flat('road', [node.at, pA, TA, ...kerbArc.slice(1, -1), TB, pB], ROAD_Z);
+        if (mode === 'major' && (isArterialRoad(roads.get(A.road)!.kind) || isArterialRoad(roads.get(Bm.road)!.kind))) {
+          for (let i = 1; i < kerbArc.length; i++) {
+            const q0 = kerbArc[i - 1]!, q1 = kerbArc[i]!;
+            B.line(V(q0[0], q0[1], ROAD_Z + 0.01), V(q1[0], q1[1], ROAD_Z + 0.01), 'crease');
+          }
+        }
       }
-      if (drawCornerWalk) {
-        // the sidewalk round the corner, when both arms have one on this side
-        const w = Math.min(A.walkR, Bm.walkL);
-        if (w > 0 && R > 0.5) {
-          walkRibbon(B, arc(R), arc(Math.max(0.3, R - w)));
+      if (drawCornerWalk && R > 0.4) {
+        const wA = A.walkR, wB = Bm.walkL;
+        if (wA > 0 && wB > 0) {
+          // Both arms have sidewalks: smoothly interpolate sidewalk width around the fillet arc
+          const backArc: Vec2[] = Array.from({ length: steps + 1 }, (_, i) => {
+            const u = i / steps, s = u * u * (3 - 2 * u);
+            const wi = wA * (1 - s) + wB * s;
+            const ri = Math.max(0.35, R - wi);
+            const ang = a0 + (dAng * i) / steps;
+            return [C[0] + ri * Math.cos(ang), C[1] + ri * Math.sin(ang)];
+          });
+          walkRibbon(B, kerbArc, backArc);
+        } else if (wA > 0) {
+          // Arm A has a sidewalk meeting an alley/street without one: curve and taper smoothly into the corner
+          const sub = Math.max(8, Math.round(steps * 0.75));
+          const subKerb = kerbArc.slice(0, sub + 1);
+          const subBack: Vec2[] = Array.from({ length: sub + 1 }, (_, i) => {
+            const u = i / sub;
+            const wi = wA * Math.cos(u * Math.PI * 0.5);
+            const ri = Math.max(0.25, R - wi);
+            const ang = a0 + (dAng * i) / steps;
+            return [C[0] + ri * Math.cos(ang), C[1] + ri * Math.sin(ang)];
+          });
+          walkRibbon(B, subKerb, subBack);
+        } else if (wB > 0) {
+          // Arm B has a sidewalk meeting an alley/street without one: curve and taper smoothly out of the corner
+          const startIdx = Math.min(steps - 6, Math.round(steps * 0.25));
+          const subKerb = kerbArc.slice(startIdx);
+          const span = steps - startIdx;
+          const subBack: Vec2[] = Array.from({ length: span + 1 }, (_, i) => {
+            const u = i / span;
+            const wi = wB * Math.sin(u * Math.PI * 0.5);
+            const ri = Math.max(0.25, R - wi);
+            const ang = a0 + (dAng * (startIdx + i)) / steps;
+            return [C[0] + ri * Math.cos(ang), C[1] + ri * Math.sin(ang)];
+          });
+          walkRibbon(B, subKerb, subBack);
         }
       }
     }
-    out.push({ tA, tB });
+    out.push({ tA, tB, isMinorCorner });
   }
   return out;
 }
@@ -370,21 +446,101 @@ function junction(B: Batch | null, node: NetNode, roads: Map<string, Road>, mode
 /** right-hand unit normal of a direction (x east, y south: (−dy, dx)) */
 const rightOf = (a: Vec2, b: Vec2): Vec2 => { const L = dist(a, b) || 1; return [-(b[1] - a[1]) / L, (b[0] - a[0]) / L]; };
 
-/** the line `d` metres to the right of a path (negative = left), with mitred corners */
+/** the line `d` metres to the right of a path (negative = left), with 1-to-1 vertices (used for bridges & lane dashes) */
 export function offsetLine(path: readonly Vec2[], d: number): Vec2[] {
   return path.map((p, i) => {
     const n0 = i > 0 ? rightOf(path[i - 1]!, p) : rightOf(p, path[i + 1]!);
     const n1 = i < path.length - 1 ? rightOf(p, path[i + 1]!) : n0;
     let mx = n0[0] + n1[0], my = n0[1] + n1[1];
     const L = Math.hypot(mx, my) || 1; mx /= L; my /= L;
-    const k = Math.min(3, 1 / Math.max(0.33, mx * n0[0] + my * n0[1]));
+    const k = Math.min(2.2, 1 / Math.max(0.45, mx * n0[0] + my * n0[1]));
     return [p[0] + mx * d * k, p[1] + my * d * k];
   });
 }
 
+/** Offset a polyline by `d` metres to the right (negative = left) with smooth circular arc joins
+    on outer (convex) bends and clamped non-self-intersecting joins on inner (concave) bends. */
+export function offsetSmoothLine(path: readonly Vec2[], d: number): Vec2[] {
+  if (path.length < 2 || Math.abs(d) < 1e-5) return [...path];
+  const out: Vec2[] = [];
+  const nFirst = rightOf(path[0]!, path[1]!);
+  out.push([path[0]![0] + nFirst[0] * d, path[0]![1] + nFirst[1] * d]);
+
+  for (let i = 1; i < path.length - 1; i++) {
+    const p = path[i]!;
+    const n0 = rightOf(path[i - 1]!, p);
+    const n1 = rightOf(p, path[i + 1]!);
+    const a0 = Math.atan2(n0[1], n0[0]);
+    const a1 = Math.atan2(n1[1], n1[0]);
+    let delta = a1 - a0;
+    while (delta > Math.PI) delta -= 2 * Math.PI;
+    while (delta < -Math.PI) delta += 2 * Math.PI;
+
+    if (d * delta > 0 && Math.abs(delta) > 0.08) {
+      // Convex (outer) bend: emit a smooth circular arc fan of radius |d| around p
+      const steps = Math.max(2, Math.min(8, Math.ceil(Math.abs(delta) / 0.16)));
+      for (let s = 0; s <= steps; s++) {
+        const ang = a0 + (delta * s) / steps;
+        out.push([p[0] + d * Math.cos(ang), p[1] + d * Math.sin(ang)]);
+      }
+    } else {
+      // Concave (inner) bend or nearly collinear: clamped miter to prevent inner bowtie spikes
+      let mx = n0[0] + n1[0], my = n0[1] + n1[1];
+      const mL = Math.hypot(mx, my) || 1;
+      mx /= mL;
+      my /= mL;
+      const cosHalf = Math.max(0.4, mx * n0[0] + my * n0[1]);
+      const minSeg = Math.min(dist(path[i - 1]!, p), dist(p, path[i + 1]!));
+      const maxK = Math.min(2.0, Math.hypot(1, (minSeg * 0.45) / Math.max(0.1, Math.abs(d))));
+      const k = Math.min(maxK, 1 / cosHalf);
+      out.push([p[0] + mx * d * k, p[1] + my * d * k]);
+    }
+  }
+
+  const last = path[path.length - 1]!;
+  const nLast = rightOf(path[path.length - 2]!, last);
+  out.push([last[0] + nLast[0] * d, last[1] + nLast[1] * d]);
+  return out;
+}
+
 /** the ring between offsets d0 and d1 of a path */
 export function strip(path: readonly Vec2[], d0: number, d1: number): Vec2[] {
-  return [...offsetLine(path, d0), ...offsetLine(path, d1).reverse()];
+  return [...offsetSmoothLine(path, d0), ...offsetSmoothLine(path, d1).reverse()];
+}
+
+/** Smooth road/footway ribbon of half-width `h` with rounded semicircular end-caps and circular arc bends,
+    so any two roads meeting at a node blend seamlessly without V-notches or sharp 90° corners. */
+function roadStrip(path: readonly Vec2[], h: number): Vec2[] {
+  if (path.length < 2) return [...path];
+  const left = offsetSmoothLine(path, -h);
+  const right = offsetSmoothLine(path, h);
+  const capSteps = 8;
+
+  const pEnd = path[path.length - 1]!, pPrev = path[path.length - 2]!;
+  const rEnd = rightOf(pPrev, pEnd), uEnd: Vec2 = [-rEnd[1], rEnd[0]];
+  const endCap: Vec2[] = [];
+  for (let k = 1; k < capSteps; k++) {
+    const th = (Math.PI * k) / capSteps;
+    const c = Math.cos(th), s = Math.sin(th);
+    endCap.push([
+      pEnd[0] + h * (-rEnd[0] * c + uEnd[0] * s),
+      pEnd[1] + h * (-rEnd[1] * c + uEnd[1] * s),
+    ]);
+  }
+
+  const pStart = path[0]!, pNext = path[1]!;
+  const rStart = rightOf(pStart, pNext), uStart: Vec2 = [-rStart[1], rStart[0]];
+  const startCap: Vec2[] = [];
+  for (let k = 1; k < capSteps; k++) {
+    const th = (Math.PI * k) / capSteps;
+    const c = Math.cos(th), s = Math.sin(th);
+    startCap.push([
+      pStart[0] + h * (rStart[0] * c - uStart[0] * s),
+      pStart[1] + h * (rStart[1] * c - uStart[1] * s),
+    ]);
+  }
+
+  return [...left, ...endCap, ...right.reverse(), ...startCap];
 }
 
 /** the parts of a path left after cutting out the given [from, to] spans (distances along it) */

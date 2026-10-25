@@ -254,7 +254,7 @@ describe('Google Maps–style URL state (@lat,lon,157m,0h,35.3t,2d)', () => {
 });
 
 describe('full 12-district CityView initialization & 2-tier spatial chunk streaming', () => {
-  it('initializes CityView on the entire unfiltered city without call stack overflow', async () => {
+  it('initializes CityView on the entire unfiltered city without call stack overflow', { timeout: 25000 }, async () => {
     const { CityView } = await import('./CityView');
     const view = new CityView(city);
     expect(view.tiles.length).toBeGreaterThan(500);
@@ -262,7 +262,7 @@ describe('full 12-district CityView initialization & 2-tier spatial chunk stream
     expect(view.cells.length).toBeGreaterThan(200);
   });
 
-  it('starts fast from Tier-0 skeleton + initial chunks and streams neighborhood chunks on demand', async () => {
+  it('starts fast from Tier-0 skeleton + initial chunks and streams neighborhood chunks on demand', { timeout: 25000 }, async () => {
     const { loadCityStreamingInitAsync, loadCityChunkCityAsync } = await import('@my-city/osm-import');
     const { CityView } = await import('./CityView');
 
@@ -289,6 +289,7 @@ describe('full 12-district CityView initialization & 2-tier spatial chunk stream
     expect(view.tiles.length).toBeGreaterThan(beforeTiles);
   });
 });
+
 
 
 

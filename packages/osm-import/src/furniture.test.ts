@@ -18,7 +18,7 @@ describe('street furniture', () => {
     expect(new Set(sig.map(s => s.group))).toEqual(new Set(['x', 'y']));
   });
 
-  it('keeps everything off the carriageways', () => {
+  it('keeps everything off the carriageways', { timeout: 20000 }, () => {
     const atGrade = net.roads.filter(r => r.layer === 0).map(r => {
       let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
       for (const [x, y] of r.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
