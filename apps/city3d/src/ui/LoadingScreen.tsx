@@ -76,18 +76,6 @@ const KHUE_VAN_CAC_STROKES: readonly StrokeSpec[] = [
   { d: 'M 120 18 V 7 M 116 14 Q 120 9 124 14 Q 120 18 116 14', start: 94, end: 100, width: 1.5 },
 ];
 
-function strokeStyle(pct: number, start: number, end: number) {
-  if (pct <= start) {
-    return { strokeDasharray: 100, strokeDashoffset: 100, opacity: 0 };
-  }
-  const t = Math.min(1, (pct - start) / Math.max(1, end - start));
-  return {
-    strokeDasharray: 100,
-    strokeDashoffset: Number(((1 - t) * 100).toFixed(2)),
-    opacity: 1,
-  };
-}
-
 export function LoadingScreen({
   progress,
   onRetry,
@@ -115,9 +103,8 @@ export function LoadingScreen({
   }, [targetPct]);
 
   const pct = Math.max(0, Math.min(100, displayPct));
-  // Vertical clip rises from bottom (y = 180 at 0%) to top (y = 0 at 100%)
-  const clipHeight = (pct / 100) * 180;
-  const clipY = 180 - clipHeight;
+  // Radial fill expands from the center of the Sao Khuê circular window (cx = 120, cy = 82.5) outward (max radius = 136)
+  const clipRadius = (pct / 100) * 136;
 
   return (
     <div className="kvc-loader" role="status" aria-live="polite" aria-label={isEn ? 'Loading 3D map' : 'Đang tải bản đồ 3D'}>
@@ -131,20 +118,32 @@ export function LoadingScreen({
           >
             <defs>
               <clipPath id={clipId}>
-                <rect x="0" y={clipY} width="240" height={clipHeight} />
+                <circle cx="120" cy="82.5" r={clipRadius} />
               </clipPath>
             </defs>
-            <g clipPath={`url(#${clipId})`}>
+            {/* Always-visible light grey silhouette of Khuê Văn Các */}
+            <g className="kvc-loader-base">
               {KHUE_VAN_CAC_STROKES.map((s, idx) => (
                 <path
-                  key={idx}
+                  key={`base-${idx}`}
                   d={s.d}
-                  pathLength={100}
                   stroke="currentColor"
                   strokeWidth={s.width ?? 1.5}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  style={strokeStyle(pct, s.start, s.end)}
+                />
+              ))}
+            </g>
+            {/* Color fill layer expanding radially from the inside (Sao Khuê center) outward */}
+            <g className="kvc-loader-fill" clipPath={`url(#${clipId})`}>
+              {KHUE_VAN_CAC_STROKES.map((s, idx) => (
+                <path
+                  key={`fill-${idx}`}
+                  d={s.d}
+                  stroke="currentColor"
+                  strokeWidth={s.width ?? 1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
                 />
               ))}
             </g>

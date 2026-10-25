@@ -542,13 +542,15 @@ input[type="checkbox"] { accent-color:var(--accent); }
   .status-pill .read { max-width:48vw; }
 }
 
-/* Minimalist Horizontal Line + 2D Khuê Văn Các Progressive Loading Screen */
+/* Minimalist Horizontal Line + 2D Khuê Văn Các Inside-Out Radial Color Fill Loading Screen */
 .kvc-loader { position:fixed; inset:0; z-index:100; display:flex; align-items:center; justify-content:center; background:var(--bg); color:var(--accent-hi); overflow:hidden; }
 .kvc-loader-stage { width:100vw; display:flex; flex-direction:column; align-items:center; justify-content:center; position:relative; }
 .kvc-loader-artwork { width:220px; height:165px; display:flex; align-items:flex-end; justify-content:center; margin-bottom:-1px; pointer-events:none; }
-.kvc-loader-svg { width:100%; height:100%; display:block; color:var(--accent-hi); filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 30%, transparent)); }
-.kvc-loader-line-track { width:100vw; height:2px; background:color-mix(in srgb, var(--edge) 65%, transparent); position:relative; overflow:hidden; }
-.kvc-loader-line-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-hi)); box-shadow:0 0 12px var(--accent); transition:width 0.12s linear; }
+.kvc-loader-svg { width:100%; height:100%; display:block; }
+.kvc-loader-base { color:color-mix(in srgb, var(--ink) 42%, var(--edge)); opacity:0.65; }
+.kvc-loader-fill { color:var(--accent-hi); filter:drop-shadow(0 0 8px color-mix(in srgb, var(--accent) 36%, transparent)); }
+.kvc-loader-line-track { width:100vw; height:2px; background:color-mix(in srgb, var(--edge) 65%, transparent); position:relative; overflow:hidden; display:flex; justify-content:center; }
+.kvc-loader-line-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--accent-hi), var(--accent)); box-shadow:0 0 12px var(--accent); transition:width 0.12s linear; }
 .kvc-loader-error { margin-top:18px; max-width:420px; display:flex; flex-direction:column; align-items:center; gap:8px; padding:10px 14px; border-radius:6px; background:color-mix(in srgb, #ef4444 14%, var(--bg)); border:1px solid #ef4444; color:var(--ink-hi); font-size:11.5px; text-align:center; }
 .kvc-loader-error p { margin:0; }
 .game-loader-retry { border-color:var(--accent-hi); color:var(--accent-hi); font-weight:600; }

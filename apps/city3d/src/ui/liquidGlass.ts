@@ -18,7 +18,7 @@ export interface UiGlassSettings {
 }
 
 export const DEFAULT_UI_GLASS_SETTINGS: UiGlassSettings = {
-  mode: 'off',
+  mode: 'tint',
   transparency: 76,
   lensScale: 120,
 };

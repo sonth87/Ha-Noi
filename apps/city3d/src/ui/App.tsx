@@ -9,7 +9,6 @@ import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
 import { lightOn } from '@view/lights';
 import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
-import { isMobileDevice } from '@view/quality';
 import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
 import { frameForCity, parseUrlState } from '@view/urlState';
 import { LightsPanel } from './LightsPanel';
@@ -370,7 +369,7 @@ function AppShell({ view: v }: { view: CityView }) {
   const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
-  const [panel, setPanel] = useState(() => !isMobileDevice());
+  const [panel, setPanel] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'appearance' | 'lights' | 'quality'>('appearance');
   const [uiGlass, setUiGlass] = useState<UiGlassSettings>(() => loadUiGlassSettings());
   const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | 'pov' | null>(null);

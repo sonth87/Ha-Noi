@@ -114,8 +114,7 @@ export function roadNetwork(city: City): Network {
 
   const jIndex = pointIndex(city.junctions, j => j.at);
   const atJunction = (p: Vec2) => jIndex.some(p);
-  const rawRoads = joinPieces(city.streets.filter(isRoad), atJunction);
-  const roads = smoothRoads(rawRoads, atJunction);
+  const roads = joinPieces(city.streets.filter(isRoad), atJunction).map(r => smooth(r, atJunction));
 
   const armsByJunction = new Map<string, Arm[]>();
   for (const j of city.junctions) armsByJunction.set(j.id, []);
@@ -286,154 +285,31 @@ function profileAbs(s: Street, offset: number, reversed = false): [number, numbe
 
 const dedupe = (p: [number, number][]) => p.filter((q, i) => i === 0 || q[0] - p[i - 1]![0] > 1e-6);
 
-const unitVec = (a: Vec2, b: Vec2): Vec2 => {
-  const d = dist(a, b) || 1;
-  return [(b[0] - a[0]) / d, (b[1] - a[1]) / d];
-};
-
-/** Compute shared endpoint tangents across junctions where a street continues smoothly,
-    then smooth each road with tangent-guided Hermite/Chaikin subdivision. */
-function smoothRoads(roads: Road[], fixed: (p: Vec2) => boolean): Road[] {
-  interface EndRef { road: Road; atStart: boolean; pt: Vec2; away: Vec2 }
-  const endGrid = new Map<string, EndRef[]>();
-  const addEnd = (ref: EndRef) => {
-    const k = `${Math.floor(ref.pt[0])},${Math.floor(ref.pt[1])}`;
-    const list = endGrid.get(k);
-    if (list) list.push(ref);
-    else endGrid.set(k, [ref]);
-  };
-  for (const r of roads) {
-    if (r.path.length < 2) continue;
-    addEnd({ road: r, atStart: true, pt: r.path[0]!, away: unitVec(r.path[0]!, r.path[1]!) });
-    const n = r.path.length;
-    addEnd({ road: r, atStart: false, pt: r.path[n - 1]!, away: unitVec(r.path[n - 1]!, r.path[n - 2]!) });
-  }
-  const nearEnds = (p: Vec2): EndRef[] => {
-    const gx = Math.floor(p[0]), gy = Math.floor(p[1]);
-    const out: EndRef[] = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const cell = endGrid.get(`${gx + dx},${gy + dy}`);
-        if (cell) for (const ref of cell) if (same(ref.pt, p)) out.push(ref);
-      }
-    }
-    return out;
-  };
-  const tangentAtEnd = (r: Road, atStart: boolean): Vec2 | null => {
-    const pt = atStart ? r.path[0]! : r.path[r.path.length - 1]!;
-    // Direction along r's path at this endpoint
-    const uSelf = atStart
-      ? unitVec(r.path[0]!, r.path[1]!)
-      : unitVec(r.path[r.path.length - 2]!, r.path[r.path.length - 1]!);
-    let bestTurn = 0.34; // max ~20° turn to preserve route chaining thresholds
-    let bestDir: Vec2 | null = null;
-    for (const other of nearEnds(pt)) {
-      if (other.road === r) continue;
-      if (other.road.kind !== r.kind || other.road.name !== r.name || other.road.oneway !== r.oneway || other.road.layer !== r.layer) continue;
-      if (Math.abs(other.road.width - r.width) > 1.0) continue;
-      if (r.oneway && other.atStart === atStart) continue;
-      // Direction of `other` matching `r`'s forward orientation
-      const uOther: Vec2 = atStart ? [-other.away[0], -other.away[1]] : other.away;
-      const dot = Math.max(-1, Math.min(1, uSelf[0] * uOther[0] + uSelf[1] * uOther[1]));
-      const turn = Math.acos(dot);
-      if (turn > 0.015 && turn < bestTurn) {
-        bestTurn = turn;
-        const tx = uSelf[0] + uOther[0], ty = uSelf[1] + uOther[1];
-        const tl = Math.hypot(tx, ty) || 1;
-        bestDir = [tx / tl, ty / tl];
-      }
-    }
-    return bestDir;
-  };
-  return roads.map(r => smooth(r, fixed, tangentAtEnd(r, true), tangentAtEnd(r, false)));
-}
-
-/** Smooth a road between fixed points (ends and junctions) using tangent-guided Hermite/Chaikin cutting */
-function smooth(r: Road, fixed: (p: Vec2) => boolean, startTan: Vec2 | null = null, endTan: Vec2 | null = null): Road {
+/** Chaikin corner cutting (3 passes + adaptive corner refinement) between fixed points (ends and junctions) */
+function smooth(r: Road, fixed: (p: Vec2) => boolean): Road {
   const L0 = polylineLength(r.path);
-  // Precompute smooth tangents at any interior junction vertices along r.path
-  const vertexTan: (Vec2 | null)[] = r.path.map((p, i) => {
-    if (i === 0) return startTan;
-    if (i === r.path.length - 1) return endTan;
-    if (!fixed(p)) return null;
-    const u0 = unitVec(r.path[i - 1]!, p), u1 = unitVec(p, r.path[i + 1]!);
-    const dot = Math.max(-1, Math.min(1, u0[0] * u1[0] + u0[1] * u1[1]));
-    const turn = Math.acos(dot);
-    if (turn < 0.015 || turn > 0.75) return null;
-    const tx = u0[0] + u1[0], ty = u0[1] + u1[1], tl = Math.hypot(tx, ty) || 1;
-    return [tx / tl, ty / tl];
-  });
-
   const out: Vec2[] = [r.path[0]!];
   let seg: Vec2[] = [r.path[0]!];
-  let segStartIdx = 0;
-
-  const flush = (segEndIdx: number) => {
-    const t0 = vertexTan[segStartIdx] ?? null;
-    const t1 = vertexTan[segEndIdx] ?? null;
+  const flush = () => {
     let s = seg;
-
-    if (s.length === 2) {
-      const a = s[0]!, b = s[1]!, L = dist(a, b);
-      if ((t0 || t1) && L >= 3.5) {
-        const chord = unitVec(a, b);
-        const T0 = t0 ?? chord, T1 = t1 ?? chord;
-        const steps = Math.min(8, Math.max(4, Math.ceil(L / 4)));
-        const hermite: Vec2[] = [a];
-        for (let k = 1; k < steps; k++) {
-          const u = k / steps, u2 = u * u, u3 = u2 * u;
-          const h00 = 2 * u3 - 3 * u2 + 1;
-          const h10 = u3 - 2 * u2 + u;
-          const h01 = -2 * u3 + 3 * u2;
-          const h11 = u3 - u2;
-          hermite.push([
-            h00 * a[0] + h10 * T0[0] * L + h01 * b[0] + h11 * T1[0] * L,
-            h00 * a[1] + h10 * T0[1] * L + h01 * b[1] + h11 * T1[1] * L,
-          ]);
-        }
-        hermite.push(b);
-        out.push(...hermite.slice(1));
-        return;
-      }
-    }
-
-    if (s.length > 2) {
-      if (t0) {
-        const L = dist(s[0]!, s[1]!);
-        if (L >= 4) {
-          const d = Math.min(L * 0.28, 5);
-          s = [s[0]!, [s[0]![0] + t0[0] * d, s[0]![1] + t0[1] * d], ...s.slice(1)];
-        }
-      }
-      if (t1) {
-        const m = s.length - 1, L = dist(s[m - 1]!, s[m]!);
-        if (L >= 4) {
-          const d = Math.min(L * 0.28, 5);
-          s = [...s.slice(0, m), [s[m]![0] - t1[0] * d, s[m]![1] - t1[1] * d], s[m]!];
-        }
-      }
-    }
-
     for (let pass = 0; pass < 3 && s.length > 2; pass++) {
       const n: Vec2[] = [s[0]!];
       for (let i = 0; i < s.length - 1; i++) {
         const a = s[i]!, b = s[i + 1]!;
         if (i > 0) n.push([a[0] * 0.75 + b[0] * 0.25, a[1] * 0.75 + b[1] * 0.25]);
-        else if (pass === 0 && dist(a, b) > 4) n.push([a[0] * 0.82 + b[0] * 0.18, a[1] * 0.82 + b[1] * 0.18]);
         if (i < s.length - 2) n.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
-        else if (pass === 0 && dist(a, b) > 4) n.push([a[0] * 0.18 + b[0] * 0.82, a[1] * 0.18 + b[1] * 0.82]);
       }
       n.push(s[s.length - 1]!);
       s = n;
     }
-    // Refine any remaining interior corner >= 0.28 rad (~16°) across all road kinds
+    // Refine any interior corner sharper than 0.25 rad (~14°)
     for (let extra = 0; extra < 3 && s.length > 2; extra++) {
       let sharp = false;
       const n: Vec2[] = [s[0]!];
       for (let i = 1; i < s.length - 1; i++) {
         const a = s[i - 1]!, b = s[i]!, c = s[i + 1]!;
         const t = Math.abs(Math.atan2(c[1] - b[1], c[0] - b[0]) - Math.atan2(b[1] - a[1], b[0] - a[0]));
-        if (Math.min(t, 2 * Math.PI - t) >= 0.28) {
+        if (Math.min(t, 2 * Math.PI - t) >= 0.25) {
           sharp = true;
           n.push([a[0] * 0.25 + b[0] * 0.75, a[1] * 0.25 + b[1] * 0.75]);
           n.push([b[0] * 0.75 + c[0] * 0.25, b[1] * 0.75 + c[1] * 0.25]);
@@ -449,11 +325,7 @@ function smooth(r: Road, fixed: (p: Vec2) => boolean, startTan: Vec2 | null = nu
   };
   for (let i = 1; i < r.path.length; i++) {
     seg.push(r.path[i]!);
-    if (i === r.path.length - 1 || fixed(r.path[i]!)) {
-      flush(i);
-      seg = [r.path[i]!];
-      segStartIdx = i;
-    }
+    if (i === r.path.length - 1 || fixed(r.path[i]!)) { flush(); seg = [r.path[i]!]; }
   }
   const L1 = polylineLength(out), k = L0 ? L1 / L0 : 1;
   return { ...r, path: out, profile: r.profile.map(([s, z]) => [s * k, z]) };
