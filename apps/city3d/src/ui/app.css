@@ -268,13 +268,17 @@ kbd { font:inherit; font-size:10px; color:var(--ink); opacity:.82; margin-left:2
 
 /* Hierarchical Architecture & Landmark Explorer (Country → City/Province → District → Category → Landmark) */
 .showcase-explorer {
-  width:720px;
-  max-width:calc(100vw - 24px);
-  max-height:calc(100vh - 86px);
+  width:min(740px, calc(100vw - 24px));
+  height:min(540px, calc(100vh - 118px));
+  max-height:calc(100vh - 118px);
   padding:12px;
   gap:10px;
+  overflow:hidden;
+  background:color-mix(in srgb, var(--panel) 96%, var(--bg));
+  box-shadow:0 16px 48px rgba(0, 0, 0, 0.28);
 }
 .showcase-geo-bar {
+  flex-shrink:0;
   display:flex;
   flex-wrap:wrap;
   align-items:center;
@@ -347,6 +351,7 @@ kbd { font:inherit; font-size:10px; color:var(--ink); opacity:.82; margin-left:2
   max-width:190px;
 }
 .showcase-search-row {
+  flex-shrink:0;
   display:flex;
   align-items:center;
   gap:8px;
@@ -371,22 +376,28 @@ kbd { font:inherit; font-size:10px; color:var(--ink); opacity:.82; margin-left:2
   background:color-mix(in srgb, var(--accent) 16%, var(--panel));
 }
 .showcase-body {
+  flex:1 1 0%;
+  min-height:0;
+  overflow:hidden;
   display:grid;
-  grid-template-columns:228px 1fr;
+  grid-template-columns:236px minmax(0, 1fr);
+  grid-template-rows:minmax(0, 1fr);
   gap:10px;
-  min-height:320px;
-  max-height:min(460px, calc(100vh - 210px));
 }
 .showcase-sidebar {
+  height:100%;
+  min-height:0;
   overflow-y:auto;
+  overscroll-behavior:contain;
   display:flex;
   flex-direction:column;
   gap:3px;
-  padding-right:4px;
+  padding-right:6px;
   border-right:1px solid var(--edge);
   -webkit-overflow-scrolling:touch;
 }
 .showcase-cat-btn {
+  flex-shrink:0;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -427,11 +438,14 @@ kbd { font:inherit; font-size:10px; color:var(--ink); opacity:.82; margin-left:2
   flex-shrink:0;
 }
 .showcase-content {
+  height:100%;
+  min-height:0;
   overflow-y:auto;
+  overscroll-behavior:contain;
   display:flex;
   flex-direction:column;
   gap:12px;
-  padding-right:4px;
+  padding-right:6px;
   -webkit-overflow-scrolling:touch;
 }
 .showcase-cat-section {
@@ -540,12 +554,14 @@ kbd { font:inherit; font-size:10px; color:var(--ink); opacity:.82; margin-left:2
 @media (max-width: 720px) {
   .showcase-explorer {
     width:calc(100vw - 24px);
+    height:min(520px, calc(100vh - 118px));
   }
   .showcase-body {
-    grid-template-columns:1fr;
-    max-height:calc(100vh - 240px);
+    grid-template-columns:minmax(0, 1fr);
+    grid-template-rows:auto minmax(0, 1fr);
   }
   .showcase-sidebar {
+    height:auto;
     flex-direction:row;
     overflow-x:auto;
     overflow-y:hidden;

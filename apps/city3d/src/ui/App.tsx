@@ -504,7 +504,9 @@ function AppShell({ view: v }: { view: CityView }) {
       if (cur) cur.count++;
       else map.set(item.categoryId, { id: item.categoryId, title: item.group, count: 1 });
     }
-    return Array.from(map.values()).sort((a, b) => a.id.localeCompare(b.id));
+    return Array.from(map.values()).sort(
+      (a, b) => (Number.parseInt(a.id, 10) || 99) - (Number.parseInt(b.id, 10) || 99),
+    );
   }, [scGeoFiltered]);
 
   const groupedShowcases = useMemo(() => {
@@ -515,7 +517,9 @@ function AppShell({ view: v }: { view: CityView }) {
       if (g) g.items.push(item);
       else groups.set(item.categoryId, { categoryId: item.categoryId, title: item.group, items: [item] });
     }
-    return Array.from(groups.values()).sort((a, b) => a.categoryId.localeCompare(b.categoryId));
+    return Array.from(groups.values()).sort(
+      (a, b) => (Number.parseInt(a.categoryId, 10) || 99) - (Number.parseInt(b.categoryId, 10) || 99),
+    );
   }, [scGeoFiltered, scCat]);
 
   const plGroups = useMemo(() => Array.from(new Set(v.places.map(x => x.group))), [v.places]);

@@ -169,6 +169,14 @@ describe('standalone showcase dioramas, shared flags & administrative boundaries
     expect(list.some(x => x.id.startsWith('house:'))).toBe(false);
     expect(list.every(x => x.countryCode === 'vn' && x.cityId === 'vn/ha-noi' && Boolean(x.categoryId))).toBe(true);
 
+    const uniqueCatIds = Array.from(new Set(list.map(x => x.categoryId)));
+    const uniqueCatTitles = Array.from(new Set(list.map(x => x.group)));
+    expect(uniqueCatIds.length).toBe(14);
+    expect(uniqueCatTitles.length).toBe(14);
+    expect(uniqueCatIds.map(id => Number.parseInt(id, 10))).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+    expect(list.some(x => x.name.includes('Trường Mầm non Ô Chợ Dừa'))).toBe(false);
+    expect(list.some(x => x.name.includes('Công an phường Cửa Nam'))).toBe(false);
+
     const vpbankItem = list.find(x => x.name.includes('VPBank Tower'))!;
     const cinemaItem = list.find(x => x.name.includes('Trung tâm Chiếu phim Quốc gia'))!;
     const mausoleumItem = list.find(x => x.name.includes('Lăng Chủ tịch Hồ Chí Minh'))!;

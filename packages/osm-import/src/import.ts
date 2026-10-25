@@ -370,15 +370,7 @@ export function importArea(
     const nNorm = normCatalogKey(nTrim);
     const catEntry =
       catalogBySource.get(b.source) ??
-      (nNorm
-        ? catalogByName.get(nNorm) ??
-          cfg.landmarksCatalog?.find(e =>
-            e.aliases?.some(al => {
-              const k = normCatalogKey(al);
-              return k.length >= 4 && nNorm.includes(k);
-            }),
-          )
-        : undefined);
+      (nNorm ? catalogByName.get(nNorm) : undefined);
     const subtype = inferSubtype(b.t) ?? campus?.subtype ?? (catEntry ? 'heritage' : undefined);
     const isMonumentOrArtwork = Boolean(
       b.t.historic === 'monument' ||

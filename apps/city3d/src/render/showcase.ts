@@ -87,60 +87,60 @@ const COUNTRY_NAMES: Record<string, string> = {
 };
 
 const CATEGORY_META: Record<string, { id: string; title: string }> = {
-  '01-citadels-gates': {
-    id: '01-citadels-gates',
+  '1-cua-o-cong-thanh': {
+    id: '1-cua-o-cong-thanh',
     title: '1. Cửa Ô, Cổng Thành & Thành Quách Cổ',
   },
-  '02-gov-party-ministries': {
-    id: '02-gov-party-ministries',
-    title: '2. Tòa nhà Chính phủ, Cơ quan Trung ương Đảng & Nhà khách',
+  '2-chinh-phu-trung-uong': {
+    id: '2-chinh-phu-trung-uong',
+    title: '2. Toà nhà Chính phủ, Cơ quan Trung ương Đảng & Nhà khách Nhà nước',
   },
-  '03-churches-religious': {
-    id: '03-churches-religious',
+  '3-nha-tho-ton-giao': {
+    id: '3-nha-tho-ton-giao',
     title: '3. Hệ thống Nhà thờ (Công giáo, Tin lành) & Công trình Tôn giáo',
   },
-  '04-monuments-memorials': {
-    id: '04-monuments-memorials',
+  '4-tuong-dai-chien-cong': {
+    id: '4-tuong-dai-chien-cong',
     title: '4. Đài Tưởng niệm, Tượng đài & Di tích Chiến công',
   },
-  '05-hoan-kiem-old-quarter': {
-    id: '05-hoan-kiem-old-quarter',
+  '5-ho-guom-pho-co': {
+    id: '5-ho-guom-pho-co',
     title: '5. Cụm danh thắng Hồ Hoàn Kiếm, Phố Cổ & Di tích Đô thị',
   },
-  '06-tu-tran-temples': {
-    id: '06-tu-tran-temples',
+  '6-tu-tran-den-phu': {
+    id: '6-tu-tran-den-phu',
     title: '6. Tứ Trấn Thăng Long, Đền, Phủ & Đạo Quán',
   },
-  '07-ancient-pagodas': {
-    id: '07-ancient-pagodas',
+  '7-chua-co-phat-giao': {
+    id: '7-chua-co-phat-giao',
     title: '7. Chùa Cổ, Thiền viện & Quần thể Phật giáo',
   },
-  '08-communal-houses-villages': {
-    id: '08-communal-houses-villages',
+  '8-dinh-co-lang-xa': {
+    id: '8-dinh-co-lang-xa',
     title: '8. Đình Cổ & Kiến trúc Làng Xã Ngoại thành',
   },
-  '09-french-colonial-culture-edu-med': {
-    id: '09-french-colonial-culture-edu-med',
+  '9-kien-truc-phap-van-hoa-giao-duc-y-te': {
+    id: '9-kien-truc-phap-van-hoa-giao-duc-y-te',
     title: '9. Công trình Văn hóa, Giáo dục & Y tế thời Pháp thuộc',
   },
-  '10-museums-exhibitions': {
-    id: '10-museums-exhibitions',
+  '10-bao-tang-trien-lam': {
+    id: '10-bao-tang-trien-lam',
     title: '10. Bảo tàng & Trung tâm Triển lãm',
   },
-  '11-skyscrapers-malls-modern': {
-    id: '11-skyscrapers-malls-modern',
-    title: '11. Tòa nhà Cao tầng, Trung tâm Thương mại & Tổ hợp Hiện đại',
+  '11-cao-oc-tttm-hien-dai': {
+    id: '11-cao-oc-tttm-hien-dai',
+    title: '11. Toà nhà Cao tầng, Trung tâm Thương mại & Tổ hợp Hiện đại',
   },
-  '12-luxury-hotels': {
-    id: '12-luxury-hotels',
+  '12-khach-san-sang-trong': {
+    id: '12-khach-san-sang-trong',
     title: '12. Khách sạn Sang trọng & Nổi tiếng',
   },
-  '13-bridges-stadiums-parks': {
-    id: '13-bridges-stadiums-parks',
-    title: '13. Cầu Lớn, Sân vận động, Công viên & Công trình Biểu tượng',
+  '13-cau-ha-tang-the-thao': {
+    id: '13-cau-ha-tang-the-thao',
+    title: '13. Cầu, Hạ tầng, Thể thao & Công trình Văn hoá Quy mô lớn',
   },
-  '14-metro-stations': {
-    id: '14-metro-stations',
+  '14-nha-ga-metro': {
+    id: '14-nha-ga-metro',
     title: '14. Nhà ga Đường sắt Đô thị (Metro) & Giao thông',
   },
 };
@@ -172,42 +172,42 @@ function classifyOsmBuildingCategory(b: Building): { id: string; title: string }
   const m = b.model ?? '';
   const name = b.name ?? '';
   if (m === 'o-quan-chuong' || m === 'hanoi-flag-tower' || m === 'doan-mon' || m === 'bac-mon' || m === 'dien-kinh-thien' || m === 'hau-lau' || m === 'co-loa-citadel' || m === 'city-gate-stele') {
-    return CATEGORY_META['01-citadels-gates']!;
+    return CATEGORY_META['1-cua-o-cong-thanh']!;
   }
   if (m === 'ho-chi-minh-mausoleum' || m === 'nha-san-bac-ho' || m === 'presidential-palace' || m === 'national-assembly' || m === 'party-central-hq' || m === 'bac-bo-phu' || m === 'ministry-palace') {
-    return CATEGORY_META['02-gov-party-ministries']!;
+    return CATEGORY_META['2-chinh-phu-trung-uong']!;
   }
   if (m === 'st-joseph-cathedral' || m === 'church-hall' || m === 'nha-tho-cua-bac' || m === 'nha-tho-ham-long' || m === 'al-noor-mosque' || /^(nhà thờ|giáo xứ|thánh đường)\b/iu.test(name)) {
-    return CATEGORY_META['03-churches-religious']!;
+    return CATEGORY_META['3-nha-tho-ton-giao']!;
   }
   if (m === 'bac-son-memorial' || m === 'tuong-dai-hoa-binh' || m === 'traditional-mausoleum' || m === 'statue-monument-plaza' || m === 'tuong-dai-cam-tu' || m === 'tuong-dai-quang-trung' || m === 'b52-huu-tiep-lake') {
-    return CATEGORY_META['04-monuments-memorials']!;
+    return CATEGORY_META['4-tuong-dai-chien-cong']!;
   }
   if (m === 'thap-rua' || m === 'den-ngoc-son' || m === 'cau-the-huc' || m === 'thap-but' || m === 'thap-hoa-phong' || m === 'thap-nuoc-hang-dau' || m === 'nha-co-ma-may' || m === 'cho-dong-xuan' || m === 'traditional-market-hall') {
-    return CATEGORY_META['05-hoan-kiem-old-quarter']!;
+    return CATEGORY_META['5-ho-guom-pho-co']!;
   }
   if (m === 'den-quan-thanh' || m === 'phu-tay-ho' || m === 'den-hai-ba-trung' || m === 'traditional-temple' || /^(đền|phủ|miếu)\b/iu.test(name)) {
-    return CATEGORY_META['06-tu-tran-temples']!;
+    return CATEGORY_META['6-tu-tran-den-phu']!;
   }
   if (m === 'one-pillar-pagoda' || m === 'chua-tran-quoc' || m === 'chua-quan-su' || m === 'chua-phuc-khanh' || m === 'traditional-pagoda' || m === 'mountain-pagoda-complex' || /^(chùa|tổ đình|thiền viện)\b/iu.test(name)) {
-    return CATEGORY_META['07-ancient-pagodas']!;
+    return CATEGORY_META['7-chua-co-phat-giao']!;
   }
   if (m === 'lang-lua-van-phuc' || m === 'ancient-communal-house' || m === 'ancient-village-gate' || /^(đình|cổng làng|làng)\b/iu.test(name)) {
-    return CATEGORY_META['08-communal-houses-villages']!;
+    return CATEGORY_META['8-dinh-co-lang-xa']!;
   }
   if (m === 'khue-van-cac' || m === 'van-mieu-mon' || m === 'van-mieu-gate' || m === 'van-mieu-hall' || m === 'nha-thai-hoc' || m === 'hanoi-opera-house' || m === 'hoa-lo-prison' || m === 'ga-ha-noi' || m === 'french-colonial-university' || /Đại học|Học viện|Trường|Bệnh viện|Văn Miếu|Quốc Tử Giám/iu.test(name)) {
-    return CATEGORY_META['09-french-colonial-culture-edu-med']!;
+    return CATEGORY_META['9-kien-truc-phap-van-hoa-giao-duc-y-te']!;
   }
   if (m === 'ho-chi-minh-museum' || m === 'national-history-museum' || m === 'bao-tang-dan-toc-hoc' || m === 'bao-tang-ha-noi' || m === 'fine-arts-museum' || m === 'military-history-museum' || m === 'national-exhibition-center' || /^bảo tàng\b/iu.test(name)) {
-    return CATEGORY_META['10-museums-exhibitions']!;
+    return CATEGORY_META['10-bao-tang-trien-lam']!;
   }
   if (m === 'daewoo-hotel' || m === 'pullman-hanoi' || m === 'novotel' || m === 'metropole-hotel' || m === 'jw-marriott-hanoi' || m === 'intercontinental-westlake' || m === 'pan-pacific-hanoi' || /Hotel|Khách sạn|Novotel|Fortuna|Capella|Metropole|Marriott|Sheraton|Hilton|Melia/iu.test(name)) {
-    return CATEGORY_META['12-luxury-hotels']!;
+    return CATEGORY_META['12-khach-san-sang-trong']!;
   }
   if (m === 'svd-my-dinh' || m === 'tt-hoi-nghi-quoc-gia' || m === 'cau-nhat-tan' || m === 'cau-long-bien' || m === 'cau-chuong-duong' || m === 'arch-extradosed-bridge' || m === 'indoor-sports-arena' || /^(cầu|sân vận động|cung thể thao)\b/iu.test(name)) {
-    return CATEGORY_META['13-bridges-stadiums-parks']!;
+    return CATEGORY_META['13-cau-ha-tang-the-thao']!;
   }
-  return CATEGORY_META['11-skyscrapers-malls-modern']!;
+  return CATEGORY_META['11-cao-oc-tttm-hien-dai']!;
 }
 
 /** Legacy standalone archetypes kept only for backward-compatible direct `buildShowcase(city, 'house:...')` calls in tests */
@@ -284,6 +284,14 @@ function buildingBoundsPts(b: Building): Vec2[] {
   return pts;
 }
 
+const GENERIC_AUTO_MODELS = new Set<string>([
+  'traditional-temple',
+  'traditional-pagoda',
+  'church-hall',
+  'traditional-mausoleum',
+  'statue-monument-plaza',
+]);
+
 /**
  * Hierarchically organized architectural landmarks and stations for the city:
  * Country (Quốc gia) → City/Province (Thành phố/Tỉnh) → Category (Nhóm công trình) → Landmark.
@@ -293,11 +301,20 @@ export function showcasesOf(city: City): ShowcaseItem[] {
   const loc = resolveCityHierarchy(city);
   const norm = (s: string) => s.trim().toLowerCase();
   const catalogCoveredNames = new Set<string>();
+  const catalogCoveredSources = new Set<string>();
 
   // 1. Curated 13-Category City Landmarks Catalog (208 iconic Hanoi relics, citadels, ministries, churches, pagodas, bridges...)
   if (city.landmarksCatalog) {
     for (const entry of city.landmarksCatalog) {
       catalogCoveredNames.add(norm(entry.name));
+      const stripped = entry.name.replace(/\s*\([^)]*\)\s*$/u, '').trim();
+      if (stripped) catalogCoveredNames.add(norm(stripped));
+      for (const al of entry.aliases ?? []) {
+        catalogCoveredNames.add(norm(al));
+      }
+      if (entry.osmSource) {
+        catalogCoveredSources.add(entry.osmSource);
+      }
 
       const [w, d] = entry.footprintSize;
       const lv = entry.floors.length;
@@ -308,7 +325,9 @@ export function showcasesOf(city: City): ShowcaseItem[] {
       const aliasSuffix =
         entry.id === 'vincom-royal-city' && !entry.name.includes('Vinhomes Royal City')
           ? ' (Vinhomes Royal City)'
-          : '';
+          : entry.id === 'van-mieu-quoc-tu-giam' && !entry.name.includes('Khuê Văn Các')
+            ? ' (Khuê Văn Các)'
+            : '';
       out.push({
         id: `catalog:${entry.id}`,
         countryCode: loc.countryCode,
@@ -330,39 +349,23 @@ export function showcasesOf(city: City): ShowcaseItem[] {
     }
   }
 
-  // 2. Additional bespoke/major OSM landmarks not already represented by exact name in `landmarksCatalog`
+  // 2. Additional bespoke OSM landmarks not already represented in `landmarksCatalog`
   //    (e.g. Khuê Văn Các, Nhà sàn Bác Hồ, Văn Miếu Môn, Điện Đại Thành, Nhà Thái Học, VPBank Tower, Trung tâm Chiếu phim Quốc gia...)
   const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
   const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
 
   const osmLandmarks = city.buildings.filter(b => {
-    if (!b.name) return false;
-    const lv = maxLevels(b);
-    const box = bbox(buildingBoundsPts(b));
-    const span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
-    return (
-      Boolean(b.model || b.isSignatureLandmark) ||
-      lv >= 8 ||
-      (lv >= 4 &&
-        span >= 32 &&
-        /Tower|Plaza|Vincom|MIPEC|Novotel|Thái Bình|Sky|VPBank|Chiếu phim|Diamond|Peak|Fortuna|CONINCO|Eurowindow|Capella|Geleximco|Ngân hàng|Đại học|Học viện/i.test(
-          b.name,
-        ))
-    );
+    if (!b.name || !b.model) return false;
+    return !GENERIC_AUTO_MODELS.has(b.model);
   });
 
-  osmLandmarks.sort((a, b) => {
-    const ba = b.model !== undefined ? 1 : 0;
-    const aa = a.model !== undefined ? 1 : 0;
-    if (aa !== ba) return ba - aa;
-    return maxHeight(b) - maxHeight(a) || a.name!.localeCompare(b.name!, 'vi');
-  });
+  osmLandmarks.sort((a, b) => maxHeight(b) - maxHeight(a) || a.name!.localeCompare(b.name!, 'vi'));
 
   const seenNames = new Set<string>(catalogCoveredNames);
   for (const b of osmLandmarks) {
     const name = b.name!.trim();
     const nKey = norm(name);
-    if (seenNames.has(nKey)) continue;
+    if (seenNames.has(nKey) || catalogCoveredSources.has(b.source)) continue;
     seenNames.add(nKey);
 
     const lv = maxLevels(b);
@@ -393,7 +396,7 @@ export function showcasesOf(city: City): ShowcaseItem[] {
   }
 
   // 3. Elevated Metro Stations (Tuyến 2A Cát Linh – Hà Đông & Tuyến 3 Nhổn – Ga Hà Nội)
-  const metroCat = CATEGORY_META['14-metro-stations']!;
+  const metroCat = CATEGORY_META['14-nha-ga-metro']!;
   for (const st of city.stations.filter(s => s.kind === 'metro')) {
     const tag = st.lineTag ?? 'Metro 2A';
     const lineDesc = st.lineName ?? 'Tuyến 2A Cát Linh – Hà Đông';
@@ -417,8 +420,8 @@ export function showcasesOf(city: City): ShowcaseItem[] {
     });
   }
 
-  // Sort items cleanly by Category ID so all items in the same architectural group are contiguous
-  out.sort((a, b) => a.categoryId.localeCompare(b.categoryId));
+  // Sort items numerically by Category ID (1..14) so all items in the same architectural group are contiguous
+  out.sort((a, b) => (Number.parseInt(a.categoryId, 10) || 99) - (Number.parseInt(b.categoryId, 10) || 99));
 
   return out;
 }
@@ -677,8 +680,8 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
         countryName: loc.countryName,
         cityId: loc.cityId,
         cityName: loc.cityName,
-        categoryId: '05-hoan-kiem-old-quarter',
-        group: CATEGORY_META['05-hoan-kiem-old-quarter']!.title,
+        categoryId: '5-ho-guom-pho-co',
+        group: CATEGORY_META['5-ho-guom-pho-co']!.title,
         name: arch.name,
         subtitle: arch.subtitle,
         zoom: arch.zoom,
