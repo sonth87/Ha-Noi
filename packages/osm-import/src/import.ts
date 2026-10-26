@@ -10,7 +10,7 @@
      7. the area's hand corrections (overrides).
    Every list is sorted by id, so the same extract always gives the same city. Pure. */
 import {
-  applyOverrides, bbox, bridgeProfile, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
+  applyOverrides, bbox, bridgeProfile, DECK_H, centroid, clipPathTo, clipRing, closestOnSegment, dist, inRegion, railHeight, frontEdge, frontage, frontStreet, guessKind, guessLevels, houseFor, houseStoreys,
   inRect, normalizeRing, pointInRing, polylineLength, area as ringArea, storeyHeights, streetShape,
   type Area, type Building, type BuildingPart, type City, type CityLandmarkCatalogEntry, type CityPlace, type Feature, type Junction, type Overrides, type Rail, type Rect, type Station, type Street, type Vec2,
 } from '@my-city/core';
@@ -87,6 +87,7 @@ export function importArea(
 
   // ---------- 2. streets ----------
   const streets: Street[] = [];
+  const bridgePieces: { s: Street; H: number; startCut: boolean; endCut: boolean }[] = [];
   const streetNodes = new Map<number, Set<string>>();   // node → ids of the street pieces through it
   const degree = new Map<number, number>();               // node → street arms leaving it (an end counts 1, a node inside a way 2)
   for (const w of ways.values()) {
@@ -110,16 +111,28 @@ export function importArea(
         const s0 = along(full, piece[0]!), s1 = s0 + polylineLength(piece);
         cutProf = cutProfile(prof, s0, s1);
       }
-      streets.push({
+      const street: Street = {
         id, name: t.name, kind, path: piece, ...shape, oneway, layer: bridge ? 1 : layer,
         profile: cutProf, source: src('way', w.id),
-      });
+      };
+      streets.push(street);
+      if (prof.length && road) {
+        // the road bridges are given one height profile across the whole bridge network below
+        const same = (a: Vec2, b: Vec2) => Math.hypot(a[0] - b[0], a[1] - b[1]) < 0.01;
+        bridgePieces.push({
+          s: street, H: bridgeDeckHeight(t.name, layer),
+          startCut: !same(piece[0]!, full[0]!) && !same(piece[0]!, full[full.length - 1]!),
+          endCut: !same(piece[piece.length - 1]!, full[0]!) && !same(piece[piece.length - 1]!, full[full.length - 1]!),
+        });
+      }
       for (const nid of w.nodes) {
         const p = xy.get(nid);
         if (road && p && inside(p)) { const set = streetNodes.get(nid) ?? new Set(); set.add(id); streetNodes.set(nid, set); }
       }
     });
   }
+
+  solveBridgeProfiles(streets, bridgePieces);
 
   // ---------- 3. buildings and parts ----------
   type Raw = { id: string; source: string; ring: Vec2[]; t: OsmTags };
@@ -739,4 +752,77 @@ function rings(r: OsmRelation, ways: Map<number, OsmWay>, path: (w: OsmWay) => V
   const innerSegs = r.members.filter(m => m.type === 'way' && m.role === 'inner').map(m => ways.get(m.ref)).filter((w): w is OsmWay => !!w).map(w => [...w.nodes]);
   const inner = innerSegs.length;
   return { outer: stitch(outerSegs), innerRings: stitch(innerSegs), inner };
+}
+
+
+/** deck height above the ground (m): the usual flyover height per layer, a tall river bridge for Cầu Long Biên */
+function bridgeDeckHeight(name: string | undefined, layer: number): number {
+  if (name && /cầu long biên/i.test(name)) return 9.5;
+  void layer;   // OSM layer 2 only means "over another bridge"; every flyover keeps the usual 6 m deck as before
+  return DECK_H;
+}
+
+/** a deck climbs at most this steeply (120 m for a 6 m flyover, 190 m for the 9.5 m Cầu Long Biên) unless the bridge is short */
+const RAMP_SLOPE = 0.05;
+
+/** Height profile of every road bridge, worked out over the whole network of bridge pieces instead of
+    one way at a time: a piece used to ramp from the ground at both its ends, so a bridge made of
+    several OSM ways dipped to the ground at every joint. Now the height at a joint is shared by the pieces
+    that meet there (the ground where a normal street meets it, otherwise the lower deck of the two) and
+    each piece ramps only as much as it has to, at about 4.5 %. A piece cut by the area edge keeps its
+    height there. Pieces that run on top of another bridge piece of the same name are dropped. */
+function solveBridgeProfiles(streets: Street[], pieces: { s: Street; H: number; startCut: boolean; endCut: boolean }[]) {
+  if (!pieces.length) return;
+  const key = (p: Vec2) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
+  // drop a duplicate deck: same name, lying within 4 m of a piece already kept
+  const kept: typeof pieces = [];
+  const dup = (a: Street, b: Street) => a.name === b.name && a.path.filter(p => nearPath(p, b.path, 4)).length >= a.path.length * 0.6;
+  for (const piece of [...pieces].sort((a, b) => a.H - b.H || (a.s.id < b.s.id ? -1 : 1))) {
+    if (kept.some(k => dup(piece.s, k.s))) { streets.splice(streets.indexOf(piece.s), 1); continue; }
+    kept.push(piece);
+  }
+  const bridgeSet = new Set(kept.map(k => k.s));
+  const ground = new Set<string>();
+  for (const st of streets) if (!bridgeSet.has(st) && !st.profile.length) for (const p of st.path) ground.add(key(p));
+  // a node's height is capped by the lowest deck that meets there, and cannot be reached faster than the ramp
+  // slope allows from the ground: the shortest network distance to a ground node (or free end) sets it
+  const cap = new Map<string, number>(), count = new Map<string, number>();
+  for (const { s, H } of kept) for (const p of [s.path[0]!, s.path[s.path.length - 1]!]) {
+    const k = key(p);
+    cap.set(k, Math.min(cap.get(k) ?? Infinity, H));
+    count.set(k, (count.get(k) ?? 0) + 1);
+  }
+  // a bridge group too short for the gentle slope climbs over a third of its length, as one-way pieces always did
+  const comp = new Map<string, string>();
+  const find = (k: string): string => { let r = k; while (comp.get(r) !== r && comp.has(r)) r = comp.get(r)!; return r; };
+  for (const k of cap.keys()) comp.set(k, k);
+  for (const { s } of kept) comp.set(find(key(s.path[0]!)), find(key(s.path[s.path.length - 1]!)));
+  const total = new Map<string, number>(), top = new Map<string, number>();
+  for (const { s, H } of kept) { const c = find(key(s.path[0]!)); total.set(c, (total.get(c) ?? 0) + polylineLength(s.path)); top.set(c, Math.max(top.get(c) ?? 0, H)); }
+  const slopeOf = (p: Vec2) => { const c = find(key(p)); return Math.max(RAMP_SLOPE, (3 * (top.get(c) ?? 0)) / (total.get(c) || 1)); };
+  const dist = new Map<string, number>();
+  for (const k of cap.keys()) dist.set(k, ground.has(k) || (count.get(k) ?? 0) < 2 ? 0 : Infinity);
+  // a piece cut by the area edge keeps its deck height at the cut
+  for (const { s, H, startCut, endCut } of kept) {
+    if (startCut) dist.set(key(s.path[0]!), Math.min(dist.get(key(s.path[0]!))!, H / slopeOf(s.path[0]!)));
+    if (endCut) dist.set(key(s.path[s.path.length - 1]!), Math.min(dist.get(key(s.path[s.path.length - 1]!))!, H / slopeOf(s.path[s.path.length - 1]!)));
+  }
+  for (let changed = true, guard = 0; changed && guard < 500; guard++) {
+    changed = false;
+    for (const { s } of kept) {
+      const a = key(s.path[0]!), b = key(s.path[s.path.length - 1]!), L = polylineLength(s.path);
+      if (dist.get(a)! + L < dist.get(b)! - 1e-6) { dist.set(b, dist.get(a)! + L); changed = true; }
+      if (dist.get(b)! + L < dist.get(a)! - 1e-6) { dist.set(a, dist.get(b)! + L); changed = true; }
+    }
+  }
+  const nodeZ = (p: Vec2) => { const k = key(p); return Math.min(cap.get(k) ?? 0, slopeOf(p) * (dist.get(k) ?? 0)); };
+  for (const { s, H } of kept) {
+    const L = polylineLength(s.path), ha = Math.min(H, nodeZ(s.path[0]!)), hb = Math.min(H, nodeZ(s.path[s.path.length - 1]!));
+    // the deck is the lower of: its own height, the ramp up from the first end and the ramp up from the last end
+    const k = slopeOf(s.path[0]!);
+    const f = (x: number) => Math.min(H, ha + k * x, hb + k * (L - x));
+    const cuts = [0, L, (H - ha) / k, L - (H - hb) / k, (hb - ha + k * L) / (2 * k)];
+    const xs = [...new Set(cuts.filter(x => x >= 0 && x <= L).map(x => Math.round(x * 1000) / 1000))].sort((a, b) => a - b);
+    s.profile = xs.map((x): [number, number] => [x, Math.round(f(x) * 1e4) / 1e4]);
+  }
 }

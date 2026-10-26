@@ -534,11 +534,6 @@ export const HA_NOI_BUILDING_OVERRIDES: Record<SourceId, BuildingOverride> = {
   // ── Khu vực Bắc Từ Liêm ──
   // ── Khu vực Tây Hồ – Phường Phú Thượng ──
   // ── Khu vực Long Biên ──
-  'osm:way/99000000111': {
-    name: 'Cầu Long Biên lịch sử (Phường Bồ Đề – Hoàn Kiếm)', kind: 'other', model: 'cau-long-bien', isSignatureLandmark: true,
-    description: 'Cầu Long Biên lịch sử (1899–1902) bắc qua Sông Hồng với kết cấu dầm thép hình rồng lượn – chứng nhân lịch sử hào hùng của Thủ đô Hà Nội.',
-    floors: [7.5, 7.5, 7.5],
-  },
   // ── Khu vực Hà Đông ──
   // ── Khu vực Hoàng Mai ──
   'osm:way/1446303895': {

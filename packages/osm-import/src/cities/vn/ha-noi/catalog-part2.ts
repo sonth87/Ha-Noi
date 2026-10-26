@@ -1396,7 +1396,6 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'cau-long-bien',
     floors: [7.5, 7.5, 7.5],
     footprintSize: [96, 16],
-    osmSource: 'osm:way/99000000111',
     description: 'Cầu Long Biên lịch sử (xây dựng năm 1899–1902 bởi hãng Daydé & Pillé) với kết cấu giàn thép hẫng hình rồng lượn vượt sông Hồng.',
   },
   {

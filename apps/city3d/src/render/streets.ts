@@ -14,7 +14,7 @@
      - areas: flat fills (grass, water, pitches, plazas) with their outlines.
    Pure. */
 import * as THREE from 'three';
-import { closestOnPath, dist, frontStreet, polylineLength, roadNetwork, type Area, type Arm, type City, type NetNode, type Road, type Vec2 } from '@my-city/core';
+import { closestOnPath, dist, frontStreet, pointInRing, polylineLength, roadNetwork, type Area, type Arm, type City, type NetNode, type Road, type Vec2 } from '@my-city/core';
 import { V, type Batch, type Surface } from './batch';
 import { drawMonumentFeature } from './landmarks';
 
@@ -459,15 +459,63 @@ function smoothPolyline(path: readonly Vec2[]): Vec2[] {
   return s;
 }
 
-/** bridges drawn in full by a landmark model (Cầu Long Biên) instead of the generic deck */
+/** Cầu Long Biên gets its steel trusses on top of the ordinary deck (which follows its real, ramped height profile) */
 const hasBespokeBridge = (r: { name?: string }) => Boolean(r.name && /cầu long biên/i.test(r.name));
+
+const TRUSS_SPAN = 95, TRUSS_CELLS = 8;
+
+/** Cantilever steel trusses (the "dragon" wave of the real bridge) over the river part of the deck:
+    one span every 95 m where the deck is at full height and over water; a tall post at each pier. */
+function longBienTruss(B: Batch, r: Road, waters: readonly (readonly Vec2[])[], sides: readonly (-1 | 1)[]) {
+  const step = TRUSS_SPAN / TRUSS_CELLS, L = polylineLength(r.path);
+  const at = (s: number): { p: Vec2; r: Vec2 } => {
+    let acc = 0;
+    for (let i = 1; i < r.path.length; i++) {
+      const a = r.path[i - 1]!, b = r.path[i]!, d = dist(a, b);
+      if (s <= acc + d || i === r.path.length - 1) {
+        const t = d ? Math.min(1, Math.max(0, (s - acc) / d)) : 0;
+        return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], r: rightOf(a, b) };
+      }
+      acc += d;
+    }
+    return { p: r.path[0]!, r: [0, 1] };
+  };
+  const n = Math.floor(L / step), half = r.width / 2 + 0.1;
+  const deckTop = r.profile.length ? Math.max(...r.profile.map(q => q[1])) : 0;
+  const over = (c: number) => { const q = at((c * TRUSS_CELLS + TRUSS_CELLS / 2) * step); return zAt(r, (c * TRUSS_CELLS + TRUSS_CELLS / 2) * step) >= deckTop - 0.5 && waters.some(w => pointInRing(q.p, w)); };
+  const topRel = (i: number) => 4 + 7.5 * Math.cos((Math.PI * (i % TRUSS_CELLS)) / TRUSS_CELLS) ** 2;
+  for (let c = 0; c * TRUSS_CELLS + TRUSS_CELLS <= n; c++) {
+    if (!over(c)) continue;
+    for (const sv of sides) {
+      let prev: THREE.Vector3 | null = null, prevBase: THREE.Vector3 | null = null;
+      for (let k = 0; k <= TRUSS_CELLS; k++) {
+        const i = c * TRUSS_CELLS + k, s = i * step, q = at(s), z0 = zAt(r, s) + 0.9;
+        const x = q.p[0] + q.r[0] * sv * half, y = q.p[1] + q.r[1] * sv * half;
+        const base = V(x, y, z0), top = V(x, y, z0 + topRel(i));
+        B.line(base, top, 'crease');
+        if (prev && prevBase) {
+          B.line(prev, top, 'crease');
+          B.line(k % 2 ? prevBase : base, k % 2 ? top : prev, 'crease');
+        }
+        if (k === 0 || k === TRUSS_CELLS) {
+          const ring: Vec2[] = [[-0.5, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]].map(([a, b]) => [x + a!, y + b!]);
+          B.solid(ring, z0, z0 + topRel(i), () => 'metal', 'metal');
+        }
+        prev = top; prevBase = base;
+      }
+    }
+    // overhead sway bracing at the middle of the span
+    const sMid = (c * TRUSS_CELLS + TRUSS_CELLS / 2) * step, q = at(sMid), zt = zAt(r, sMid) + 0.9 + topRel(TRUSS_CELLS / 2);
+    if (sides.length === 2) B.line(V(q.p[0] - q.r[0] * half, q.p[1] - q.r[1] * half, zt), V(q.p[0] + q.r[0] * half, q.p[1] + q.r[1] * half, zt), 'crease');
+  }
+}
 
 function drawRoadGeometry(B: Batch, r: Road, taper: RoadTaper, c: LocalStreetCuts, mode: StreetRenderMode) {
   const minor = isMinorRoad(r);
   const drawCarriageway = mode === 'all' || (mode === 'major' ? !minor : minor);
   const drawLocalDetails = mode === 'all' || mode === 'local';
   if (r.layer > 0 && r.profile.length) {
-    if (drawCarriageway && !hasBespokeBridge(r)) bridge(B, r);
+    if (drawCarriageway) bridge(B, r);
     return;
   }
   if (drawCarriageway) {
@@ -541,8 +589,19 @@ export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all
   const { roads, roadList, nodes, tapers } = prepareRenderNetwork(city);
   const cuts = computeRoadCuts(nodes, roads, tapers, B, mode);
   const emptyCut: LocalStreetCuts = { left: [], right: [], marks: [] };
+  const waters = city.areas.filter(a => a.kind === 'water').map(a => a.polygon);
+  // the two carriageways of Cầu Long Biên each get a truss on their outer side only
+  const lbDecks = roadList.filter(r => r.layer > 0 && r.profile.length && hasBespokeBridge(r));
+  const outerSides = (r: Road): (-1 | 1)[] => {
+    const other = lbDecks.find(o => o !== r);
+    if (!other) return [-1, 1];
+    const mid = r.path[Math.floor(r.path.length / 2)]!, om = closestOnPath(mid, other.path).at;
+    const a = r.path[Math.floor(r.path.length / 2) - 1] ?? r.path[0]!, b = r.path[Math.floor(r.path.length / 2)]!, n = rightOf(a, b);
+    return [(om[0] - mid[0]) * n[0] + (om[1] - mid[1]) * n[1] > 0 ? -1 : 1];
+  };
   for (const r of roadList) {
     drawRoadGeometry(B, r, tapers.get(r.id)!, cuts.get(r.id) ?? emptyCut, mode);
+    if (mode !== 'local' && lbDecks.includes(r)) longBienTruss(B, r, waters, outerSides(r));
   }
   if (mode === 'major') return;
   const metroStations = city.stations.filter(st => st.kind === 'metro');

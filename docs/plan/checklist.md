@@ -96,6 +96,7 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý & yêu cầu: bổ sung bắt buộc các cây cầu biểu tượng (Cầu Thê Húc, Cầu Long Biên, Cầu Rồng Đà Nẵng…) vào quy tắc vẽ 3D riêng; sửa lỗi Hồ Tây và các hồ tràn vùng xanh ra khu dân cư khi để `Màu 1` + khoét đúng đảo trong hồ; thể hiện rõ màu cỏ xanh & rừng cây 3D cho Công viên Bách Thảo và toàn bộ công viên/vườn hoa; sửa vị trí/hướng Cầu Thê Húc và Tháp Bút tại Đền Ngọc Sơn; sửa Tượng đài Cảm tử (trước bị vẽ là ngôi nhà) và Tượng đài Quang Trung (trước chỉ như cái cọc) cùng toàn bộ tượng đài khác thành cụm điêu khắc 3D chi tiết → ADR-057
 
 - [x] Đánh giá toàn diện `city3d` + lỗi người dùng báo (đường giữa sông, Cầu Long Biên, Tháp Bút / Thê Húc, Hồ Tây, giật trên tablet, `RangeError`) → ADR-058: xoá dữ liệu bịa, dùng OSM thật; neo Ngọc Sơn theo tâm đền; lớp tổng quan L0; ngân sách thời gian dựng ô; ErrorBoundary; CI
+- [x] Góp ý (ảnh): đầu Cầu Long Biên / Chương Dương cụt, cầu nhấp nhô, vòng xuyến lộn xộn → ADR-058 mục 2: cao độ cầu theo cả mạng cầu
 - [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
 
 ## Backlog
