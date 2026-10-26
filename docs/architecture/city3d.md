@@ -50,7 +50,7 @@ Hệ thống camera kép gồm `OrthographicCamera` cho bản đồ và `Perspec
 
 ## 4. Mức chi tiết theo zoom (ADR-036, ADR-049)
 
-Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: các ô trong tầm nhìn dựng ngay ở mức thấp; sau đó mỗi khung hình (khi người dùng không đang kéo/chụm cảm ứng) dựng thêm một ô trong tầm nhìn ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại.
+Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: các ô trong tầm nhìn dựng ngay ở mức thấp; sau đó mỗi khung hình (khi người dùng không đang kéo/chụm cảm ứng) dựng thêm một ô trong tầm nhìn ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại. Mỗi khung chỉ dựng trong ngân sách thời gian (6 ms di động, 10 ms máy tính; luôn dựng ít nhất một ô) để tablet không bị khựng; lớp tổng quan công trình zoom xa dựng ở L0 lúc rảnh và dựng lại khi chunk mới thêm công trình (ADR-058).
 
 ## 5. Đèn (ADR-039)
 

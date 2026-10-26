@@ -1810,9 +1810,15 @@ function drawThapRua(B: Batch, b: Building, level: Detail) {
 // ============================================================================
 // 22. ĐỀN NGỌC SƠN, CẦU THÊ HÚC, ĐẮC NGUYỆT LÂU, ĐÀI NGHIÊN, THÁP BÚT & ĐÌNH TRẤN BA (Hồ Gươm)
 // ============================================================================
+/** Centre of Đền Ngọc Sơn's oriented box on the real map (OSM way/178995262 in the current frame).
+    The Thê Húc / Tháp Bút / Trấn Ba spots below are offsets from it, measured from OSM; a test keeps the
+    two in step, because an absolute copy of these went stale once the map origin moved. */
+export const NGOC_SON_MAP_CENTRE: Vec2 = [3449.8, 1482.2];
+
 function drawDenNgocSon(B: Batch, b: Building, level: Detail) {
   const rawOb = orientedBoxOf(b.footprint, b.front);
-  const onRealMap = Math.hypot(rawOb.c[0] - 3813.0, rawOb.c[1] - 1494.1) < 80;
+  const onRealMap = Math.hypot(rawOb.c[0] - NGOC_SON_MAP_CENTRE[0], rawOb.c[1] - NGOC_SON_MAP_CENTRE[1]) < 80;
+  const atMap = (dx: number, dy: number): Vec2 => [rawOb.c[0] + dx, rawOb.c[1] + dy];
   // True geographic orientation of Đền Ngọc Sơn & Cầu Thê Húc on the real map:
   // +u points East along Cầu Thê Húc toward Phố Đinh Tiên Hoàng; +v points South toward Đình Trấn Ba & Tháp Rùa.
   // On the standalone Showcase diorama plate (!onRealMap), align +v with the front street (+y) and +u along +x.
@@ -1842,7 +1848,7 @@ function drawDenNgocSon(B: Batch, b: Building, level: Detail) {
   drawTraditionalCurvedRoof(B, ob, hallW + 0.5, hallD + 0.5, 4.55, 2.35, b.id, true);
 
   // 2. Đình Trấn Ba (Phương đình 2 tầng 8 mái đao cong ở mũi Nam Đảo Ngọc nhìn thẳng ra Tháp Rùa)
-  const tranBaPos: Vec2 = onRealMap ? [3792.2, 1511.2] : localPt(ob, 0, 17.5);
+  const tranBaPos: Vec2 = onRealMap ? atMap(-20.8, 17.1) : localPt(ob, 0, 17.5);
   const tranBaOb: OrientedBox = { c: tranBaPos, u: uEast, v: vSouth, hw: 3.6, hd: 3.6 };
   B.solid(localRect(tranBaOb, -4.2, 4.2, -4.2, 4.2), 0, 0.85, () => 'stone', 'stone', b.id);
   for (const su of [-1, 1] as const) {
@@ -1857,8 +1863,8 @@ function drawDenNgocSon(B: Batch, b: Building, level: Detail) {
   drawTraditionalCurvedRoof(B, tranBaOb, 2.35, 2.35, 5.05, 1.4, b.id, true);
 
   // 3. Đắc Nguyệt Lâu (Lầu Đắc Nguyệt 2 tầng mái cong cổ kính tại đầu Tây Cầu Thê Húc bên mép Đông Đảo Ngọc)
-  const bridgeStart: Vec2 = onRealMap ? [3827.98, 1508.09] : localPt(ob, 13.2, 2.2);
-  const bridgeEnd: Vec2 = onRealMap ? [3845.21, 1551.02] : localPt(ob, 37.2, 2.2);
+  const bridgeStart: Vec2 = onRealMap ? atMap(14.6, 14.06) : localPt(ob, 13.2, 2.2);
+  const bridgeEnd: Vec2 = onRealMap ? atMap(31.85, 56.99) : localPt(ob, 37.2, 2.2);
   const bDx = bridgeEnd[0] - bridgeStart[0], bDy = bridgeEnd[1] - bridgeStart[1];
   const bridgeLen = Math.hypot(bDx, bDy) || 24.0;
   const bu: Vec2 = [bDx / bridgeLen, bDy / bridgeLen];
@@ -1910,7 +1916,7 @@ function drawDenNgocSon(B: Batch, b: Building, level: Detail) {
   B.solid(regPoly(daiNghienPos, 0.78, 10), 4.45, 5.25, () => 'stone', 'bronze', b.id);
 
   // 6. Tháp Bút ("Tả Thanh Thiên" — Bảo tháp đá 5 tầng trên núi Độc Tôn / Núi Ngọc Bội bên đường Đinh Tiên Hoàng)
-  const thapButPos: Vec2 = onRealMap ? [3852.82, 1592.02] : localPt(bridgeOb, bridgeLen + 8.5, 6.2);
+  const thapButPos: Vec2 = onRealMap ? atMap(39.46, 98.0) : localPt(bridgeOb, bridgeLen + 8.5, 6.2);
   const tbOb: OrientedBox = { c: thapButPos, u: bv, v: bu, hw: 4.5, hd: 4.5 };
   // Núi Ngọc Bội (Gò đá hộc ghép bậc 3 tầng cao ~3.4m)
   B.solid(regPoly(thapButPos, 4.4, 10), 0, 1.35, () => 'stone', 'stone', b.id);
@@ -2755,38 +2761,48 @@ function drawNhatTanBridge(B: Batch, b: Building, level: Detail) {
 // 44. CẦU LONG BIÊN LỊCH SỬ (Chứng nhân lịch sử qua Sông Hồng – Phường Hoàn Kiếm / Phường Bồ Đề)
 // ============================================================================
 function drawLongBienBridge(B: Batch, b: Building, level: Detail) {
+  // The footprint is a rectangle laid on the real OSM deck axis (~1.7 km), so everything scales with its length
   const ob = orientedBoxOf(b.footprint, b.front);
-  const hw = Math.max(42.0, ob.hw), hd = Math.max(5.5, ob.hd);
-  void level;
+  const hw = ob.hw, hd = Math.max(5.5, ob.hd);
+  const n = Math.max(1, Math.round((hw * 2) / 95));
+  const span = (hw * 2) / n;
 
-  // 1. Stone masonry river piers & historic French steel deck (z = 9.5 .. 11.4 m)
-  for (let k = -2; k <= 2; k++) {
-    const uPier = k * (hw * 0.42);
-    B.solid(localRect(ob, uPier - 1.8, uPier + 1.8, -hd * 1.05, hd * 1.05), 0, 9.6, () => 'wall', 'walk', b.id);
+  // 1. Masonry piers at every span joint and the steel deck (z = 9.6 .. 11.2 m)
+  for (let k = 0; k <= n; k++) {
+    const u = -hw + k * span;
+    B.solid(localRect(ob, u - 1.8, u + 1.8, -hd * 0.85, hd * 0.85), 0, 9.6, () => 'wall', 'walk', b.id);
   }
   B.solid(localRect(ob, -hw, hw, -hd, hd), 9.6, 11.2, () => 'metal', 'metal', b.id);
+  if (level === 0) return;
 
-  // 2. Cantilevered steel lattice truss peaks ("nhịp dầm thép hình rồng lượn")
-  const spans = 4;
-  const spanW = (hw * 1.9) / spans;
-  for (let s = 0; s < spans; s++) {
-    const u0 = -hw * 0.95 + s * spanW;
-    const uMid = u0 + spanW * 0.5;
-    const u1 = u0 + spanW;
+  // 2. Cantilevered steel trusses: the top chord peaks over each pier, the "dragon" wave of the real bridge
+  const cells = 8;
+  const topAt = (t: number) => 13.4 + 8.6 * Math.cos(Math.PI * t) ** 2;
+  for (let s = 0; s < n; s++) {
+    const u0 = -hw + s * span;
     for (const sv of [-1, 1] as const) {
-      const vTruss = sv * (hd * 0.68);
-      const p0 = localPt(ob, u0, vTruss);
-      const pMid = localPt(ob, uMid, vTruss);
-      const p1 = localPt(ob, u1, vTruss);
-      B.solid(regPoly(pMid, 0.55, 6), 11.2, 22.5, () => 'metal', 'metal', b.id);
-      B.line(V(p0[0], p0[1], 13.5), V(pMid[0], pMid[1], 22.5), 'crease');
-      B.line(V(pMid[0], pMid[1], 22.5), V(p1[0], p1[1], 13.5), 'crease');
-      B.line(V(p0[0], p0[1], 11.2), V(p0[0], p0[1], 13.5), 'crease');
+      const v = sv * hd * 0.68;
+      let prev = localPt(ob, u0, v), prevZ = topAt(0);
+      for (let c = 1; c <= cells; c++) {
+        const t = c / cells, p = localPt(ob, u0 + t * span, v), z = topAt(t);
+        B.line(V(prev[0], prev[1], prevZ), V(p[0], p[1], z), 'crease');
+        B.line(V(p[0], p[1], 11.2), V(p[0], p[1], z), 'crease');
+        const q = localPt(ob, u0 + ((c - 1) / cells) * span, v);
+        B.line(V(q[0], q[1], 11.2), V(p[0], p[1], c % 2 ? z : topAt((c - 1) / cells)), 'crease');
+        prev = p; prevZ = z;
+      }
     }
-    // Overhead lateral steel sway bracing at each peak
-    const pPeakL = localPt(ob, uMid, -hd * 0.68);
-    const pPeakR = localPt(ob, uMid, hd * 0.68);
-    B.line(V(pPeakL[0], pPeakL[1], 22.2), V(pPeakR[0], pPeakR[1], 22.2), 'crease');
+    const pm = localPt(ob, u0 + span * 0.5, 0);
+    const a = localPt(ob, u0 + span * 0.5, -hd * 0.68), c = localPt(ob, u0 + span * 0.5, hd * 0.68);
+    B.line(V(a[0], a[1], topAt(0.5)), V(c[0], c[1], topAt(0.5)), 'crease');
+    void pm;
+  }
+  // Tall posts over each pier carry the peaks
+  for (let k = 0; k <= n; k++) {
+    for (const sv of [-1, 1] as const) {
+      const p = localPt(ob, -hw + k * span, sv * hd * 0.68);
+      B.solid(regPoly(p, 0.5, 6), 11.2, topAt(0), () => 'metal', 'metal', b.id);
+    }
   }
 }
 

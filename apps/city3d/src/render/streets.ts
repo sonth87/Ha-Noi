@@ -157,12 +157,26 @@ function densifyTaperedPath(path: readonly Vec2[], taper: RoadTaper): Vec2[] {
   return out;
 }
 
-function prepareRenderNetwork(city: City): {
+type RenderNetwork = {
   roads: Map<string, Road>;
   roadList: Road[];
   nodes: NetNode[];
   tapers: Map<string, RoadTaper>;
-} {
+};
+
+/** The network is the same for the major layer and the local tiles, and costs about a second on a
+    laptop: keep the last one per city (streets stream in, so the street count is part of the key). */
+const renderNetworkCache = new WeakMap<City, { streets: number; net: RenderNetwork }>();
+
+function prepareRenderNetwork(city: City): RenderNetwork {
+  const hit = renderNetworkCache.get(city);
+  if (hit && hit.streets === city.streets.length) return hit.net;
+  const net = computeRenderNetwork(city);
+  renderNetworkCache.set(city, { streets: city.streets.length, net });
+  return net;
+}
+
+function computeRenderNetwork(city: City): RenderNetwork {
   const net = roadNetwork(city);
   const roadList: Road[] = net.roads.map(r => ({ ...r, path: [...r.path] }));
   const roads = new Map(roadList.map(r => [r.id, r]));
@@ -445,12 +459,15 @@ function smoothPolyline(path: readonly Vec2[]): Vec2[] {
   return s;
 }
 
+/** bridges drawn in full by a landmark model (Cầu Long Biên) instead of the generic deck */
+const hasBespokeBridge = (r: { name?: string }) => Boolean(r.name && /cầu long biên/i.test(r.name));
+
 function drawRoadGeometry(B: Batch, r: Road, taper: RoadTaper, c: LocalStreetCuts, mode: StreetRenderMode) {
   const minor = isMinorRoad(r);
   const drawCarriageway = mode === 'all' || (mode === 'major' ? !minor : minor);
   const drawLocalDetails = mode === 'all' || mode === 'local';
   if (r.layer > 0 && r.profile.length) {
-    if (drawCarriageway) bridge(B, r);
+    if (drawCarriageway && !hasBespokeBridge(r)) bridge(B, r);
     return;
   }
   if (drawCarriageway) {

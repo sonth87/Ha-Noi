@@ -969,7 +969,6 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'tuong-dai-hoa-binh',
     floors: [10.0, 10.0, 10.0],
     footprintSize: [34, 34],
-    osmSource: 'osm:way/99000000107',
     description: 'Tượng đài Hòa Bình cao 30 m cùng đàn chim bồ câu tung cánh tại Công viên Hòa Bình kỷ niệm 1000 năm Thăng Long – Hà Nội.',
   },
   {
@@ -1446,7 +1445,6 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.6, 3.6],
     footprintSize: [22, 30],
-    osmSource: 'osm:way/99000000112',
     description: 'Ngôi đền cổ linh thiêng thờ Nguyên phi Ỷ Lan và Thánh Mẫu bên bờ Bắc sông Hồng tại phường Bồ Đề, Long Biên.',
   },
   {
@@ -1503,7 +1501,6 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.6, 3.6],
     footprintSize: [22, 28],
-    osmSource: 'osm:way/99000000116',
     description: 'Di tích lịch sử Đền Lừ thờ đức Phạm Tổ và danh tướng Nguyễn Xí trên gò đảo xanh giữa lòng Hồ Đền Lừ.',
   },
 ];

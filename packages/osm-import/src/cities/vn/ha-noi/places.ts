@@ -29,35 +29,35 @@ export const HA_NOI_PLACES: CityPlace[] = [
   // Khu vực Tây Hồ
   { id: 'chua-tran-quoc', name: 'Chùa Trấn Quốc – Đền Quán Thánh – Đường Thanh Niên', group: 'Phường Tây Hồ', at: [4402, -838] },
   { id: 'phu-tay-ho', name: 'Phủ Tây Hồ – Hồ Tây – Chùa Kim Liên', group: 'Phường Tây Hồ', at: [4659, -2636] },
-  { id: 'cau-nhat-tan', name: 'Cầu Nhật Tân – Đình Phú Gia (Phú Thượng)', group: 'Phường Phú Thượng', at: [5950, -6850] },
+  { id: 'cau-nhat-tan', name: 'Cầu Nhật Tân – Đình Phú Gia (Phú Thượng)', group: 'Phường Phú Thượng', at: [7162, -4566] },
   // Khu vực Hai Bà Trưng
   { id: 'cong-vien-thong-nhat', name: 'Công viên Thống Nhất – Hồ Bảy Mẫu', group: 'Phường Hai Bà Trưng', at: [1483, 1583] },
   { id: 'vincom-ba-trieu', name: 'Vincom Center Bà Triệu – Tòa nhà Gelex', group: 'Phường Hai Bà Trưng', at: [1437, 2193] },
-  { id: 'den-hai-ba-trung', name: 'Quần thể Di tích Đền – Chùa – Đình Hai Bà Trưng', group: 'Phường Hai Bà Trưng', at: [1933, 2954] },
+  { id: 'den-hai-ba-trung', name: 'Quần thể Di tích Đền – Chùa – Đình Hai Bà Trưng', group: 'Phường Hai Bà Trưng', at: [1761, 2679] },
   { id: 'dh-bach-khoa', name: 'Đại học Bách Khoa Hà Nội – Bạch Mai', group: 'Phường Bạch Mai', at: [497, 1979] },
   // Khu vực Thanh Xuân
   { id: 'royal-city', name: 'Vinhomes Royal City – Ngã Tư Sở (72A Nguyễn Trãi)', group: 'Phường Thanh Xuân', at: [-1093, -473] },
   { id: 'chua-phuc-khanh', name: 'Tổ đình Phúc Khánh – Đình Khương Hạ', group: 'Phường Khương Đình', at: [-714, -202] },
   { id: 'nut-giao-thanh-xuan', name: 'Nút giao Thanh Xuân – Nguyễn Trãi – Khuất Duy Tiến', group: 'Phường Thanh Xuân', at: [-2450, -950] },
   // Khu vực Cầu Giấy
-  { id: 'keangnam-landmark72', name: 'Keangnam Hanoi Landmark Tower (72 tầng – Phạm Hùng)', group: 'Phường Yên Hòa', at: [-1480, -2950] },
+  { id: 'keangnam-landmark72', name: 'Keangnam Hanoi Landmark Tower (72 tầng – Phạm Hùng)', group: 'Phường Yên Hòa', at: [-1308, -4020] },
   { id: 'bao-tang-dan-toc-hoc', name: 'Bảo tàng Dân tộc học Việt Nam & Công viên Nghĩa Đô', group: 'Phường Nghĩa Đô', at: [2180, -4080] },
-  { id: 'cong-vien-cau-giay', name: 'Công viên Cầu Giấy – Chùa Hà – Discovery Complex', group: 'Phường Cầu Giấy', at: [620, -3520] },
+  { id: 'cong-vien-cau-giay', name: 'Công viên Cầu Giấy – Chùa Hà – Discovery Complex', group: 'Phường Cầu Giấy', at: [255, -4053] },
   // Khu vực Nam Từ Liêm
-  { id: 'svd-my-dinh', name: 'Sân vận động Quốc gia Mỹ Đình (Lê Đức Thọ)', group: 'Phường Từ Liêm', at: [-1580, -5620] },
-  { id: 'bao-tang-ha-noi', name: 'Bảo tàng Hà Nội & Trung tâm Hội nghị Quốc gia', group: 'Phường Đại Mỗ', at: [-2120, -2720] },
-  { id: 'vinhomes-smart-city', name: 'Khu đô thị & Công viên Trung tâm Tây Mỗ', group: 'Phường Tây Mỗ', at: [-3900, -5950] },
+  { id: 'svd-my-dinh', name: 'Sân vận động Quốc gia Mỹ Đình (Lê Đức Thọ)', group: 'Phường Từ Liêm', at: [-1799, -6148] },
+  { id: 'bao-tang-ha-noi', name: 'Bảo tàng Hà Nội & Trung tâm Hội nghị Quốc gia', group: 'Phường Đại Mỗ', at: [-1752, -3550] },
+  { id: 'vinhomes-smart-city', name: 'Khu đô thị & Công viên Trung tâm Tây Mỗ', group: 'Phường Tây Mỗ', at: [-3688, -6282] },
   // Khu vực Bắc Từ Liêm
-  { id: 'cong-vien-hoa-binh', name: 'Công viên Hòa Bình & Tượng đài Hòa Bình', group: 'Phường Xuân Đỉnh', at: [2650, -6480] },
-  { id: 'dinh-dong-ngac', name: 'Đình cổ Đông Ngạc (Đình Vẽ) & Học viện Tài chính', group: 'Phường Đông Ngạc', at: [4120, -9150] },
+  { id: 'cong-vien-hoa-binh', name: 'Công viên Hòa Bình & Tượng đài Hòa Bình', group: 'Phường Xuân Đỉnh', at: [3675, -6271] },
+  { id: 'dinh-dong-ngac', name: 'Đình cổ Đông Ngạc (Đình Vẽ) & Học viện Tài chính', group: 'Phường Đông Ngạc', at: [6218, -7536] },
   // Khu vực Hà Đông
   { id: 'lang-lua-van-phuc', name: 'Làng lụa Vạn Phúc & Hồ Văn Quán (Hà Đông)', group: 'Phường Hà Đông', at: [-4850, -1420] },
-  { id: 'cong-vien-thien-van-hoc', name: 'Công viên Thiên văn học Dương Nội & Chùa Bia Bà', group: 'Phường Dương Nội', at: [-5950, -3750] },
+  { id: 'cong-vien-thien-van-hoc', name: 'Công viên Thiên văn học Dương Nội & Chùa Bia Bà', group: 'Phường Dương Nội', at: [-6002, -4700] },
   // Khu vực Hoàng Mai
-  { id: 'times-city', name: 'Vinhomes Times City – Quảng trường Nhạc nước', group: 'Phường Vĩnh Hưng', at: [2180, 4420] },
-  { id: 'ho-linh-dam', name: 'Bán đảo & Hồ Linh Đàm (Hoàng Liệt)', group: 'Phường Hoàng Liệt', at: [-2950, 4450] },
-  { id: 'cong-vien-yen-so', name: 'Công viên & Hồ Yên Sở (Hoàng Mai)', group: 'Phường Yên Sở', at: [-680, 6750] },
+  { id: 'times-city', name: 'Vinhomes Times City – Quảng trường Nhạc nước', group: 'Phường Vĩnh Hưng', at: [986, 4623] },
+  { id: 'ho-linh-dam', name: 'Bán đảo & Hồ Linh Đàm (Hoàng Liệt)', group: 'Phường Hoàng Liệt', at: [-3523, 3038] },
+  { id: 'cong-vien-yen-so', name: 'Công viên & Hồ Yên Sở (Hoàng Mai)', group: 'Phường Yên Sở', at: [-3271, 5321] },
   // Khu vực Long Biên
-  { id: 'cau-long-bien', name: 'Cầu Long Biên lịch sử & Đền Ghềnh (Bồ Đề)', group: 'Phường Bồ Đề', at: [4880, 820] },
-  { id: 'aeon-long-bien', name: 'AEON Mall Long Biên & Khu đô thị Việt Hưng', group: 'Phường Long Biên', at: [5720, 4950] },
+  { id: 'cau-long-bien', name: 'Cầu Long Biên lịch sử & Đền Ghềnh (Bồ Đề)', group: 'Phường Bồ Đề', at: [4909, 1356] },
+  { id: 'aeon-long-bien', name: 'AEON Mall Long Biên & Khu đô thị Việt Hưng', group: 'Phường Long Biên', at: [5368, 6005] },
 ];

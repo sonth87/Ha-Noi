@@ -1,6 +1,9 @@
 /* Administrative district / ward boundaries, region bounding rectangles, and transit station
    metadata for Hanoi (vn/ha-noi, ADR-054, ADR-055). Pure. */
-import type { Rect, Vec2 } from '@my-city/core';
+import { pointInRing, type Rect, type Vec2 } from '@my-city/core';
+import { HA_NOI_WARD_OUTLINES } from './wards.data';
+
+const WARD_LIST = Object.entries(HA_NOI_WARD_OUTLINES);
 
 const LINE_3_STATIONS = new Set([
   'Cầu Giấy',
@@ -16,6 +19,8 @@ const LINE_3_STATIONS = new Set([
 /** Resolve city-frame [x, y] into Hanoi's 43 official 2025 Phường (ward) administrative units across
     Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân, Cầu Giấy, Nam Từ Liêm, Bắc Từ Liêm, Hà Đông, Hoàng Mai, and Long Biên */
 export const districtOf = (pt: readonly [number, number]): string => {
+  // the real OSM outline first; the rectangles below only cover what falls outside every outline
+  for (const [name, w] of WARD_LIST) if (pointInRing([pt[0], pt[1]], w.polygon)) return name;
   const [x, y] = pt;
   // 1. Khu vực Long Biên (phía Đông qua Sông Hồng)
   if (x >= 4680 && y >= -1200) {

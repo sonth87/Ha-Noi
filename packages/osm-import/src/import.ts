@@ -496,8 +496,6 @@ export function importArea(
   };
   for (const w of ways.values()) if (w.nodes.length >= 4 && w.nodes[0] === w.nodes[w.nodes.length - 1]) addArea(`a${w.id}`, src('way', w.id), path(w), tags(w));
   for (const r of relations) {
-    // Skip rel/6907107 (27km regional Red River relation) because Sông Hồng within Hanoi bounds is already represented cleanly by way/99000000010 & way/1162959477
-    if (r.id === 6907107) continue;
     if (tags(r).type !== 'multipolygon' || !areaKind(tags(r))) continue;
     const { outer, innerRings } = rings(r, ways, path);
     outer.forEach((ring, k) => addArea(`ar${r.id}${outer.length > 1 ? `-${k}` : ''}`, src('relation', r.id), ring, tags(r), innerRings));

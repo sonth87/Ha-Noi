@@ -378,7 +378,6 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'ancient-village-gate',
     floors: [4.8, 3.4],
     footprintSize: [18, 14],
-    osmSource: 'osm:way/99000000108',
     description: 'Cổng làng và Đình cổ Đông Ngạc (Làng Vẽ) bên bờ sông Hồng – ngôi làng khoa bảng có nhiều Tiến sĩ bậc nhất kinh thành Thăng Long.',
   },
   {
@@ -644,7 +643,7 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'bao-tang-dan-toc-hoc',
     floors: [5.5, 5.0, 4.5],
     footprintSize: [46, 38],
-    osmSource: 'osm:way/99000000102',
+    osmSource: 'osm:way/339936730',
     description: 'Bảo tàng Dân tộc học Việt Nam với tòa nhà Trống Đồng (KTS Hà Đức Lịnh), tòa Cánh Diều và vườn kiến trúc dân gian Nhà Rông Tây Nguyên.',
   },
   {
@@ -688,7 +687,7 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'bao-tang-ha-noi',
     floors: [6.5, 6.5, 6.5, 7.0],
     footprintSize: [48, 48],
-    osmSource: 'osm:way/99000000105',
+    osmSource: 'osm:way/208255133',
     description: 'Bảo tàng Hà Nội khánh thành dịp Đại lễ 1000 năm Thăng Long – Hà Nội (2010) với kiến trúc Kim tự tháp ngược 4 tầng vươn rộng dần lên cao.',
   },
   {
@@ -793,7 +792,6 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(5.0, 5), ...rep(4.5, 67)],
     footprintSize: [56, 56],
-    osmSource: 'osm:way/99000000101',
     description: 'Tòa tháp chọc trời Keangnam Hanoi Landmark 72 cao 336 m (72 tầng) kèm hai tháp đôi 48 tầng trên trục đường Phạm Hùng.',
   },
   {
@@ -976,7 +974,6 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'times-city',
     floors: [...rep(4.5, 4), ...rep(3.3, 31)],
     footprintSize: [60, 40],
-    osmSource: 'osm:way/99000000115',
     description: 'Khu đô thị phức hợp và TTTM Vincom Mega Mall Times City tại 458 Minh Khai với quảng trường nhạc nước và cổng vòm tân cổ điển.',
   },
   {
@@ -1428,7 +1425,6 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'cau-nhat-tan',
     floors: [...rep(13.5, 8)],
     footprintSize: [104, 24],
-    osmSource: 'osm:way/99000000109',
     description: 'Cầu dây văng liên tục 5 nhịp tháp hình thoi lớn nhất Việt Nam bắc qua sông Hồng, biểu trưng cho 5 cửa ô Hà Nội và tình hữu nghị Việt – Nhật.',
   },
   {
@@ -1499,7 +1495,7 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'svd-my-dinh',
     floors: [5.0, 4.5, 4.5, 4.0, 4.0],
     footprintSize: [86, 68],
-    osmSource: 'osm:way/99000000104',
+    osmSource: 'osm:way/533838254',
     description: 'Sân vận động Quốc gia Mỹ Đình sức chứa 40.192 chỗ ngồi với hai mái vòm giàn thép ống khổng lồ nặng 2.300 tấn.',
   },
   {
@@ -1572,7 +1568,7 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [5.5, 5.0, 4.8, 4.5, 4.5],
     footprintSize: [68, 46],
-    osmSource: 'osm:way/99000000106',
+    osmSource: 'osm:way/208251764',
     description: 'Trung tâm Hội nghị Quốc gia tại ngã tư Phạm Hùng – Đại lộ Thăng Long với kiến trúc mái lượn sóng "Lưỡng hợp" biểu trưng cho sóng Biển Đông và non nước Hạ Long.',
   },
 ];

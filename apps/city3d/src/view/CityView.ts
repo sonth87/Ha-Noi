@@ -32,7 +32,7 @@ import {
   MAX_FLAG_VIEW_SPAN_M, createWavingFlagGroup, flagpolesOf, isFlagVisibleAtSpan, stepSharedWavingFlags, type WavingFlagInstance,
 } from '@render/buildings';
 import {
-  TILE, beaconsOf, buildLandmarkOverviewLayer, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
+  TILE, beaconsOf, buildLandmarkOverviewLayer, isMajorLandmarkBuilding, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
   type Detail, type Layer, type LocalStreetTile, type MapBaseLayers, type Tile,
 } from '@render/city';
 import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
@@ -71,6 +71,8 @@ import {
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
 import { getCityManifest, loadCityChunkCityAsync, projector } from '@my-city/osm-import';
 import type { MapPaletteId } from '@my-city/theme';
+
+const MAX_CHUNK_TRIES = 4;
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
@@ -195,6 +197,9 @@ export class CityView {
   readonly stationShell: Layer;
   readonly railTracks: Layer;
   private landmarkOverviewLayer: Layer | null = null;
+  private overviewTimer: ReturnType<typeof setTimeout> | undefined;
+  private overviewStale = false;
+  private contextLost = false;
   readonly tiles: TileState[];
   readonly localTiles: LocalTileState[];
   private readonly landmarkTileSet = new Set<TileState>();
@@ -210,6 +215,7 @@ export class CityView {
   private readonly availableChunks = new Set<string>();
   private readonly loadedChunks = new Set<string>();
   private readonly loadingChunks = new Set<string>();
+  private readonly chunkFailures = new Map<string, { tries: number; retryAt: number }>();
   private cacheTick = 0;
   private readonly projScreenMatrix = new THREE.Matrix4();
   private readonly camFrustum = new THREE.Frustum();
@@ -577,8 +583,16 @@ export class CityView {
     renderer.domElement.style.zIndex = '0';
     renderer.domElement.style.touchAction = 'none';
     host.insertBefore(renderer.domElement, host.firstChild);
-    const onLost = (e: Event) => e.preventDefault();
+    // preventDefault is what lets the browser restore the context; three.js then re-uploads its own
+    // buffers, so we only have to stop drawing while it is gone and ask for a fresh frame after
+    const onLost = (e: Event) => { e.preventDefault(); this.contextLost = true; };
+    const onRestored = () => {
+      this.contextLost = false;
+      const m = this.mounted;
+      if (m) { m.renderer.setSize(m.host.clientWidth, m.host.clientHeight); m.composer?.setSize(m.host.clientWidth, m.host.clientHeight); }
+    };
     renderer.domElement.addEventListener('webglcontextlost', onLost);
+    renderer.domElement.addEventListener('webglcontextrestored', onRestored);
 
     const scene = new THREE.Scene();
     const mapGroup = new THREE.Group();
@@ -1004,7 +1018,7 @@ export class CityView {
         try { ext.onTick?.(dt, this.sdk); } catch { /* isolate extension errors */ }
       }
       this.events.emit('tick', { dt, now });
-      if (this.mounted) {
+      if (this.mounted && !this.contextLost) {
         if (this.mounted.bloom?.enabled && this.mounted.composer) this.mounted.composer.render();
         else this.mounted.renderer.render(scene, this.activeCamera());
       }
@@ -1116,6 +1130,7 @@ export class CityView {
         renderer.domElement.removeEventListener('pointerup', onUp);
         renderer.domElement.removeEventListener('dblclick', onDbl);
         renderer.domElement.removeEventListener('webglcontextlost', onLost);
+        renderer.domElement.removeEventListener('webglcontextrestored', onRestored);
       },
     };
     if (typeof window !== 'undefined') window.MyCitySDK = this.sdk;
@@ -1162,6 +1177,7 @@ export class CityView {
     this.placeInfoStep(true);
     this.adminBoundariesStep(true);
     this.syncUrlState(performance.now(), true);
+    this.scheduleLandmarkOverview(2500);
     raf = requestAnimationFrame(tick);
   }
 
@@ -1184,6 +1200,7 @@ export class CityView {
     }
     m.stop();
     this.timers.forEach(clearTimeout); this.timers = [];
+    if (this.overviewTimer !== undefined) { clearTimeout(this.overviewTimer); this.overviewTimer = undefined; }
     this.labelLayer?.remove();
     this.labelLayer = null;
     this.labelNodes.clear();
@@ -2583,11 +2600,34 @@ export class CityView {
     return mapZoomStage(zoom, Boolean(this.snap.showcase), this.pov.isActive());
   }
 
+  /** Build the zoomed-out landmark layer ahead of the first zoom-out, off the interaction path, and
+      again (debounced) after streamed chunks add landmarks, so it never stalls a zoom or goes stale. */
+  private scheduleLandmarkOverview(delayMs: number) {
+    if (this.overviewTimer !== undefined) clearTimeout(this.overviewTimer);
+    this.overviewTimer = setTimeout(() => {
+      this.overviewTimer = undefined;
+      if (!this.mounted) return;
+      if (this.interacting || performance.now() < this.interactCooldown) { this.scheduleLandmarkOverview(500); return; }
+      if (this.overviewStale) this.dropLandmarkOverview();
+      this.ensureLandmarkOverviewGroup();
+    }, delayMs);
+  }
+
+  private dropLandmarkOverview() {
+    const m = this.mounted;
+    if (m) for (const c of [...m.landmarkOverviewGroup.children]) m.landmarkOverviewGroup.remove(c);
+    if (this.landmarkOverviewLayer) this.disposeLayerObj(this.landmarkOverviewLayer);
+    this.landmarkOverviewLayer = null;
+    this.overviewStale = false;
+  }
+
   private ensureLandmarkOverviewGroup() {
     const m = this.mounted;
     if (!m) return;
+    if (this.overviewStale && this.overviewTimer === undefined) this.dropLandmarkOverview();
     if (!this.landmarkOverviewLayer) {
-      this.landmarkOverviewLayer = buildLandmarkOverviewLayer(this.city, 1);
+      // L0: no windows or detail strokes. At L1 the whole-city overview made ~33M floats and ran out of memory on tablets
+      this.landmarkOverviewLayer = buildLandmarkOverviewLayer(this.city, 0);
       this.layers.add(this.landmarkOverviewLayer);
       this.paintLayer(this.landmarkOverviewLayer);
     }
@@ -2816,6 +2856,12 @@ export class CityView {
       }
     }
 
+    if (newBuildings.some(isMajorLandmarkBuilding)) {
+      this.overviewStale = true;
+      // rebuild now only if the layer is on screen; otherwise it is rebuilt lazily or in the idle pre-build
+      this.scheduleLandmarkOverview(this.mounted?.landmarkOverviewGroup.visible ? 800 : 4000);
+    }
+
     for (const ts of dirtyTiles) {
       if (ts.layers.size > 0) {
         for (const v of ts.layers.values()) {
@@ -2983,6 +3029,8 @@ export class CityView {
       for (let dy = -1; dy <= 1; dy++) {
         const key = `${cx + dx},${cy + dy}`;
         if (!this.availableChunks.has(key) || this.loadedChunks.has(key) || this.loadingChunks.has(key)) continue;
+        const failed = this.chunkFailures.get(key);
+        if (failed && (failed.tries >= MAX_CHUNK_TRIES || performance.now() < failed.retryAt)) continue;
         const centerX = (cx + dx + 0.5) * 1024;
         const centerY = (cy + dy + 0.5) * 1024;
         const d2 = (centerX - fx) ** 2 + (centerY - fz) ** 2;
@@ -3004,8 +3052,12 @@ export class CityView {
             this.loadingChunks.delete(key);
           }
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           this.loadingChunks.delete(key);
+          // back off (2 s, 4 s, 8 s…) and give up after a few tries instead of hammering the server
+          const tries = (this.chunkFailures.get(key)?.tries ?? 0) + 1;
+          this.chunkFailures.set(key, { tries, retryAt: performance.now() + 2000 * 2 ** (tries - 1) });
+          if (tries >= MAX_CHUNK_TRIES) console.warn(`[city3d] map chunk ${key} failed ${tries} times, giving up`, err);
         });
     }
   }
@@ -3159,6 +3211,8 @@ export class CityView {
     }
 
     this.cacheTick++;
+    const frameStart = performance.now(), buildBudgetMs = isMobileDevice() ? 6 : 10;
+    let built = 0;
     this.refreshCameraFrustum();
     const want = this.wantedDetail();
     const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
@@ -3183,8 +3237,11 @@ export class CityView {
     }
     if (unbuilt.length) {
       unbuilt.sort((a, b) => dist2XZ(a.tile.center, focus) - dist2XZ(b.tile.center, focus));
+      // A frame-time budget, not a tile count: one tile can cost 1 ms or 100 ms, and a slow tablet
+      // pays several times that. Always build at least one so the scene keeps filling in.
       const l0Budget = this.interacting ? 3 : isMobileDevice() ? 5 : 8;
       for (let i = 0; i < Math.min(l0Budget, unbuilt.length); i++) {
+        if (i > 0 && performance.now() - frameStart > buildBudgetMs) break;
         const t = unbuilt[i]!;
         this.show(t, this.ensure(t, povActive ? 1 : 0));
         this.syncTileVisibility(t, true);
@@ -3195,13 +3252,15 @@ export class CityView {
       waiting.sort((a, b) => dist2XZ(a.t.tile.center, focus) - dist2XZ(b.t.tile.center, focus));
       const budget = povActive ? 4 : want <= 1 ? 3 : 2;
       for (let i = 0; i < Math.min(budget, waiting.length); i++) {
+        if (performance.now() - frameStart > buildBudgetMs) break;
         const item = waiting[i]!;
         this.show(item.t, this.ensure(item.t, item.level));
         this.syncTileVisibility(item.t, true);
+        built++;
       }
     }
     if (!busy) this.evictFarCaches();
-    const pending = busy ? waiting.length : Math.max(0, waiting.length - (povActive ? 4 : want <= 1 ? 3 : 2));
+    const pending = busy ? waiting.length : Math.max(0, waiting.length - built);
     if (want !== this.snap.detail || pending !== this.snap.pending) this.update({ detail: want, pending, stats: this.shownStats() });
   }
 

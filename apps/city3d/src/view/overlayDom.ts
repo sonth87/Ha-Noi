@@ -4,6 +4,7 @@
    - Hover banner tooltip
    - Rich detail popup card (with corner light-bulb toggle, 3D showcase button, and extension popup actions) */
 import { getLocale, t, type Locale } from './i18n';
+import { safeIconSvg } from './safeIcon';
 import type { PlaceEntry, PlaceInfoMode } from './placeInfo';
 import type { CitySDK, PopupActionDescriptor } from './sdk';
 import type { ProjectedStreetLabel, StreetEntry, StreetLabelMode } from './streetLabels';
@@ -302,8 +303,9 @@ export function renderPopupCardDom(params: {
       btn.className = 'popup-btn';
       btn.dataset.actionId = act.id;
       const labelText = typeof act.label === 'function' ? act.label(entry, locale) : act.label;
-      if (act.iconHtml) {
-        btn.innerHTML = `${act.iconHtml}<span></span>`;
+      const icon = act.iconHtml ? safeIconSvg(act.iconHtml) : '';
+      if (icon) {
+        btn.innerHTML = `${icon}<span></span>`;
         btn.querySelector('span')!.textContent = labelText;
       } else {
         btn.textContent = labelText;

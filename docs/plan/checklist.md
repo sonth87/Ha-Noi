@@ -95,6 +95,9 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Yêu cầu: thêm chức năng chọn tông màu bản đồ (Đơn sắc + các tông màu thực tế cho đường xá, hồ nước, công viên, cây xanh, công trình lớn, di tích, đền chùa, miếu mạo, tượng đài — chọn trực tiếp bằng ô màu không đặt tên hoa mỹ) và thiết kế lại toàn bộ UI theo Mẫu 1 (thanh nổi tràn viền + Drawer cài đặt phân tab) tích hợp hiệu ứng Liquid Glass Apple Optical Lens (`sonth87/liquid-glass`) với cấu hình độ trong suốt `Off (mặc định không trong suốt) → Tint → Glass` → ADR-056
 - [x] Góp ý & yêu cầu: bổ sung bắt buộc các cây cầu biểu tượng (Cầu Thê Húc, Cầu Long Biên, Cầu Rồng Đà Nẵng…) vào quy tắc vẽ 3D riêng; sửa lỗi Hồ Tây và các hồ tràn vùng xanh ra khu dân cư khi để `Màu 1` + khoét đúng đảo trong hồ; thể hiện rõ màu cỏ xanh & rừng cây 3D cho Công viên Bách Thảo và toàn bộ công viên/vườn hoa; sửa vị trí/hướng Cầu Thê Húc và Tháp Bút tại Đền Ngọc Sơn; sửa Tượng đài Cảm tử (trước bị vẽ là ngôi nhà) và Tượng đài Quang Trung (trước chỉ như cái cọc) cùng toàn bộ tượng đài khác thành cụm điêu khắc 3D chi tiết → ADR-057
 
+- [x] Đánh giá toàn diện `city3d` + lỗi người dùng báo (đường giữa sông, Cầu Long Biên, Tháp Bút / Thê Húc, Hồ Tây, giật trên tablet, `RangeError`) → ADR-058: xoá dữ liệu bịa, dùng OSM thật; neo Ngọc Sơn theo tâm đền; lớp tổng quan L0; ngân sách thời gian dựng ô; ErrorBoundary; CI
+- [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
+
 ## Backlog
 - Mở rộng thêm sang các phường ngoại thành / quận khác của Hà Nội (đã có trọn vẹn 6 khu vực trung tâm: Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân — ADR-054)
 - Nguồn dữ liệu bổ sung ngoài OSM (ảnh vệ tinh, ảnh người dùng chụp); kiểm bản quyền trước

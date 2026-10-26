@@ -32,6 +32,7 @@ export {
 } from '@my-city/osm-data';
 export { importArea, type AreaConfig, type ImportOptions, type ImportReport } from './import';
 export { projector, unprojector, type Frame } from './frame';
+export { HA_NOI_WARD_OUTLINES } from './cities/vn/ha-noi/wards.data';
 export {
   findHaNoiCatalogLandmark,
   HA_NOI_AREA_CONFIG,

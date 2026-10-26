@@ -505,93 +505,43 @@ export const HA_NOI_BUILDING_OVERRIDES: Record<SourceId, BuildingOverride> = {
     floors: [4.5],
   },
   // ── Khu vực Cầu Giấy ──
-  'osm:way/99000000101': {
-    name: 'Keangnam Hanoi Landmark Tower (72 tầng)', kind: 'office', model: 'keangnam-landmark72', facade: 'glass', isSignatureLandmark: true,
-    description: 'Tòa tháp Keangnam Hanoi Landmark 72 cao 336 m (72 tầng) tại mặt đường Phạm Hùng (Phường Yên Hòa) – tòa nhà cao nhất Hà Nội với đài quan sát Sky72 trên đỉnh.',
-    floors: [...rep(5.0, 5), ...rep(4.5, 67)],
-  },
-  'osm:way/99000000102': {
+  'osm:way/339936730': {
     name: 'Bảo tàng Dân tộc học Việt Nam (Nguyễn Văn Huyên)', kind: 'other', model: 'bao-tang-dan-toc-hoc', isSignatureLandmark: true,
     description: 'Bảo tàng Dân tộc học Việt Nam tại đường Nguyễn Văn Huyên (Phường Nghĩa Đô) với tòa nhà Trống Đồng hình tròn và khu vườn kiến trúc dân gian Nhà Rông Tây Nguyên.',
     floors: [5.5, 5.0, 4.5],
   },
-  'osm:way/99000000103': {
+  'osm:way/1118494921': {
     name: 'Chùa Hà – Thánh Đức Tự (Phường Cầu Giấy)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
     description: 'Chùa Hà (Thánh Đức Tự) trên phố Chùa Hà (Phường Cầu Giấy) – ngôi cổ tự nổi tiếng linh thiêng của Thủ đô Hà Nội.',
     floors: [4.6, 3.8],
   },
   // ── Khu vực Nam Từ Liêm ──
-  'osm:way/99000000104': {
+  'osm:way/533838254': {
     name: 'Sân vận động Quốc gia Mỹ Đình (Phường Từ Liêm)', kind: 'other', model: 'svd-my-dinh', isSignatureLandmark: true,
     description: 'Sân vận động Quốc gia Mỹ Đình sức chứa hơn 40.000 chỗ ngồi tại Phường Từ Liêm với kiến trúc hai mái vòm giàn thép khổng lồ và quảng trường cờ Tổ quốc.',
     floors: [5.0, 4.5, 4.5, 4.0, 4.0],
   },
-  'osm:way/99000000105': {
+  'osm:way/208255133': {
     name: 'Bảo tàng Hà Nội – Kim tự tháp ngược (Phường Đại Mỗ)', kind: 'other', model: 'bao-tang-ha-noi', isSignatureLandmark: true,
     description: 'Bảo tàng Hà Nội trên đường Phạm Hùng (Phường Đại Mỗ) với thiết kế Kim tự tháp ngược 4 tầng độc đáo soi bóng xuống hồ nước cảnh quan.',
     floors: [6.5, 6.5, 6.5, 7.0],
   },
-  'osm:way/99000000106': {
+  'osm:way/208251764': {
     name: 'Trung tâm Hội nghị Quốc gia (Phường Đại Mỗ)', kind: 'other', model: 'tt-hoi-nghi-quoc-gia', isSignatureLandmark: true,
     description: 'Trung tâm Hội nghị Quốc gia tại ngã tư Đại lộ Thăng Long – Phạm Hùng (Phường Đại Mỗ) với kiến trúc mái lượn sóng Biển Đông.',
     floors: [5.5, 5.0, 4.8, 4.5, 4.5],
   },
   // ── Khu vực Bắc Từ Liêm ──
-  'osm:way/99000000107': {
-    name: 'Tượng đài Hòa Bình – Công viên Hòa Bình (Phường Xuân Đỉnh)', kind: 'other', model: 'tuong-dai-hoa-binh', isSignatureLandmark: true,
-    description: 'Tượng đài Hòa Bình cao 30 m tại trung tâm Công viên Hòa Bình (Phường Xuân Đỉnh) kỷ niệm Đại lễ 1000 năm Thăng Long – Hà Nội.',
-    floors: [10.0, 10.0, 10.0],
-  },
-  'osm:way/99000000108': {
-    name: 'Đình cổ Đông Ngạc – Đình Vẽ (Phường Đông Ngạc)', kind: 'other', model: 'ancient-communal-house', isSignatureLandmark: true,
-    description: 'Đình Đông Ngạc (Đình Vẽ) cổ kính xây dựng từ thế kỷ XVII bên bờ Sông Hồng tại làng khoa bảng Đông Ngạc.',
-    floors: [4.8, 3.6],
-  },
   // ── Khu vực Tây Hồ – Phường Phú Thượng ──
-  'osm:way/99000000109': {
-    name: 'Cầu Nhật Tân – 5 Tháp dây văng (Phường Phú Thượng)', kind: 'other', model: 'cau-nhat-tan', isSignatureLandmark: true,
-    description: 'Cầu Nhật Tân bắc qua Sông Hồng tại Phường Phú Thượng với 5 trụ tháp dây văng hình thoi rực rỡ tượng trưng cho 5 cửa ô Thăng Long – Hà Nội.',
-    floors: [...rep(13.5, 8)],
-  },
-  'osm:way/99000000110': {
-    name: 'Đình Phú Gia (Di tích lịch sử Phường Phú Thượng)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
-    description: 'Cụm di tích Đình Phú Gia – Chùa Bà Già cổ kính bên bờ Nam Sông Hồng thuộc Phường Phú Thượng.',
-    floors: [4.6, 3.6],
-  },
   // ── Khu vực Long Biên ──
   'osm:way/99000000111': {
     name: 'Cầu Long Biên lịch sử (Phường Bồ Đề – Hoàn Kiếm)', kind: 'other', model: 'cau-long-bien', isSignatureLandmark: true,
     description: 'Cầu Long Biên lịch sử (1899–1902) bắc qua Sông Hồng với kết cấu dầm thép hình rồng lượn – chứng nhân lịch sử hào hùng của Thủ đô Hà Nội.',
     floors: [7.5, 7.5, 7.5],
   },
-  'osm:way/99000000112': {
-    name: 'Đền Ghềnh – Chùa Bồ Đề (Phường Bồ Đề)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
-    description: 'Di tích lịch sử Đền Ghềnh và Chùa Bồ Đề cổ kính bên bờ Bắc Sông Hồng thuộc Phường Bồ Đề (Long Biên).',
-    floors: [4.6, 3.6],
-  },
   // ── Khu vực Hà Đông ──
-  'osm:way/99000000113': {
-    name: 'Làng lụa Vạn Phúc & Đền Vạn Phúc (Phường Hà Đông)', kind: 'other', model: 'lang-lua-van-phuc', isSignatureLandmark: true,
-    description: 'Cổng Tam quan Làng lụa Vạn Phúc và Đền thờ Tổ nghề dệt lụa hơn 1.000 năm tuổi tại Phường Hà Đông.',
-    floors: [5.0, 4.2],
-  },
-  'osm:way/99000000114': {
-    name: 'Cụm di tích Chùa Bia Bà – Đình La Khê (Phường Dương Nội)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
-    description: 'Cụm di tích lịch sử văn hóa Chùa Bia Bà – Đình La Khê nổi tiếng tại Phường Dương Nội (Hà Đông).',
-    floors: [4.6, 3.8],
-  },
   // ── Khu vực Hoàng Mai ──
-  'osm:way/99000000115': {
-    name: 'Vinhomes Times City – Quảng trường Nhạc nước (Phường Vĩnh Hưng)', kind: 'apartment', model: 'times-city', isSignatureLandmark: true,
-    description: 'Khu đô thị phức hợp Vinhomes Times City (458 Minh Khai, Phường Vĩnh Hưng) nổi bật với cổng vòm tân cổ điển và Quảng trường Nhạc nước.',
-    floors: [...rep(4.5, 4), ...rep(3.3, 31)],
-  },
-  'osm:way/99000000116': {
-    name: 'Đền Lừ (Di tích lịch sử Phường Tương Mai)', kind: 'other', model: 'traditional-temple', isSignatureLandmark: true,
-    description: 'Di tích lịch sử Đền Lừ trên gò đảo xanh giữa Hồ Đền Lừ (Phường Tương Mai, Hoàng Mai).',
-    floors: [4.6, 3.6],
-  },
-  'osm:way/99000000117': {
+  'osm:way/1446303895': {
     name: 'Chùa Sét – Đền Trương Định (Phường Hoàng Mai)', kind: 'other', model: 'traditional-pagoda', isSignatureLandmark: true,
     description: 'Di tích lịch sử văn hóa Chùa Sét (Đại Bi Tự) và Đền thờ Bình Tây Đại Nguyên Soái Trương Định tại Phường Hoàng Mai.',
     floors: [4.6, 3.8],

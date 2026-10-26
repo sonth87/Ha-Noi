@@ -4,6 +4,7 @@
    - At far city-wide zoom levels (zoom < 0.26): renders the outer boundary of Hà Nội and places the
      "Hà Nội" title centered in the middle of the map. */
 import type { Vec2 } from '@my-city/core';
+import { HA_NOI_WARD_OUTLINES } from '@my-city/osm-import';
 
 export type AdminBoundaryMode = 'off' | 'ward' | 'city';
 
@@ -19,7 +20,7 @@ export interface AdminBoundaryDef {
 /** 43 Phường administrative boundaries (official 2025 Hanoi ward arrangement) covering:
     Hoàn Kiếm, Tây Hồ, Ba Đình, Đống Đa, Hai Bà Trưng, Thanh Xuân, Cầu Giấy,
     Nam Từ Liêm, Bắc Từ Liêm, Hà Đông, Hoàng Mai, and Long Biên */
-export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
+const WARD_BOX_BOUNDARIES: readonly AdminBoundaryDef[] = [
   // ── Khu vực Hoàn Kiếm (2 phường) ──
   {
     id: 'ward:hoan-kiem',
@@ -385,6 +386,9 @@ export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = [
     ],
   },
 ];
+
+/** Real OSM outlines where we have them (all 43 wards today); the boxes above are only a fallback */
+export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = WARD_BOX_BOUNDARIES.map(w => ({ ...w, ...HA_NOI_WARD_OUTLINES[w.name] }));
 
 /** Outer boundary of Hanoi enclosing the 12 urban districts (43 Phường) */
 export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = {
