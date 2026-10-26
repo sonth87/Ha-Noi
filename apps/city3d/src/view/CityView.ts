@@ -41,8 +41,8 @@ import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metr
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
 import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
 import {
-  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, adminBoundaryModeForZoom, buildDashedBoundarySegments, mapZoomStage,
-  type AdminBoundaryDef, type MapZoomStage,
+  HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, buildDashedBoundarySegments, mapZoomStage,
+  type MapZoomStage,
 } from '@render/adminBoundaries';
 import {
   CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
@@ -53,21 +53,22 @@ import {
 import { LOCALES, getLocale, setGlobalLocale, t, type Locale } from './i18n';
 import { lightOn, loadLights, saveLights, type LightSettings } from './lights';
 import {
-  createPlaceLabelNode, createStreetLabelNode, createStreetPlaceEntry,
+  createStreetPlaceEntry,
   renderHoverBannerDom, renderPopupCardDom, syncPopupBulbDom,
 } from './overlayDom';
 import {
-  PLACE_INFO_MODES, buildPlaceCatalog, selectVisiblePlaceLabels,
+  PLACE_INFO_MODES, buildPlaceCatalog,
   type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
 } from './placeInfo';
 import { PovController, type DriveControlKey } from './povController';
 import type { PrebuiltBase } from './prebuild';
+import { OverlayLabels } from './overlayLabels';
 import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
-import { CityEventBus, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
+import { CityEventBus, createCitySDK, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
 import {
-  STREET_LABEL_MODES, buildStreetCatalog, selectVisibleStreetLabels,
-  type ProjectedStreetLabel, type StreetEntry, type StreetLabelMode,
+  STREET_LABEL_MODES, buildStreetCatalog,
+  type StreetEntry, type StreetLabelMode,
 } from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
 import { getCityManifest, loadCityChunkCityAsync, projector } from '@my-city/osm-import';
@@ -248,21 +249,23 @@ export class CityView {
   private readonly listeners = new Set<() => void>();
   private lit = new Set<string>();
   private timers: ReturnType<typeof setTimeout>[] = [];
-  private labelLayer: HTMLDivElement | null = null;
-  private labelNodes = new Map<string, HTMLButtonElement>();
-  private labelItems = new Map<string, ProjectedStreetLabel>();
-  private labelSig = '';
-  private lastLabelSelect = 0;
-  private placeLayer: HTMLDivElement | null = null;
-  private placeNodes = new Map<string, HTMLButtonElement>();
-  private placeItems = new Map<string, { entry: PlaceEntry; x: number; y: number; anchorWorld?: [number, number, number]; offsetY?: number }>();
-  private placeSig = '';
-  private lastPlaceSelect = 0;
-  private adminLayer: HTMLDivElement | null = null;
-  private adminNodes = new Map<string, HTMLButtonElement>();
-  private adminSig = '';
+  private readonly overlays = new OverlayLabels({
+    view: () => this.mounted,
+    snap: () => this.snap,
+    povActive: () => this.pov.isActive(),
+    stage: () => this.currentZoomStage(),
+    activeCamera: () => this.activeCamera(),
+    pxPerMetre: () => this.pxPerMetre(),
+    interacting: () => this.interacting,
+    streetCatalog: () => this.streetCatalog,
+    streetById: () => this.streetById,
+    placeCatalog: () => this.placeCatalog,
+    activePopup: () => this.activePopup,
+    popupCard: () => this.popupCard,
+    povFocus: () => this.pov.getFocusPoint(),
+    flyTo: (p, exit) => this.flyTo(p, exit),
+  });
   private lastDistStep = 0;
-  private hoveredPinKey: string | null = null;
   private hoverBanner: HTMLDivElement | null = null;
   private popupCard: HTMLDivElement | null = null;
   private myLocationMarker: HTMLDivElement | null = null;
@@ -476,99 +479,13 @@ export class CityView {
       povMode: 'map', povSpeedKmh: 0, povTrainIndex: 1, povTrainTotal: Math.max(1, totalTrains), povTrainPhase: 'run', povWindowSide: 1, povLocationName: '',
     };
 
-    this.sdk = this.createSDK();
-  }
-
-  private createSDK(): CitySDK {
-    const sdk: CitySDK = {
-      events: this.events,
-      getCity: () => this.city,
-      getSnapshot: () => this.snap,
-      getLocale: () => this.snap.locale,
-      setLocale: locale => this.setLocale(locale),
-      flyTo: pt => this.flyTo(pt),
-      setZoom: zoom => {
-        const m = this.mounted;
-        if (!m) return;
-        m.camera.zoom = Math.max(m.controls.minZoom, Math.min(m.controls.maxZoom, zoom));
-        m.camera.updateProjectionMatrix();
-      },
-      setMode: mode => this.setMode(mode),
-      getPovMode: () => this.snap.povMode,
-      setPovMode: mode => this.setPovMode(mode),
-      setNight: night => {
-        this.setNight(night);
-        this.setTheme(night ? 'dark' : 'light');
-      },
-      setSeeThrough: on => this.setSeeThrough(on),
-      setShowcase: id => this.setShowcase(id),
-      openPlace: id => {
-        const entry = this.placeCatalog.byId.get(id);
-        if (!entry) return false;
-        this.openPopup(entry);
-        return true;
-      },
-      closePopup: () => this.closePopup(),
-      getPlace: id => this.placeCatalog.byId.get(id),
-      searchPlaces: query => {
-        const q = query.trim().toLowerCase();
-        if (!q) return [...this.placeCatalog.labels];
-        const out: PlaceEntry[] = [];
-        for (const entry of this.placeCatalog.byId.values()) {
-          if (entry.name.toLowerCase().includes(q) || entry.address.toLowerCase().includes(q)) {
-            out.push(entry);
-          }
-        }
-        return out;
-      },
-      setLamp: (id, on) => this.setLamp(id, on),
-      addCustomLayer: (id, object) => {
-        const prev = this.customLayers.get(id);
-        if (prev && this.mounted) this.mounted.extensionGroup.remove(prev);
-        this.customLayers.set(id, object);
-        if (this.mounted) this.mounted.extensionGroup.add(object);
-      },
-      removeCustomLayer: id => {
-        const obj = this.customLayers.get(id);
-        if (!obj) return;
-        this.customLayers.delete(id);
-        if (this.mounted) this.mounted.extensionGroup.remove(obj);
-      },
-      registerPopupAction: action => {
-        this.popupActions.set(action.id, action);
-        if (this.activePopup) this.renderPopupContent();
-        return () => {
-          this.popupActions.delete(action.id);
-          if (this.activePopup) this.renderPopupContent();
-        };
-      },
-      getPopupActions: () => Array.from(this.popupActions.values()),
-      use: extension => {
-        if (this.extensions.has(extension.id)) this.sdk.unuse(extension.id);
-        if (extension.popupActions) {
-          for (const act of extension.popupActions) this.popupActions.set(act.id, act);
-        }
-        const cleanup = this.mounted && extension.onMount ? (extension.onMount(sdk) ?? undefined) : undefined;
-        this.extensions.set(extension.id, { ext: extension, ...(cleanup ? { cleanup } : {}) });
-        if (this.activePopup) this.renderPopupContent();
-        return () => this.sdk.unuse(extension.id);
-      },
-      unuse: extensionId => {
-        const rec = this.extensions.get(extensionId);
-        if (!rec) return;
-        this.extensions.delete(extensionId);
-        if (rec.ext.popupActions) {
-          for (const act of rec.ext.popupActions) this.popupActions.delete(act.id);
-        }
-        try { rec.cleanup?.(); } catch { /* ignore */ }
-        try { rec.ext.onUnmount?.(sdk); } catch { /* ignore */ }
-        if (this.activePopup) this.renderPopupContent();
-      },
-      getExtensions: () => Array.from(this.extensions.values(), r => r.ext),
-      on: (event, handler) => this.events.on(event, handler),
-      off: (event, handler) => this.events.off(event, handler),
-    };
-    return sdk;
+    this.sdk = createCitySDK({
+      city: this.city, events: this.events, customLayers: this.customLayers, popupActions: this.popupActions, extensions: this.extensions,
+      snap: () => this.snap, mounted: () => this.mounted, placeCatalog: () => this.placeCatalog, activePopup: () => this.activePopup,
+      setLocale: l => this.setLocale(l), flyTo: p => this.flyTo(p), setMode: m => this.setMode(m), setPovMode: m => this.setPovMode(m),
+      setNight: n => this.setNight(n), setTheme: t => this.setTheme(t), setSeeThrough: o => this.setSeeThrough(o), setShowcase: id => this.setShowcase(id),
+      openPopup: e => this.openPopup(e), closePopup: () => this.closePopup(), setLamp: (id, on) => this.setLamp(id, on), renderPopupContent: () => this.renderPopupContent(),
+    });
   }
 
   // ---------- store ----------
@@ -626,7 +543,7 @@ export class CityView {
     controls.mouseButtons = { LEFT: THREE.MOUSE.PAN, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
     controls.touches = { ONE: THREE.TOUCH.PAN, TWO: this.snap.mode === '3d' ? THREE.TOUCH.DOLLY_ROTATE : THREE.TOUCH.DOLLY_PAN };
     controls.rotateSpeed = 0.6;
-    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; this.hideHoverBanner(); this.clearHoveredPin(); };
+    const onControlStart = () => { this.interacting = true; this.interactCooldown = performance.now() + 180; this.hideHoverBanner(); this.overlays.clearHoveredPin(); };
     const onControlChange = () => { if (this.interacting) this.interactCooldown = performance.now() + 140; };
     const onControlEnd = () => { this.interacting = false; this.interactCooldown = performance.now() + 140; };
     controls.addEventListener('start', onControlStart);
@@ -752,7 +669,7 @@ export class CityView {
     };
 
     const onDbl = (e: MouseEvent) => {
-      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
+      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
       if (pinHit) {
         if (pinHit.kind === 'place') {
           this.openPopup(pinHit.entry);
@@ -827,16 +744,16 @@ export class CityView {
       if (e.pointerType !== 'mouse' || this.interacting || (e.buttons & 7) !== 0) return;
       if (this.snap.showcase) {
         this.hideHoverBanner();
-        this.clearHoveredPin();
+        this.overlays.clearHoveredPin();
         return;
       }
       const now = performance.now();
       if (now - lastHoverTime < HOVER_THROTTLE_MS) return;
       lastHoverTime = now;
 
-      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
+      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
       if (pinHit) {
-        this.setHoveredPin(pinHit.key);
+        this.overlays.setHoveredPin(pinHit.key);
         renderer.domElement.style.cursor = 'pointer';
         if (pinHit.kind === 'place' && this.snap.placeInfo !== 'off') {
           const r = host.getBoundingClientRect();
@@ -846,7 +763,7 @@ export class CityView {
         }
         return;
       }
-      this.clearHoveredPin();
+      this.overlays.clearHoveredPin();
 
       const px = this.pov.isActive() ? 8 : this.pxPerMetre();
       if (this.snap.placeInfo === 'off' || px < HOVER_MIN_PX_PER_METRE) {
@@ -868,7 +785,7 @@ export class CityView {
     const onLeave = () => {
       povDragPrev = null;
       this.hideHoverBanner();
-      this.clearHoveredPin();
+      this.overlays.clearHoveredPin();
       renderer.domElement.style.cursor = '';
     };
 
@@ -876,7 +793,7 @@ export class CityView {
       povDragPrev = null;
       const maxMove = e.pointerType === 'touch' ? 12 : 5;
       if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
-      const pinHit = this.hitLabelAtClient(e.clientX, e.clientY);
+      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
       if (e.pointerType === 'touch') {
         const now = performance.now();
         if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
@@ -1017,9 +934,9 @@ export class CityView {
         for (const b of beacons) b.material = blink ? this.mats.beaconOn : this.mats.beaconOff;
         this.mats.pulse.dashOffset -= dt * 9;
       }
-      this.streetLabelsStep();
-      this.placeInfoStep();
-      this.adminBoundariesStep();
+      this.overlays.streetLabelsStep();
+      this.overlays.placeInfoStep();
+      this.overlays.adminBoundariesStep();
       this.myLocationStep();
       this.syncUrlState(now);
       for (const { ext } of this.extensions.values()) {
@@ -1046,28 +963,7 @@ export class CityView {
       }
     };
 
-    const labelLayer = document.createElement('div');
-    labelLayer.className = 'street-labels';
-    host.appendChild(labelLayer);
-    this.labelLayer = labelLayer;
-    this.labelNodes.clear();
-    this.labelItems.clear();
-    this.labelSig = '';
-
-    const placeLayer = document.createElement('div');
-    placeLayer.className = 'place-labels';
-    host.appendChild(placeLayer);
-    this.placeLayer = placeLayer;
-    this.placeNodes.clear();
-    this.placeItems.clear();
-    this.placeSig = '';
-
-    const adminLayer = document.createElement('div');
-    adminLayer.className = 'admin-boundary-labels';
-    host.appendChild(adminLayer);
-    this.adminLayer = adminLayer;
-    this.adminNodes.clear();
-    this.adminSig = '';
+    this.overlays.mount(host);
 
     const myLocEl = document.createElement('div');
     myLocEl.className = 'my-location-marker';
@@ -1181,9 +1077,9 @@ export class CityView {
       this.update({ stats: this.shownStats() });
       if (this.savedCam.place) this.openPlaceById(this.savedCam.place);
     }
-    this.streetLabelsStep(true);
-    this.placeInfoStep(true);
-    this.adminBoundariesStep(true);
+    this.overlays.streetLabelsStep(true);
+    this.overlays.placeInfoStep(true);
+    this.overlays.adminBoundariesStep(true);
     this.syncUrlState(performance.now(), true);
     this.scheduleLandmarkOverview(2500);
     raf = requestAnimationFrame(tick);
@@ -1209,20 +1105,7 @@ export class CityView {
     m.stop();
     this.timers.forEach(clearTimeout); this.timers = [];
     if (this.overviewTimer !== undefined) { clearTimeout(this.overviewTimer); this.overviewTimer = undefined; }
-    this.labelLayer?.remove();
-    this.labelLayer = null;
-    this.labelNodes.clear();
-    this.labelItems.clear();
-    this.labelSig = '';
-    this.placeLayer?.remove();
-    this.placeLayer = null;
-    this.placeNodes.clear();
-    this.placeItems.clear();
-    this.placeSig = '';
-    this.adminLayer?.remove();
-    this.adminLayer = null;
-    this.adminNodes.clear();
-    this.adminSig = '';
+    this.overlays.unmount();
     this.myLocationMarker?.remove();
     this.myLocationMarker = null;
     this.hoverBanner?.remove();
@@ -1389,8 +1272,8 @@ export class CityView {
       povWindowSide: tel.windowSide,
       povLocationName: tel.locationName,
     });
-    this.streetLabelsStep(true);
-    this.placeInfoStep(true);
+    this.overlays.streetLabelsStep(true);
+    this.overlays.placeInfoStep(true);
     this.events.emit('pov:change', { povMode });
   }
 
@@ -1450,18 +1333,13 @@ export class CityView {
     setGlobalLocale(locale);
     this.placeCatalog = buildPlaceCatalog(this.city, this.showcaseIdSet, locale);
     this.update({ locale });
-    if (this.placeLayer) {
-      this.placeLayer.replaceChildren();
-      this.placeNodes.clear();
-      this.placeItems.clear();
-      this.placeSig = '';
-    }
+    this.overlays.resetPlaces();
     if (this.activePopup) {
       const updated = this.placeCatalog.byId.get(this.activePopup.entry.id);
       if (updated) this.activePopup.entry = updated;
       this.renderPopupContent();
     }
-    this.placeInfoStep(true);
+    this.overlays.placeInfoStep(true);
     this.events.emit('locale:change', { locale });
   }
 
@@ -1493,8 +1371,8 @@ export class CityView {
         }
       }
       this.update({ showcase: null, pending: 0, lit: this.countLit(), floors: this.floors.length, stats: this.shownStats() });
-      this.streetLabelsStep(true);
-      this.placeInfoStep(true);
+      this.overlays.streetLabelsStep(true);
+      this.overlays.placeInfoStep(true);
       this.events.emit('showcase:change', { showcase: null });
       return;
     }
@@ -1502,8 +1380,8 @@ export class CityView {
       this.savedMapCam = { target: m.controls.target.clone(), zoom: m.camera.zoom };
     }
     this.mountShowcase(id);
-    this.streetLabelsStep(true);
-    this.placeInfoStep(true);
+    this.overlays.streetLabelsStep(true);
+    this.overlays.placeInfoStep(true);
     this.events.emit('showcase:change', { showcase: id });
   }
 
@@ -1764,7 +1642,7 @@ export class CityView {
     if (streetLabels === this.snap.streetLabels) return;
     this.update({ streetLabels });
     try { localStorage.setItem(STORAGE_KEYS.STREET_LABELS, streetLabels); } catch { /* not remembered */ }
-    this.streetLabelsStep(true);
+    this.overlays.streetLabelsStep(true);
   }
 
   cycleStreetLabels() {
@@ -1781,7 +1659,7 @@ export class CityView {
       this.hideHoverBanner();
       this.closePopup();
     }
-    this.placeInfoStep(true);
+    this.overlays.placeInfoStep(true);
   }
 
   cyclePlaceInfo() {
@@ -1800,411 +1678,6 @@ export class CityView {
     this.setSeeThrough(!this.snap.seeThrough);
   }
 
-  private streetLabelsStep(force = false) {
-    const m = this.mounted, layer = this.labelLayer;
-    if (!m || !layer) return;
-    const rawMode = this.snap.streetLabels;
-    const povActive = this.pov.isActive();
-    const stage = this.currentZoomStage();
-    if (this.snap.showcase || rawMode === 'off' || povActive || stage === 'city') {
-      if (layer.style.display !== 'none') {
-        layer.style.display = 'none';
-        layer.replaceChildren();
-        this.labelNodes.clear();
-        this.labelItems.clear();
-        this.labelSig = 'off';
-      }
-      return;
-    }
-
-    const mode: StreetLabelMode = stage === 'streets' && rawMode === 'pin' ? 'map' : rawMode;
-    const w = m.host.clientWidth, h = m.host.clientHeight;
-    const activeCam = this.activeCamera();
-    const focus = m.controls.target;
-    const cp = activeCam.position;
-    const sig = `${mode}|${stage}|${this.snap.povMode}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}`;
-    if (!force && sig === this.labelSig) return;
-    this.labelSig = sig;
-
-    if (layer.style.display === 'none') layer.style.display = '';
-    if (layer.dataset.mode !== mode) {
-      layer.dataset.mode = mode;
-      layer.replaceChildren();
-      this.labelNodes.clear();
-      this.labelItems.clear();
-      this.lastLabelSelect = 0;
-    }
-
-    const tmp = new THREE.Vector3();
-    const project = (world: [number, number, number]) => {
-      tmp.set(world[0], world[2], world[1]).project(activeCam);
-      return {
-        x: (tmp.x * 0.5 + 0.5) * w,
-        y: (-tmp.y * 0.5 + 0.5) * h,
-        visible: tmp.z >= -1 && tmp.z <= 1,
-      };
-    };
-
-    const now = performance.now();
-    if (this.interacting && !force && this.labelItems.size > 0 && now - this.lastLabelSelect < 140) {
-      for (const [key, item] of this.labelItems) {
-        const node = this.labelNodes.get(key);
-        if (!node) continue;
-        const scr = project([item.world[0], item.world[1], 0.4]);
-        node.style.display = scr.visible ? '' : 'none';
-        if (!scr.visible) continue;
-        item.x = scr.x;
-        item.y = scr.y;
-        if (mode === 'pin') {
-          node.style.transform = `translate3d(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px, 0)`;
-        } else {
-          node.style.transform = `translate3d(${scr.x.toFixed(1)}px, ${scr.y.toFixed(1)}px, 0) translate(-50%, -50%) rotate(${item.angleDeg}deg)`;
-        }
-      }
-      return;
-    }
-    this.lastLabelSelect = now;
-
-    const adminMode = adminBoundaryModeForZoom(m.camera.zoom, Boolean(this.snap.showcase), povActive);
-    const avoidBoxes: { x: number; y: number; halfW: number; halfH: number }[] = [];
-    if (adminMode === 'ward') {
-      for (const def of WARD_BOUNDARIES) {
-        const p = project([def.center[0], def.center[1], 2.5]);
-        if (p.visible) {
-          avoidBoxes.push({ x: p.x, y: p.y, halfW: stage === 'streets' ? 68 : 88, halfH: stage === 'streets' ? 18 : 26 });
-        }
-      }
-    }
-
-    const visible = selectVisibleStreetLabels(
-      this.streetCatalog,
-      mode,
-      this.pxPerMetre(),
-      w,
-      h,
-      [focus.x, focus.z],
-      project,
-      avoidBoxes,
-    );
-
-    const keepIds = new Set<string>();
-    for (const item of visible) {
-      const key = `${mode}:${item.id}`;
-      keepIds.add(key);
-      this.labelItems.set(key, item);
-      let btn = this.labelNodes.get(key);
-      if (!btn) {
-        btn = createStreetLabelNode(item, mode);
-        layer.appendChild(btn);
-        this.labelNodes.set(key, btn);
-      }
-      btn.style.display = '';
-
-      if (mode === 'pin') {
-        btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0)`;
-      } else {
-        btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -50%) rotate(${item.angleDeg}deg)`;
-      }
-    }
-
-    for (const [key, node] of this.labelNodes) {
-      if (!keepIds.has(key)) {
-        node.remove();
-        this.labelNodes.delete(key);
-        this.labelItems.delete(key);
-        if (this.hoveredPinKey === key) this.hoveredPinKey = null;
-      }
-    }
-  }
-
-  private placeInfoStep(force = false) {
-    const m = this.mounted, layer = this.placeLayer, popupEl = this.popupCard;
-    if (!m || !layer) return;
-    const mode = this.snap.placeInfo;
-
-    const w = m.host.clientWidth, h = m.host.clientHeight;
-    const activeCam = this.activeCamera();
-    const povActive = this.pov.isActive();
-    const stage = this.currentZoomStage();
-    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
-    const tmp = new THREE.Vector3();
-    const project = (world: [number, number, number]) => {
-      tmp.set(world[0], world[2], world[1]).project(activeCam);
-      return {
-        x: (tmp.x * 0.5 + 0.5) * w,
-        y: (-tmp.y * 0.5 + 0.5) * h,
-        visible: tmp.z >= -1 && tmp.z <= 1,
-      };
-    };
-
-    if (popupEl && this.activePopup && !this.snap.showcase && !povActive) {
-      const entry = this.activePopup.entry;
-      const scr = project([entry.world[0], entry.world[1], entry.world[2] + 2.5]);
-      if (w <= 640) {
-        popupEl.dataset.dock = 'mobile';
-        popupEl.style.transform = '';
-      } else {
-        popupEl.dataset.dock = 'anchor';
-        const px = Math.max(170, Math.min(w - 170, scr.x));
-        const py = Math.max(96, Math.min(h - 46, scr.y));
-        popupEl.style.transform = `translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, 0) translate(-50%, -100%)`;
-      }
-    }
-
-    if (this.snap.showcase || mode === 'off' || povActive || stage === 'streets' || stage === 'city') {
-      if (layer.style.display !== 'none') {
-        layer.style.display = 'none';
-        layer.replaceChildren();
-        this.placeNodes.clear();
-        this.placeItems.clear();
-        this.placeSig = 'off';
-      }
-      return;
-    }
-
-    const cp = activeCam.position;
-    const sig = `${mode}|${this.snap.povMode}|${this.snap.locale}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}|${activeCam.quaternion.y.toFixed(3)}|${this.activePopup?.entry.id ?? ''}`;
-    if (!force && sig === this.placeSig) return;
-    this.placeSig = sig;
-
-    if (layer.style.display === 'none') layer.style.display = '';
-    if (layer.dataset.mode !== mode) {
-      layer.dataset.mode = mode;
-      layer.replaceChildren();
-      this.placeNodes.clear();
-      this.placeItems.clear();
-      this.lastPlaceSelect = 0;
-    }
-
-    const now = performance.now();
-    if ((this.interacting || povActive) && !force && this.placeItems.size > 0 && now - this.lastPlaceSelect < 140) {
-      for (const [key, item] of this.placeItems) {
-        const node = this.placeNodes.get(key);
-        if (!node) continue;
-        const scr = project(item.anchorWorld ?? item.entry.world);
-        node.style.display = scr.visible ? '' : 'none';
-        if (!scr.visible) continue;
-        item.x = scr.x;
-        item.y = scr.y + (item.offsetY ?? 0);
-        node.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
-      }
-      return;
-    }
-    this.lastPlaceSelect = now;
-
-    const visible = selectVisiblePlaceLabels(
-      this.placeCatalog,
-      mode,
-      povActive ? 8.5 : this.pxPerMetre(),
-      w,
-      h,
-      [focus.x, focus.z],
-      project,
-    );
-
-    const keepIds = new Set<string>();
-    for (const item of visible) {
-      const key = `${mode}:${item.entry.id}`;
-      keepIds.add(key);
-      this.placeItems.set(key, { entry: item.entry, x: item.x, y: item.y, anchorWorld: item.anchorWorld, offsetY: item.offsetY });
-      let btn = this.placeNodes.get(key);
-      if (!btn) {
-        btn = createPlaceLabelNode(item.entry, mode);
-        layer.appendChild(btn);
-        this.placeNodes.set(key, btn);
-      }
-      btn.style.display = '';
-
-      btn.classList.toggle('active', this.activePopup?.entry.id === item.entry.id);
-      btn.style.transform = `translate3d(${item.x.toFixed(1)}px, ${item.y.toFixed(1)}px, 0) translate(-50%, -100%)`;
-    }
-
-    for (const [key, node] of this.placeNodes) {
-      if (!keepIds.has(key)) {
-        node.remove();
-        this.placeNodes.delete(key);
-        this.placeItems.delete(key);
-      }
-    }
-  }
-
-  private createAdminLabelNode(def: AdminBoundaryDef, mode: 'ward' | 'city'): HTMLButtonElement {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = `admin-boundary-badge is-${mode}`;
-    const title = document.createElement('span');
-    title.className = 'admin-boundary-title';
-    title.textContent = def.name;
-    btn.appendChild(title);
-    btn.addEventListener('pointerdown', e => e.stopPropagation());
-    btn.addEventListener('click', e => {
-      e.stopPropagation();
-      this.flyTo([def.center[0], def.center[1]], false);
-      if (this.mounted && mode === 'city' && this.mounted.camera.zoom < 0.10) {
-        this.mounted.camera.zoom = 0.12;
-        this.mounted.camera.updateProjectionMatrix();
-      } else if (this.mounted && mode === 'ward' && this.mounted.camera.zoom < 0.35) {
-        this.mounted.camera.zoom = 0.50;
-        this.mounted.camera.updateProjectionMatrix();
-      } else if (this.mounted && mode === 'ward' && this.mounted.camera.zoom < 1.1) {
-        this.mounted.camera.zoom = 1.25;
-        this.mounted.camera.updateProjectionMatrix();
-      }
-    });
-    return btn;
-  }
-
-  private adminBoundariesStep(force = false) {
-    const m = this.mounted, layer = this.adminLayer;
-    if (!m || !layer) return;
-    const povActive = this.pov.isActive();
-    const mode = adminBoundaryModeForZoom(m.camera.zoom, Boolean(this.snap.showcase), povActive);
-    const stage = this.currentZoomStage();
-    m.wardBoundaryLines.visible = mode === 'ward';
-    m.cityBoundaryLines.visible = mode === 'city';
-
-    if (mode === 'off') {
-      if (layer.style.display !== 'none') {
-        layer.style.display = 'none';
-        layer.replaceChildren();
-        this.adminNodes.clear();
-        this.adminSig = 'off';
-      }
-      return;
-    }
-
-    const w = m.host.clientWidth, h = m.host.clientHeight;
-    const activeCam = this.activeCamera();
-    const focus = m.controls.target;
-    const cp = activeCam.position;
-    const compact = mode === 'ward' && stage === 'streets' ? '1' : '0';
-    const sig = `${mode}|${compact}|${w}x${h}|${m.camera.zoom.toFixed(4)}|${focus.x.toFixed(1)},${focus.z.toFixed(1)}|${cp.x.toFixed(1)},${cp.y.toFixed(1)},${cp.z.toFixed(1)}`;
-    if (!force && sig === this.adminSig) return;
-    this.adminSig = sig;
-
-    if (layer.style.display === 'none') layer.style.display = '';
-    if (layer.dataset.compact !== compact) layer.dataset.compact = compact;
-    if (layer.dataset.mode !== mode) {
-      layer.dataset.mode = mode;
-      layer.replaceChildren();
-      this.adminNodes.clear();
-    }
-
-    const defs: readonly AdminBoundaryDef[] = mode === 'city' ? [HANOI_OUTER_BOUNDARY] : WARD_BOUNDARIES;
-    const tmp = new THREE.Vector3();
-    const keepIds = new Set<string>();
-    const padX = mode === 'city' ? 80 : 48;
-    const padY = mode === 'city' ? 60 : 38;
-    const placed: { x: number; y: number; halfW: number; halfH: number }[] = [];
-
-    for (const def of defs) {
-      tmp.set(def.center[0], mode === 'city' ? 6 : 2.5, def.center[1]).project(activeCam);
-      let sx = (tmp.x * 0.5 + 0.5) * w;
-      let sy = (-tmp.y * 0.5 + 0.5) * h;
-      if (mode === 'city' && tmp.z >= -1 && tmp.z <= 1) {
-        sx = Math.max(padX, Math.min(w - padX, sx));
-        sy = Math.max(padY, Math.min(h - padY, sy));
-      }
-      const inBounds = tmp.z >= -1 && tmp.z <= 1 && sx >= padX && sx <= w - padX && sy >= padY && sy <= h - padY;
-      if (!inBounds) continue;
-
-      if (mode === 'ward') {
-        const halfW = Math.max(46, Math.min(92, def.name.length * 3.4 + 14));
-        const halfH = compact === '1' ? 14 : 21;
-        const collides = placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs(sy - o.y) < halfH + o.halfH);
-        if (collides) {
-          if (!placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs((sy + 26) - o.y) < halfH + o.halfH) && sy + 26 <= h - padY) {
-            sy += 26;
-          } else if (!placed.some(o => Math.abs(sx - o.x) < halfW + o.halfW && Math.abs((sy - 26) - o.y) < halfH + o.halfH) && sy - 26 >= padY) {
-            sy -= 26;
-          } else {
-            continue;
-          }
-        }
-        placed.push({ x: sx, y: sy, halfW, halfH });
-      }
-
-      keepIds.add(def.id);
-      let node = this.adminNodes.get(def.id);
-      if (!node) {
-        node = this.createAdminLabelNode(def, mode);
-        layer.appendChild(node);
-        this.adminNodes.set(def.id, node);
-      }
-      node.style.display = '';
-      node.style.transform = `translate3d(${sx.toFixed(1)}px, ${sy.toFixed(1)}px, 0) translate(-50%, -50%)`;
-    }
-
-    for (const [id, node] of this.adminNodes) {
-      if (!keepIds.has(id)) {
-        node.remove();
-        this.adminNodes.delete(id);
-      }
-    }
-  }
-
-  /** Hit-test visible place or street pins at client coordinates without blocking map drag (`pointer-events: none`) */
-  private hitLabelAtClient(clientX: number, clientY: number):
-    | { kind: 'place'; key: string; entry: PlaceEntry; x: number; y: number }
-    | { kind: 'street'; key: string; street: StreetEntry; item: ProjectedStreetLabel; x: number; y: number }
-    | null {
-    const m = this.mounted;
-    if (!m || this.snap.showcase) return null;
-    const rect = m.host.getBoundingClientRect();
-    const x = clientX - rect.left;
-    const y = clientY - rect.top;
-
-    if (this.snap.placeInfo !== 'off') {
-      const isCard = this.snap.placeInfo === 'label';
-      for (const [key, item] of this.placeItems) {
-        const halfW = isCard ? 78 : 54;
-        const h = isCard ? 46 : 26;
-        if (x >= item.x - halfW && x <= item.x + halfW && y >= item.y - h && y <= item.y + 4) {
-          return { kind: 'place', key, entry: item.entry, x: item.x, y: item.y - h };
-        }
-      }
-    }
-
-    if (this.snap.streetLabels !== 'off') {
-      const isPin = this.labelLayer?.dataset.mode === 'pin';
-      for (const [key, item] of this.labelItems) {
-        const baseId = item.id.replace(/:\d+$/, '');
-        if (isPin) {
-          const totalH = item.stemHeightPx + 32;
-          const halfW = Math.max(36, Math.min(72, item.shortName.length * 4 + 16));
-          const hitCard = x >= item.x - halfW && x <= item.x + halfW && y >= item.y - totalH - 6 && y <= item.y - item.stemHeightPx + 8;
-          const hitBase = Math.hypot(x - item.x, y - item.y) <= 14;
-          if (hitCard || hitBase) {
-            const street = this.streetById.get(baseId);
-            if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - totalH };
-          }
-        } else {
-          const halfW = Math.max(36, Math.min(75, item.name.length * 3.8 + 14));
-          if (x >= item.x - halfW && x <= item.x + halfW && y >= item.y - 14 && y <= item.y + 14) {
-            const street = this.streetById.get(baseId);
-            if (street) return { kind: 'street', key, street, item, x: item.x, y: item.y - 14 };
-          }
-        }
-      }
-    }
-
-    return null;
-  }
-
-  private setHoveredPin(key: string | null) {
-    if (this.hoveredPinKey === key) return;
-    if (this.hoveredPinKey) {
-      this.labelNodes.get(this.hoveredPinKey)?.classList.remove('is-hover');
-    }
-    this.hoveredPinKey = key;
-    if (key) {
-      this.labelNodes.get(key)?.classList.add('is-hover');
-    }
-  }
-
-  private clearHoveredPin() {
-    this.setHoveredPin(null);
-  }
 
   private openStreetPopup(street: StreetEntry, world: [number, number]) {
     const cityName = this.city.cityName ?? this.city.name.split(':')[0]?.trim() ?? '';
@@ -2248,7 +1721,7 @@ export class CityView {
     this.activePopup = { entry, ...(floor ? { floor } : {}) };
     this.savedCam.place = entry.id;
     this.renderPopupContent();
-    this.placeInfoStep(true);
+    this.overlays.placeInfoStep(true);
     this.events.emit('place:select', { entry, ...(floor ? { floor } : {}) });
   }
 
@@ -2259,7 +1732,7 @@ export class CityView {
       this.popupCard.style.display = 'none';
       this.popupCard.replaceChildren();
     }
-    this.placeInfoStep(true);
+    this.overlays.placeInfoStep(true);
     this.events.emit('place:select', { entry: null });
   }
 

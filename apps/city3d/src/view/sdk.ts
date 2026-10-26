@@ -110,6 +110,124 @@ export interface CitySDK {
   off<K extends keyof CityEventMap>(event: K, handler: CityEventHandler<K>): void;
 }
 
+/** what the SDK facade reads and calls on the view that owns it */
+export interface SdkHost {
+  readonly city: City;
+  readonly events: CityEventBus;
+  readonly customLayers: Map<string, THREE.Object3D>;
+  readonly popupActions: Map<string, PopupActionDescriptor>;
+  readonly extensions: Map<string, { ext: CityExtension; cleanup?: () => void }>;
+  snap(): Snapshot;
+  mounted(): { camera: THREE.OrthographicCamera; controls: { minZoom: number; maxZoom: number }; extensionGroup: THREE.Group } | null;
+  placeCatalog(): { byId: Map<string, PlaceEntry>; labels: readonly PlaceEntry[] };
+  activePopup(): unknown;
+  setLocale(locale: Locale): void;
+  flyTo(pt: [number, number]): void;
+  setMode(mode: Mode): void;
+  setPovMode(mode: PovMode): void;
+  setNight(night: boolean): void;
+  setTheme(theme: Theme): void;
+  setSeeThrough(on: boolean): void;
+  setShowcase(id: string | null): void;
+  openPopup(entry: PlaceEntry): void;
+  closePopup(): void;
+  setLamp(id: string, on: boolean): void;
+  renderPopupContent(): void;
+}
+
+/** The public SDK as a facade over the view (moved out of CityView.ts). */
+export function createCitySDK(h: SdkHost): CitySDK {
+    const sdk: CitySDK = {
+      events: h.events,
+      getCity: () => h.city,
+      getSnapshot: () => h.snap(),
+      getLocale: () => h.snap().locale,
+      setLocale: locale => h.setLocale(locale),
+      flyTo: pt => h.flyTo(pt),
+      setZoom: zoom => {
+        const m = h.mounted();
+        if (!m) return;
+        m.camera.zoom = Math.max(m.controls.minZoom, Math.min(m.controls.maxZoom, zoom));
+        m.camera.updateProjectionMatrix();
+      },
+      setMode: mode => h.setMode(mode),
+      getPovMode: () => h.snap().povMode,
+      setPovMode: mode => h.setPovMode(mode),
+      setNight: night => {
+        h.setNight(night);
+        h.setTheme(night ? 'dark' : 'light');
+      },
+      setSeeThrough: on => h.setSeeThrough(on),
+      setShowcase: id => h.setShowcase(id),
+      openPlace: id => {
+        const entry = h.placeCatalog().byId.get(id);
+        if (!entry) return false;
+        h.openPopup(entry);
+        return true;
+      },
+      closePopup: () => h.closePopup(),
+      getPlace: id => h.placeCatalog().byId.get(id),
+      searchPlaces: query => {
+        const q = query.trim().toLowerCase();
+        if (!q) return [...h.placeCatalog().labels];
+        const out: PlaceEntry[] = [];
+        for (const entry of h.placeCatalog().byId.values()) {
+          if (entry.name.toLowerCase().includes(q) || entry.address.toLowerCase().includes(q)) {
+            out.push(entry);
+          }
+        }
+        return out;
+      },
+      setLamp: (id, on) => h.setLamp(id, on),
+      addCustomLayer: (id, object) => {
+        const m = h.mounted(), prev = h.customLayers.get(id);
+        if (prev) m?.extensionGroup.remove(prev);
+        h.customLayers.set(id, object);
+        m?.extensionGroup.add(object);
+      },
+      removeCustomLayer: id => {
+        const obj = h.customLayers.get(id);
+        if (!obj) return;
+        h.customLayers.delete(id);
+        h.mounted()?.extensionGroup.remove(obj);
+      },
+      registerPopupAction: action => {
+        h.popupActions.set(action.id, action);
+        if (h.activePopup()) h.renderPopupContent();
+        return () => {
+          h.popupActions.delete(action.id);
+          if (h.activePopup()) h.renderPopupContent();
+        };
+      },
+      getPopupActions: () => Array.from(h.popupActions.values()),
+      use: extension => {
+        if (h.extensions.has(extension.id)) sdk.unuse(extension.id);
+        if (extension.popupActions) {
+          for (const act of extension.popupActions) h.popupActions.set(act.id, act);
+        }
+        const cleanup = h.mounted() && extension.onMount ? (extension.onMount(sdk) ?? undefined) : undefined;
+        h.extensions.set(extension.id, { ext: extension, ...(cleanup ? { cleanup } : {}) });
+        if (h.activePopup()) h.renderPopupContent();
+        return () => sdk.unuse(extension.id);
+      },
+      unuse: extensionId => {
+        const rec = h.extensions.get(extensionId);
+        if (!rec) return;
+        h.extensions.delete(extensionId);
+        if (rec.ext.popupActions) {
+          for (const act of rec.ext.popupActions) h.popupActions.delete(act.id);
+        }
+        try { rec.cleanup?.(); } catch { /* ignore */ }
+        try { rec.ext.onUnmount?.(sdk); } catch { /* ignore */ }
+        if (h.activePopup()) h.renderPopupContent();
+      },
+      getExtensions: () => Array.from(h.extensions.values(), r => r.ext),
+      on: (event, handler) => h.events.on(event, handler),
+      off: (event, handler) => h.events.off(event, handler),
+    };
+    return sdk;
+}
+
 declare global {
   interface Window {
     MyCitySDK?: CitySDK;

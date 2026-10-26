@@ -102,7 +102,9 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Góp ý (ảnh vòng xoay lần 2): lan can bên trong đan thành chữ Y ở chỗ nhánh rẽ/nhập → bỏ lan can nằm trên mặt cầu khác (`onOtherDeck`), test `bridges.test.ts`
 - [x] Góp ý: tải trang đầu lâu kể cả trên máy tính → CS-07: đo bằng profiler, sửa 4 điểm nghẽn, tính toán khởi động ~6,5 s → ~2,4 s
 - [x] Dọn nốt: Web Worker (có đường lùi), cầu Nhật Tân theo đường, vùng hành lang Đông Anh, đoạn cầu cắt ở rìa vùng, viền Hà Nội theo phường thật, chốt chặn kích thước `CityView` (ADR-058 mục 9)
-- [ ] Tách `CityView.ts` theo city3d.md §8 (từng bước, kiểm bằng mắt sau mỗi bước)
+- [x] Tách `CityView.ts` bước 1–2: `OverlayLabels`, `createCitySDK` (3.913 → 3.386 dòng)
+- [ ] Người dùng xem trên dev server: nhãn phố / địa điểm / phường, bấm nhãn bay tới, đổi ngôn ngữ, `window.MyCitySDK`
+- [ ] Tách `CityView.ts` bước 3+: chunk + cache ô, `mount()` (city3d.md §8)
 - [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
 
 ## Backlog
