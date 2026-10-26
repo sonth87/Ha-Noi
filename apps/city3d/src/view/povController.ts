@@ -3,7 +3,7 @@
    - 'metro-cab': First-person view from the front driver cab of Metro Line 2A trains.
    - 'metro-passenger': Panoramic window-seat passenger view looking out over the city from the elevated metro.
    - 'drive-cabin': Interactive car driving with close chase camera behind the 3D car.
-   - 'drive-top': Interactive car driving with elevated top-down chase camera.
+   - 'drive-inside': Interactive car driving from the driver's seat (ADR-064).
    Includes road carriageway constraint, gentle lane-follow assist, circular mini-map radar renderer,
    and frustum-cone & distance-tiered LOD culling for 60 FPS perspective rendering. */
 import * as THREE from 'three';
@@ -175,7 +175,7 @@ export class PovController {
     locationName: '',
   };
 
-  // Player's 3D car mesh (visible in both 'drive-cabin' and 'drive-top' modes)
+  // Player's 3D car mesh (visible in both 'drive-cabin' and 'drive-inside' modes)
   private playerCarGroup: THREE.Group | null = null;
   private playerBeamMesh: THREE.Mesh | null = null;
 
@@ -188,6 +188,9 @@ export class PovController {
   }
 
   setNearTraffic(list: readonly PlacedVehicle[]): void { this.nearTraffic = list; }
+
+  /** the wheel, −1 … 1 (the shell turns the drawn steering wheel with it) */
+  get steer(): number { return this.car.steer; }
 
   /** streets of a map chunk that arrived after start: without this the car could not drive on them (CS-09) */
   addStreets(streets: readonly Street[]): void {
@@ -292,7 +295,7 @@ export class PovController {
   }
 
   isDriving(): boolean {
-    return this.mode === 'drive-cabin' || this.mode === 'drive-top';
+    return this.mode === 'drive-cabin' || this.mode === 'drive-inside';
   }
 
   isMetro(): boolean {
@@ -397,12 +400,12 @@ export class PovController {
           ? POV_CONFIG.FOV_PASSENGER
           : next === 'drive-cabin'
             ? POV_CONFIG.FOV_DRIVE_CABIN
-            : POV_CONFIG.FOV_DRIVE_TOP;
+            : POV_CONFIG.FOV_DRIVE_INSIDE;
     this.camera.fov = fov;
     this.camera.updateProjectionMatrix();
 
-    if (next === 'drive-cabin' || next === 'drive-top') {
-      const wasDriving = prev === 'drive-cabin' || prev === 'drive-top';
+    if (next === 'drive-cabin' || next === 'drive-inside') {
+      const wasDriving = prev === 'drive-cabin' || prev === 'drive-inside';
       if (!keepSelection && (!wasDriving || !this.car.initialized)) {
         this.spawnCarNear(mapTarget.x, mapTarget.z);
       }
@@ -672,9 +675,9 @@ export class PovController {
     this.lookPitch = 0;
   }
 
-  /** Toggle between Close Chase ('drive-cabin') and Overhead ('drive-top') camera while driving */
+  /** Toggle between the chase camera ('drive-cabin') and the driver's seat ('drive-inside') while driving */
   toggleDriveCamera(trains: readonly TrainInstanceRef[], mapTarget: { x: number; z: number }): PovMode {
-    const next: PovMode = this.mode === 'drive-cabin' ? 'drive-top' : 'drive-cabin';
+    const next: PovMode = this.mode === 'drive-cabin' ? 'drive-inside' : 'drive-cabin';
     this.setMode(next, trains, mapTarget);
     return next;
   }
@@ -742,7 +745,7 @@ export class PovController {
   step(dt: number, simTime: number, trains: readonly TrainInstanceRef[], nightBeamOn: boolean): PovTelemetry {
     if (this.mode === 'metro-cab' || this.mode === 'metro-passenger') {
       this.stepMetro(dt, simTime, trains);
-    } else if (this.mode === 'drive-cabin' || this.mode === 'drive-top') {
+    } else if (this.mode === 'drive-cabin' || this.mode === 'drive-inside') {
       this.stepDriving(dt, nightBeamOn);
     }
 
@@ -948,7 +951,8 @@ export class PovController {
 
     // Update 3D player car mesh position & orientation (visible in both car camera views)
     if (this.playerCarGroup) {
-      this.playerCarGroup.visible = true;
+      // inside the car its own body would fill the view: the shell draws the dashboard and the wheel instead
+      this.playerCarGroup.visible = this.mode !== 'drive-inside';
       this.playerCarGroup.position.copy(V(c.x, c.y, c.z + 0.12));
       this.playerCarGroup.rotation.order = 'YXZ';
       this.playerCarGroup.rotation.y = -c.heading;
@@ -965,7 +969,7 @@ export class PovController {
     const followSpeed = (this.mode === 'drive-cabin' ? 3.6 : 2.8) + pace * 2.2;
     c.chaseYaw = wrapAngle(c.chaseYaw + angleDiff * Math.min(1, dt * followSpeed));
     const camYaw = c.chaseYaw + this.lookYaw + c.steer * 0.12 * pace;
-    const baseFov = this.mode === 'drive-cabin' ? POV_CONFIG.FOV_DRIVE_CABIN : POV_CONFIG.FOV_DRIVE_TOP;
+    const baseFov = this.mode === 'drive-cabin' ? POV_CONFIG.FOV_DRIVE_CABIN : POV_CONFIG.FOV_DRIVE_INSIDE;
     const fov = baseFov + 10 * pace;
     if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 4); this.camera.updateProjectionMatrix(); }
     const pull = 1 + 0.22 * pace;
@@ -988,21 +992,15 @@ export class PovController {
       this.tmpTarget.copy(V(targetX, targetY, targetZ));
       this.camera.lookAt(this.tmpTarget);
     } else {
-      // High overhead third-person chase camera ('Góc nhìn cao / Toàn cảnh')
-      const distBack = POV_CONFIG.DRIVE_TOP_DISTANCE * pull * Math.cos(this.lookPitch * 0.45);
-      const heightUp = POV_CONFIG.DRIVE_TOP_HEIGHT + Math.sin(this.lookPitch) * 6;
-
-      const camX = c.x - Math.cos(camYaw) * distBack;
-      const camY = c.y - Math.sin(camYaw) * distBack;
-      const camZ = c.z + Math.max(5.5, heightUp);
-
-      const lookAhead = 6.0;
-      const targetX = c.x + Math.cos(c.heading) * lookAhead;
-      const targetY = c.y + Math.sin(c.heading) * lookAhead;
-      const targetZ = c.z + 0.9;
-
+      // Inside the car (ADR-064): the driver's eye, on the left seat (traffic keeps right), 1.2 m up, looking out
+      // through the windscreen; turning the head (drag) looks round, the view follows the car with no lag
+      const h = c.heading, ahead = 0.25, left = 0.38, eye = 1.2;
+      const camX = c.x + Math.cos(h) * ahead + Math.sin(h) * left;
+      const camY = c.y + Math.sin(h) * ahead - Math.cos(h) * left;
+      const camZ = c.z + eye + Math.sin(c.pitch) * ahead;
+      const yaw = h + this.lookYaw, pitch = this.lookPitch * 0.6 - 0.04 + c.pitch;
       this.camera.position.copy(V(camX, camY, camZ));
-      this.tmpTarget.copy(V(targetX, targetY, targetZ));
+      this.tmpTarget.copy(V(camX + Math.cos(yaw) * Math.cos(pitch) * 20, camY + Math.sin(yaw) * Math.cos(pitch) * 20, camZ + Math.sin(pitch) * 20));
       this.camera.lookAt(this.tmpTarget);
     }
 
@@ -1362,7 +1360,7 @@ export class PovController {
     const nearRadius = 155 + radius;
     if (distSq <= nearRadius * nearRadius) return true;
 
-    const backAllowance = this.mode === 'drive-top' || this.isMetro() ? 85 : 45;
+    const backAllowance = this.isMetro() ? 85 : 45;
     if (fwd < -radius - backAllowance) return false;
 
     const maxDist = POV_CONFIG.CULL_MAX_DIST + radius;
@@ -1387,7 +1385,7 @@ export class PovController {
     const distSq = dx * dx + dz * dz;
     const nearR = 95 + radius;
     if (distSq <= nearR * nearR) return true;
-    const backLimit = this.mode === 'drive-top' || this.isMetro() ? 65 : 35;
+    const backLimit = this.isMetro() ? 65 : 35;
     const fwd = dx * this.camFwdX + dz * this.camFwdZ;
     if (fwd < -radius - backLimit) return false;
     const lim = maxDist + radius;

@@ -44,14 +44,14 @@ export const POV_LABEL: Record<PovMode, { label: TranslationKey; sub?: Translati
   'metro-cab': { label: 'pov.mode.metro-cab', sub: 'pov.sub.metro-cab', icon: 'train' },
   'metro-passenger': { label: 'pov.mode.metro-passenger', sub: 'pov.sub.metro-passenger', icon: 'eye' },
   'drive-cabin': { label: 'pov.mode.drive-cabin', sub: 'pov.sub.drive-cabin', icon: 'car' },
-  'drive-top': { label: 'pov.mode.drive-top', sub: 'pov.sub.drive-top', icon: 'view' },
+  'drive-inside': { label: 'pov.mode.drive-inside', sub: 'pov.sub.drive-inside', icon: 'view' },
 };
 
 export function PovMenu({ v, locale: loc, active, onClose }: { v: CityView; locale: Locale; active: PovMode; onClose: () => void }) {
   return (
     <Sheet title={t('pov.menu.title', undefined, loc)} closeLabel={t('ui.close', undefined, loc)} onClose={onClose} className="pov-menu">
       <ul className="mode-list">
-        {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
+        {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-inside'] as const).map(pm => (
           <li key={pm}>
             <button type="button" className="mode-card" aria-pressed={active === pm} onClick={() => { v.setPovMode(pm); onClose(); }}>
               <span className="mode-icon"><Icon name={POV_LABEL[pm].icon} size={22} /></span>

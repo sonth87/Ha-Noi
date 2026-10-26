@@ -61,14 +61,14 @@ export const SEE_THROUGH = {
 } as const;
 
 /** Camera viewpoint modes: standard map ('map') or immersive perspective / driving views */
-export type PovMode = 'map' | 'metro-cab' | 'metro-passenger' | 'drive-cabin' | 'drive-top';
+export type PovMode = 'map' | 'metro-cab' | 'metro-passenger' | 'drive-cabin' | 'drive-inside';
 
 export const POV_MODES: readonly PovMode[] = [
   'map',
   'metro-cab',
   'metro-passenger',
   'drive-cabin',
-  'drive-top',
+  'drive-inside',
 ] as const;
 
 /** Perspective POV & interactive driving physics / culling constants */
@@ -76,7 +76,8 @@ export const POV_CONFIG = {
   FOV_CAB: 62,
   FOV_PASSENGER: 65,
   FOV_DRIVE_CABIN: 60,
-  FOV_DRIVE_TOP: 54,
+  /** inside the car: wide, as a driver sees the street through the windscreen */
+  FOV_DRIVE_INSIDE: 74,
   NEAR: 0.35,
   FAR: 1600,
   METRO_CAB_OFFSET_FWD: 8.8,
@@ -85,8 +86,6 @@ export const POV_CONFIG = {
   METRO_PASSENGER_SIDE_OFFSET: 1.15,
   DRIVE_CLOSE_DISTANCE: 8.2,
   DRIVE_CLOSE_HEIGHT: 3.1,
-  DRIVE_TOP_DISTANCE: 22.0,
-  DRIVE_TOP_HEIGHT: 16.5,
   DRIVE_MAX_SPEED: 14.5,
   DRIVE_REVERSE_MAX_SPEED: 6.0,
   DRIVE_ACCEL: 8.5,

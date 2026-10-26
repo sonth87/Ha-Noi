@@ -183,6 +183,13 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Giao diện: font sans hệ thống, cỡ chữ và vùng bấm lớn hơn, thanh trên gọn, popup mới, dock, thanh nhập vai, nút lái cho cảm ứng
 - [ ] Người dùng xem trên máy tính và điện thoại: thanh trên, 3 menu, bảng Tùy chỉnh, popup tòa nhà (nút Mô hình 3D), mô hình (Về bản đồ / Xem vị trí), chạm và kéo Pegman, chế độ lái (thanh trên, nút lái), chế độ Kính / Mờ / Đặc
 
+## Góp ý sau khi thử giao diện mới (2026-10-26, ADR-064)
+- [x] Va chạm theo hình hộp (hết "đâm" khi còn cách nhau); test các tình huống sát nhau
+- [x] Nút đủ lớn trên cảm ứng (48 px, chip / select / công tắc / bảng cài đặt / nút lái)
+- [x] Không nhìn xuyên mái ga khi đi tàu
+- [x] Lái ô tô từ ghế lái (`drive-inside`): camera ở mắt người lái, táp-lô, cột kính, vô lăng xoay; thay cho góc nhìn trên cao
+- [ ] Người dùng xem: lái sát xe khác, ấn các nút trên điện thoại, đi tàu qua ga, góc nhìn trong xe (vô lăng, táp-lô có che đường quá nhiều không)
+
 ## Backlog
 - Mở rộng thêm sang các phường ngoại thành / quận khác của Hà Nội (đã có trọn vẹn 6 khu vực trung tâm: Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân — ADR-054)
 - Nguồn dữ liệu bổ sung ngoài OSM (ảnh vệ tinh, ảnh người dùng chụp); kiểm bản quyền trước

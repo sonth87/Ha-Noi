@@ -537,6 +537,28 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
   - Chưa kiểm bằng mắt (A7), người dùng cần xem trên máy tính và điện thoại.
   - Hai thao tác cũ đã đổi: chạm Pegman không còn vào chế độ lái; phím `P` mở menu.
 
+### ADR-064 · Va chạm theo hình hộp, nút đủ lớn cho cảm ứng, không nhìn xuyên khi đi tàu, lái xe từ ghế lái
+- **Trạng thái**: Đã chốt (2026-10-26, góp ý của người dùng sau khi thử bản ADR-063).
+- **Góp ý và nguyên nhân**:
+  1. **"Hai xe còn cách một khoảng đã tính là đâm"**: va chạm dùng hai hình tròn, bán kính cộng ~3,3 m. Hai ô tô song song ở hai làn cạnh nhau (tâm cách ~3,25 m) đã bị coi là đâm.
+  2. **"Các nút trên mobile quá nhỏ"**: vùng bấm 44 px mới áp cho một phần. Chip, nút phân đoạn, select, công tắc và nút trong bảng Đèn/Đồ họa vẫn 32–36 px.
+  3. **"Ngồi trên tàu không nên nhìn xuyên"**: tới gần ga thì mái ga bị ẩn.
+  4. **"Lái ô tô nhìn xa nên là góc nhìn trong xe"**.
+- **Quyết định**:
+  1. **Va chạm** (`separateFromTraffic`): hai hình hộp theo hướng xe, kiểm bằng định lý trục tách.
+     - Ô tô 4,4 × 1,8 m, xe máy rộng 0,8 m.
+     - Chồng lên nhau thì xe người chơi bị đẩy ra theo hướng ngắn nhất và mất phần tốc độ đâm vào.
+     - Có test: song song cách 0,7 m, nối đuôi cách 1 m, xe máy sát bên đều không phải va chạm.
+  2. **Cảm ứng hoặc màn ≤ 640 px**: vùng bấm 48 px (`--tap`); mọi nút, select ≥ 44 px; chip 42 px; công tắc 52 × 30 px; ô tìm kiếm chữ 16 px (iOS không tự phóng to); nút lái 78 px.
+  3. **Trong chế độ nhập vai không có nhìn xuyên**: mái ga luôn hiện; tòa nhà vốn đã không bị cắt khi ở POV.
+  4. **Chế độ `drive-top` (đuổi theo từ trên cao) đổi thành `drive-inside`** (trong xe):
+     - mắt người lái ở ghế trái (xe chạy bên phải), cao 1,2 m, FOV 74°;
+     - thân xe được ẩn;
+     - giao diện vẽ táp-lô, hai cột kính và vô lăng xoay theo tay lái (`Cockpit`, đọc `povSteer()` mỗi khung, không qua React);
+     - kéo chuột hoặc ngón tay để quay đầu nhìn.
+     Chế độ còn lại là `drive-cabin` (sau xe).
+- **Hệ quả**: không còn góc nhìn lái từ trên cao. Test: `trafficView.test.ts` (va chạm), `povController.test.ts` (camera trong xe). Hình ảnh khoang lái chưa kiểm bằng mắt (A7).
+
 ---
 
 ## Câu hỏi mở

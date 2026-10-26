@@ -76,7 +76,7 @@ Bản đồ (đường, mặt bằng nhà, cầu, vườn) lấy từ OpenStreet
 
 ## Lái xe (chế độ POV)
 
-- **W / ↑**: ga · **S / ↓**: phanh, giữ khi đã dừng thì lùi · **A D / ← →**: lái · **Space**: phanh tay (rẽ gắt hơn) · **V**: đổi góc camera gần / cao · **C**: nhìn thẳng lại · kéo chuột: nhìn quanh.
+- **W / ↑**: ga · **S / ↓**: phanh, giữ khi đã dừng thì lùi · **A D / ← →**: lái · **Space**: phanh tay (rẽ gắt hơn) · **V**: đổi góc nhìn sau xe / trong xe (ghế lái) · **C**: nhìn thẳng lại · kéo chuột: nhìn quanh.
 - Xe đi tối đa khoảng 70 km/h, rẽ gọn ở tốc độ thấp. Chạm lề thì xe trượt dọc lề. Xe không tự bẻ lái.
 
 ## Giao diện (ADR-063)

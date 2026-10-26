@@ -62,12 +62,24 @@ describe('player car and traffic (CS-09)', () => {
     expect(v[0]!.s).toBeGreaterThan(110);
   });
 
-  it('the player car cannot drive through a traffic car and loses its speed', () => {
-    const p = { x: -1, y: 0, heading: 0, speed: 10 };
+  it('the player car cannot drive through a traffic car, and loses the speed it had into it', () => {
+    const p = { x: -3, y: 0, heading: 0, speed: 10 };
     expect(separateFromTraffic(p, [{ x: 0, z: 0, heading: 0, len: 4.4 }])).toBe(true);
-    expect(Math.hypot(p.x, p.y)).toBeGreaterThan(2.5);
-    expect(p.speed).toBeLessThan(0);
+    expect(p.x).toBeCloseTo(-4.4, 5);                 // pushed back to nose touching tail
+    expect(Math.abs(p.speed)).toBeLessThan(0.5);
     const q = { x: -20, y: 0, heading: 0, speed: 10 };
     expect(separateFromTraffic(q, [{ x: 0, z: 0, heading: 0, len: 4.4 }])).toBe(false);
+  });
+
+  it('cars side by side in neighbouring lanes, or a metre apart nose to tail, do not touch (ADR-064)', () => {
+    const car = { x: 0, y: 0, heading: 0, speed: 10 };
+    expect(separateFromTraffic(car, [{ x: 0, z: 2.5, heading: 0, len: 4.4 }])).toBe(false);   // 2.5 m between centres, 0.7 m gap
+    expect(separateFromTraffic(car, [{ x: 5.4, z: 0, heading: 0, len: 4.4 }])).toBe(false);   // 1 m gap ahead
+    expect(separateFromTraffic(car, [{ x: 0, z: 1.4, heading: 0, len: 1.8 }])).toBe(false);   // a motorbike passing close
+    expect(car.speed).toBe(10);
+    // a car crossing in front at right angles, overlapping by 20 cm: pushed back, sideways speed kept
+    const c2 = { x: 0, y: 0, heading: 0.3, speed: 8 };
+    expect(separateFromTraffic(c2, [{ x: 2.2 + 0.9 - 0.2, z: 0, heading: Math.PI / 2, len: 4.4 }])).toBe(true);
+    expect(Math.abs(c2.speed)).toBeGreaterThan(1);
   });
 });

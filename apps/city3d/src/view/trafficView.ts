@@ -104,21 +104,37 @@ export function playerAhead(v: PlacedVehicle, player: { x: number; z: number }):
 }
 
 const PLAYER_HALF_LEN = 2.2;
-const PLAYER_R = 1.6;
+const PLAYER_HALF_W = 0.9;
+/** half the width of a traffic vehicle: a car is 1.8 m wide, a motorbike with its rider 0.8 m */
+const halfWidthOf = (len: number) => (len < 3 ? 0.4 : 0.9);
 
-/** Keep the player's car out of the traffic: push it off every vehicle it overlaps (circles of ~half a car)
-    and take most of its speed if it was driving into one. Mutates and returns whether it hit something. */
+/** Keep the player's car out of the traffic. Both are boxes turned to their heading (separating axis test): two
+    cars side by side in neighbouring lanes, or nose to tail a metre apart, do not touch (the old test used circles
+    of ~3.3 m and called that a crash, ADR-064). When they overlap, the car is pushed out the shortest way and loses
+    the part of its speed that went into the other one. Mutates and returns whether it hit something. */
 export function separateFromTraffic(car: { x: number; y: number; heading: number; speed: number }, traffic: readonly PlacedVehicle[]): boolean {
   let hit = false;
   for (const v of traffic) {
-    const r = PLAYER_R + Math.max(0.6, v.len / 2.6);
-    const dx = car.x - v.x, dy = car.y - v.z, d = Math.hypot(dx, dy);
-    if (d >= r) continue;
-    const nx = d > 1e-6 ? dx / d : -Math.cos(car.heading), ny = d > 1e-6 ? dy / d : -Math.sin(car.heading);
-    car.x = v.x + nx * r;
-    car.y = v.z + ny * r;
-    const vx = Math.cos(car.heading) * car.speed, vy = Math.sin(car.heading) * car.speed;
-    if (vx * nx + vy * ny < 0) car.speed *= -0.15;
+    const ca = Math.cos(car.heading), sa = Math.sin(car.heading), cb = Math.cos(v.heading), sb = Math.sin(v.heading);
+    const axes: [number, number][] = [[ca, sa], [-sa, ca], [cb, sb], [-sb, cb]];
+    const dx = car.x - v.x, dy = car.y - v.z;
+    const hl = v.len / 2, hw = halfWidthOf(v.len);
+    let depth = Infinity, nx = 0, ny = 0;
+    for (const [ax, ay] of axes) {
+      const ra = PLAYER_HALF_LEN * Math.abs(ca * ax + sa * ay) + PLAYER_HALF_W * Math.abs(-sa * ax + ca * ay);
+      const rb = hl * Math.abs(cb * ax + sb * ay) + hw * Math.abs(-sb * ax + cb * ay);
+      const d = dx * ax + dy * ay, over = ra + rb - Math.abs(d);
+      if (over <= 0) { depth = 0; break; }
+      if (over < depth) { depth = over; nx = d >= 0 ? ax : -ax; ny = d >= 0 ? ay : -ay; }
+    }
+    if (depth <= 0) continue;
+    car.x += nx * depth;
+    car.y += ny * depth;
+    const vx = ca * car.speed, vy = sa * car.speed, into = vx * nx + vy * ny;
+    if (into < 0) {
+      const tx = vx - into * nx, ty = vy - into * ny;
+      car.speed = Math.sign(car.speed) * Math.hypot(tx, ty) * 0.6;
+    }
     hit = true;
   }
   return hit;

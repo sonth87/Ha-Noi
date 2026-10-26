@@ -1080,6 +1080,9 @@ export class CityView {
     this.update({ povLocationName: tel.locationName, povSpeedKmh: 0 });
   }
 
+  /** the car's wheel, −1 … 1, read every frame by the drawn cockpit (not through the snapshot: no re-render) */
+  povSteer(): number { return this.pov.steer; }
+
   centerPovLook() {
     this.pov.centerLook();
   }
@@ -2768,7 +2771,9 @@ export class CityView {
       this.activeShowcase.shellGroup.visible = !(this.snap.seeThrough && m.camera.zoom >= SEE_THROUGH.SHOWCASE_MIN_ZOOM);
     }
     if (this.pov.isActive()) {
-      m.stationShellGroup.visible = !(this.snap.seeThrough && this.pov.isMetro() && this.pov.isNearStation(85));
+      // riding or driving a train the station is seen from outside and inside as it is: no see-through cut-away
+      // (it lifted the station roof whenever a train came near, ADR-064)
+      m.stationShellGroup.visible = true;
       this.clearAllTileCuts();
       return;
     }

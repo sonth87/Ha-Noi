@@ -13,7 +13,7 @@ import { Explorer } from './Explorer';
 import { Icon, type IconName } from './icons';
 import { LoadingScreen, type LoadingProgress } from './LoadingScreen';
 import { PlacesMenu, PovMenu } from './Menus';
-import { MapDock, PovBar, ShowcaseBar, StatusBar } from './Overlays';
+import { Cockpit, MapDock, PovBar, ShowcaseBar, StatusBar } from './Overlays';
 import { SettingsSheet } from './SettingsSheet';
 import { applyUiGlassToRoot, loadUiGlassSettings, saveUiGlassSettings, type UiGlassSettings } from './liquidGlass';
 
@@ -284,6 +284,7 @@ function AppShell({ view: v }: { view: CityView }) {
           {settings && <SettingsSheet v={v} s={s} glass={glass} onGlass={onGlass} onClose={() => setSettings(false)} />}
 
           {item && s.povMode === 'map' && <ShowcaseBar v={v} item={item} locale={loc} />}
+          {s.povMode === 'drive-inside' && <Cockpit v={v} />}
           {s.povMode !== 'map' && <PovBar v={v} s={s} />}
           {s.povMode === 'map' && <MapDock v={v} s={s} host={host} onHint={setHint} />}
           {hint && <div className="toast ui-surface" role="status" onPointerDown={e => e.stopPropagation()}>{hint}</div>}

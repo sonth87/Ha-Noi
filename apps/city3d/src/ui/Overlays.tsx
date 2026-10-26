@@ -1,6 +1,6 @@
 /* What floats over the map besides the menus (ADR-063): the camera dock with Pegman, the bar of a 3D model, the
    immersive-view bar with its driving pads, and the status line with the OpenStreetMap credit (A15). */
-import { useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { CityView, PegmanDropPreview, ShowcaseItem, Snapshot } from '@view/CityView';
 import { cleanName } from '@view/explore';
 import { t, type Locale, type TranslationKey } from '@view/i18n';
@@ -125,7 +125,7 @@ const PAD = (v: CityView, key: DriveControlKey, other?: DriveControlKey) => ({
 export function PovBar({ v, s }: { v: CityView; s: Snapshot }) {
   const loc = s.locale;
   const metro = s.povMode === 'metro-cab' || s.povMode === 'metro-passenger';
-  const driving = s.povMode === 'drive-cabin' || s.povMode === 'drive-top';
+  const driving = s.povMode === 'drive-cabin' || s.povMode === 'drive-inside';
   const [more, setMore] = useState(false);
   return (
     <>
@@ -143,7 +143,7 @@ export function PovBar({ v, s }: { v: CityView; s: Snapshot }) {
         {more && (
           <div className="pov-more">
             <div className="seg-control">
-              {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
+              {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-inside'] as const).map(pm => (
                 <button key={pm} type="button" aria-pressed={s.povMode === pm} onClick={() => v.setPovMode(pm)} title={t(POV_LABEL[pm].label, undefined, loc)}>
                   <Icon name={POV_LABEL[pm].icon} size={16} />
                 </button>
@@ -176,6 +176,44 @@ export function PovBar({ v, s }: { v: CityView; s: Snapshot }) {
         </div>
       )}
     </>
+  );
+}
+
+/* ---------- inside the car (ADR-064) ---------- */
+
+/** The driver's view: dashboard along the bottom, the two windscreen pillars, and the wheel, turned with the steering
+    every frame (read straight from the view, not through React). It takes no pointer events: dragging still looks round. */
+export function Cockpit({ v }: { v: CityView }) {
+  const wheel = useRef<SVGGElement | null>(null);
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      // the SVG attribute turns round the wheel's own centre (0, 0) in every browser
+      if (wheel.current) wheel.current.setAttribute('transform', `rotate(${(v.povSteer() * 110).toFixed(1)})`);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [v]);
+  return (
+    <div className="cockpit" aria-hidden="true">
+      <svg className="cockpit-pillars" viewBox="0 0 100 100" preserveAspectRatio="none">
+        <path d="M0 0 L7 0 L1.5 100 L0 100 Z" />
+        <path d="M100 0 L93 0 L98.5 100 L100 100 Z" />
+      </svg>
+      <svg className="cockpit-dash" viewBox="0 0 1000 200" preserveAspectRatio="none">
+        <path className="dash-body" d="M0 70 C 220 30, 780 30, 1000 70 L1000 200 L0 200 Z" />
+        <path className="dash-edge" d="M0 70 C 220 30, 780 30, 1000 70" />
+      </svg>
+      <svg className="cockpit-wheel" viewBox="-110 -110 220 220">
+        <g ref={wheel} className="wheel">
+          <circle r="96" className="wheel-rim" />
+          <circle r="22" className="wheel-hub" />
+          <path d="M-22 4 L-92 18 M22 4 L92 18 M0 22 L0 94" className="wheel-spoke" />
+          <path d="M-10 -95 L10 -95" className="wheel-mark" />
+        </g>
+      </svg>
+    </div>
   );
 }
 
