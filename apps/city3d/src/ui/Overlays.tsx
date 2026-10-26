@@ -56,13 +56,6 @@ export function MapDock({ v, s, host, onHint }: { v: CityView; s: Snapshot; host
       {drag && (
         <div className="pegman-drag-ghost" data-kind={drag.preview?.kind ?? 'car'} style={{ transform: `translate3d(${drag.x.toFixed(1)}px, ${drag.y.toFixed(1)}px, 0)` }}>
           <div className="pegman-ghost-figure"><Pegman size={26} /></div>
-          <div className="pegman-ghost-badge">
-            {drag.preview
-              ? drag.preview.kind === 'metro'
-                ? t('cam.pegman.dropMetro', { train: drag.preview.trainIndex + 1, label: drag.preview.label }, loc)
-                : t('cam.pegman.dropCar', { label: drag.preview.label }, loc)
-              : t('cam.pegman.hint', undefined, loc)}
-          </div>
         </div>
       )}
       <div className="map-dock" role="group" aria-label={t('cam.aria', undefined, loc)} onPointerDown={stop} onDoubleClick={stop}>

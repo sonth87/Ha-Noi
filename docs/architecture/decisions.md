@@ -557,6 +557,7 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
      - giao diện vẽ táp-lô, hai cột kính và vô lăng xoay theo tay lái (`Cockpit`, đọc `povSteer()` mỗi khung, không qua React);
      - kéo chuột hoặc ngón tay để quay đầu nhìn.
      Chế độ còn lại là `drive-cabin` (sau xe).
+  5. **Kéo Pegman như Google Maps**: khi kéo chỉ hiện hình người và vòng đích trên bản đồ, không có dòng chữ bên dưới (người dùng góp ý). Chạm mà không kéo vẫn hiện gợi ý một lần.
 - **Hệ quả**: không còn góc nhìn lái từ trên cao. Test: `trafficView.test.ts` (va chạm), `povController.test.ts` (camera trong xe). Hình ảnh khoang lái chưa kiểm bằng mắt (A7).
 
 ---
