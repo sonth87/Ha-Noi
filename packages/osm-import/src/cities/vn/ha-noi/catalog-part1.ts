@@ -189,6 +189,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.6, 3.4],
     footprintSize: [20, 16],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/460267385',
     description: 'Nền điện cổ và đền thờ Huyền Thiên Hắc Đế trên đỉnh núi Sưa cổ kính giữa rừng cây di sản Công viên Bách Thảo.',
   },
   {
@@ -265,6 +267,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'party-central-hq',
     floors: [5.0, 4.4, 4.2, 4.2, 4.0],
     footprintSize: [48, 28],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/207178324',
     description: 'Tổ hợp trụ sở Văn phòng Trung ương Đảng Cộng sản Việt Nam tại khu trung tâm chính trị Ba Đình với kiến trúc đại sảnh cột đá trang nghiêm.',
   },
   {
@@ -351,6 +355,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'party-central-hq',
     floors: [5.4, 4.8, 4.6, 4.6, 4.4],
     footprintSize: [56, 30],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/697161741',
     description: 'Trụ sở Chính phủ và Văn phòng Chính phủ nước Cộng hòa Xã hội Chủ nghĩa Việt Nam tại số 1 Hoàng Hoa Thám, Ba Đình.',
   },
   {
@@ -365,6 +371,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'bac-bo-phu',
     floors: [5.2, 4.8, 4.2],
     footprintSize: [44, 24],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/704153616',
     description: 'Di tích lịch sử Bắc Bộ Phủ (Dinh Thống sứ Bắc Kỳ cũ, xây dựng năm 1918) – nơi diễn ra cuộc Tổng khởi nghĩa giành chính quyền tháng 8/1945 và là nơi Chủ tịch Hồ Chí Minh làm việc sau Cách mạng Tháng Tám.',
   },
   {
@@ -452,6 +460,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [5.0, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2],
     footprintSize: [64, 34],
+    // matched by name, made explicit (CS-09): largest of 2 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1457984454',
     description: 'Quần thể trụ sở Bộ Công an hiện đại trên đại lộ Phạm Văn Đồng và cơ sở trung tâm tại Yết Kiêu – Nguyễn Du.',
   },
   {
@@ -466,6 +476,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'ministry-palace',
     floors: [5.5, 5.0, 4.5, 4.2],
     footprintSize: [48, 30],
+    // matched by name, made explicit (CS-09): largest of 3 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/170207454',
     description: 'Tòa nhà Ngân hàng Nhà nước Việt Nam (Ngân hàng Đông Dương cũ do KTS Félix Dumail thiết kế hoàn thành năm 1930) mang phong cách Art Deco kết hợp phương Đông.',
   },
   {
@@ -480,7 +492,9 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'bac-bo-phu',
     floors: [5.4, 4.8, 4.6, 4.2],
     footprintSize: [46, 26],
-    description: 'Trụ sở Tòa án Nhân dân Tối cao tại phố Lý Thường Kiệt – Hai Bà Trưng với kiến trúc Tân cổ điển Pháp uy nghiêm của Tòa Đại hình Đông Dương xưa cùng công trình mở rộng đối칭.',
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1088847126',
+    description: 'Trụ sở Tòa án Nhân dân Tối cao tại giữa hai phố Lý Thường Kiệt và Hai Bà Trưng, với kiến trúc Tân cổ điển Pháp của Tòa Đại hình Đông Dương xưa cùng phần mở rộng đối xứng.',
   },
   {
     id: 'vien-kiem-sat-nhan-dan-toi-cao',
@@ -510,6 +524,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [5.0, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2, 4.2],
     footprintSize: [46, 26],
+    // matched by name, made explicit (CS-09): largest of 2 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1087707951',
     description: 'Trụ sở Bộ Tài chính Việt Nam trên đại lộ Trần Hưng Đạo, trung tâm quận Hoàn Kiếm.',
   },
   {
@@ -627,6 +643,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'nha-tho-cua-bac',
     floors: [11.5],
     footprintSize: [20, 42],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/698018249',
     description: 'Nhà thờ Cửa Bắc hoàn thành năm 1932 do KTS Ernest Hébrard thiết kế với bố cục bất đối xứng độc đáo, tháp chuông cao bên phải mặt chính và hệ mái ngói Đông Dương.',
   },
   {
@@ -641,6 +659,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'nha-tho-ham-long',
     floors: [12.0],
     footprintSize: [20, 40],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/944513319',
     description: 'Nhà thờ Hàm Long (khánh thành năm 1939, do KTS Nguyễn Cao Luyện thiết kế) nổi tiếng với mặt tiền chạm họa tiết dây thừng dòng Phanxicô và tháp chuông uy nghiêm.',
   },
   {
@@ -669,6 +689,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'nha-tho-ham-long',
     floors: [11.0],
     footprintSize: [18, 38],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/630921540',
     description: 'Nhà thờ và Đan viện Dòng Chúa Cứu Thế Giáo xứ Thái Hà khánh thành năm 1935 bên hồ Đống Đa – Nguyễn Lương Bằng.',
   },
   {
@@ -683,6 +705,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'church-hall',
     floors: [10.0],
     footprintSize: [16, 34],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1040486455',
     description: 'Ngôi nhà thờ cổ vùng Kẻ Bưởi (xây dựng cuối thế kỷ XIX) trên phố Thụy Khuê gần Hồ Tây.',
   },
   {
@@ -795,6 +819,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'french-colonial-university',
     floors: [4.6, 4.2, 4.0],
     footprintSize: [42, 22],
+    // matched by name, made explicit (CS-09): largest of 4 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1526573633',
     description: 'Đại chủng viện Thánh Giuse Hà Nội nằm liền kề Nhà thờ Lớn Hà Nội và Tòa Tổng Giám mục trên phố Nhà Chung.',
   },
   {
@@ -823,6 +849,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'al-noor-mosque',
     floors: [8.5],
     footprintSize: [16, 26],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/700620997',
     description: 'Thánh đường Hồi giáo duy nhất tại Hà Nội (xây dựng năm 1890 bởi các thương nhân Ấn Độ) tại số 12 Hàng Lược với mái vòm củ hành trắng và tháp minaret.',
   },
 
@@ -899,6 +927,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'tuong-dai-cam-tu',
     floors: [8.5],
     footprintSize: [20, 14],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1497569902',
     description: 'Tượng đài kỷ niệm Lời kêu gọi Toàn quốc kháng chiến của Chủ tịch Hồ Chí Minh viết tại làng Vạn Phúc (Hà Đông) tháng 12/1946.',
   },
   {
@@ -1115,6 +1145,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'thap-hoa-phong',
     floors: [3.2, 2.6, 2.2],
     footprintSize: [10, 10],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1219991538',
     description: 'Ngọn bảo tháp gạch 3 tầng 4 cửa vòm hình vuông trên bờ Đông Hồ Hoàn Kiếm – di tích duy nhất còn lại của đại danh lam Chùa Báo Ân thế kỷ XIX.',
   },
   {
@@ -1129,6 +1161,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'thap-nuoc-hang-dau',
     floors: [7.5, 7.5, 6.0],
     footprintSize: [21, 21],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/242518340',
     description: 'Tháp nước Hàng Đậu xây dựng năm 1894 bằng đá hộc lấy từ thành Hà Nội cổ có hình trụ tròn đường kính 19 m, 18 cửa sổ vòm hẹp như pháo đài và mái chóp nón lợp tôn.',
   },
   {
@@ -1199,6 +1233,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'nha-co-ma-may',
     floors: [4.4, 3.4],
     footprintSize: [10, 22],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1557804638',
     description: 'Đình Tú Thị thờ ông Tổ nghề thêu Lê Công Hành tại phố Yên Thái – Hàng Hành.',
   },
   {
@@ -1213,6 +1249,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.8, 3.6],
     footprintSize: [16, 32],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/700840711',
     description: 'Đền Bạch Mã tại 76 Hàng Buồm – ngôi đền cổ kính bậc nhất khu Phố cổ gắn liền với truyền thuyết thần Long Đỗ cưỡi ngựa trắng giúp vua Lý Thái Tổ xây thành Thăng Long.',
   },
   {
@@ -1256,6 +1294,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-market-hall',
     floors: [4.8, 4.2, 4.0],
     footprintSize: [42, 32],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:relation/11623141',
     description: 'Chợ Hôm – Đức Viên trên trục Phố Huế sầm uất, trung tâm kinh doanh vải vóc và giao thương lâu đời của Hà Nội.',
   },
   {
@@ -1302,6 +1342,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.8, 3.6],
     footprintSize: [18, 32],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/700840711',
     description: 'Trấn Đông trong Thăng Long Tứ Trấn thờ thần Long Đỗ – Quảng Lợi Bạch Mã Đại Vương bảo hộ phía Đông kinh thành Thăng Long.',
   },
   {
@@ -1316,6 +1358,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.8, 3.8],
     footprintSize: [24, 34],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/699905206',
     description: 'Trấn Tây trong Thăng Long Tứ Trấn (Linh Lang Từ, dựng năm 1065 thời Lý Thánh Tông) bên hồ Thủ Lệ thờ Hoàng tử Linh Lang Đại Vương, trước cổng có đôi voi quỳ phục.',
   },
   {
@@ -1345,6 +1389,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.8, 3.8],
     footprintSize: [24, 34],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1390007821',
     description: 'Trấn Nam trong Thăng Long Tứ Trấn (Cao Sơn Đại Vương Từ) thờ thần Cao Sơn Đại Vương trên gò đất cao phố Kim Hoa, lưu giữ tấm bia đá năm 1510.',
   },
   {
@@ -1459,6 +1505,8 @@ export const HA_NOI_LANDMARKS_PART1: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-temple',
     floors: [4.6, 3.6],
     footprintSize: [22, 32],
+    // matched by name, made explicit (CS-09): largest of 3 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1040487940',
     description: 'Bích Câu Đạo Quán trên phố Cát Linh gắn liền với truyền thuyết cuộc kỳ ngộ giữa danh sĩ Tú Uyên và tiên nữ Giáng Kiều thời vua Lê Thánh Tông.',
   },
   {

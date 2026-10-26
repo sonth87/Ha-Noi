@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadCity } from '@my-city/osm-import';
 import { tilesOf } from '@render/city';
@@ -6,7 +8,7 @@ import { DEFAULT_AREA_ID, SEE_THROUGH } from './constants';
 import { setGlobalLocale, t } from './i18n';
 import { lightOn } from './lights';
 import { buildPlaceCatalog, selectVisiblePlaceLabels } from './placeInfo';
-import { detailFor, farness, lowerLevel, quality, withOption } from './quality';
+import { LEVELS, LEVEL_NAMES, detailFor, farness, lowerLevel, quality, withOption } from './quality';
 import { CityEventBus } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut } from './seeThrough';
 import { buildStreetCatalog, selectVisibleStreetLabels } from './streetLabels';
@@ -295,3 +297,18 @@ describe('full 12-district CityView initialization & 2-tier spatial chunk stream
 
 
 
+
+describe('docs follow the code (A3, CS-09)', () => {
+  /** the quality table in docs/architecture/city3d.md §6 is the presets, row for row */
+  it('city3d.md lists exactly the quality presets', () => {
+    const doc = readFileSync(join(__dirname, '../../../../docs/architecture/city3d.md'), 'utf8');
+    const yes = (b: boolean) => (b ? 'có' : '—');
+    const trees = { off: 'tắt', simple: 'đơn giản', full: 'đầy đủ' } as const;
+    for (const level of ['low', 'medium', 'high', 'ultra'] as const) {
+      const o = LEVELS[level];
+      const name = level === 'high' ? `${LEVEL_NAMES[level]} (mặc định)` : LEVEL_NAMES[level];
+      const row = `| ${name} | L${o.houseDetail} | ${o.autoDetail ? 'có' : 'không'} | ${Math.round(o.traffic * 100)}% | ${yes(o.wires)} | ${trees[o.trees]} | ${o.viewDistance ? `${o.viewDistance} m` : 'hết'} | ${o.autoQuality ? 'có' : 'không'} | ×${String(o.pixelRatio).replace('.', ',')} | ${yes(o.msaa)} | ${yes(o.bloom)} | ${yes(o.details)} |`;
+      expect(doc).toContain(row);
+    }
+  });
+});

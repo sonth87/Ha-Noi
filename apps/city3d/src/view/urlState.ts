@@ -80,10 +80,12 @@ export function parseUrlState(
   // Support `/@lat,lon,...` in pathname, `#@lat,lon,...` in hash, or `?at=...` in search
   const pathMatch = loc.pathname.match(/\/@([^/]+)/);
   const hashMatch = loc.hash.match(/^#\/?@([^?]+)/);
+  // a link is outside input: a stray '%' must not stop the app from starting (CS-09)
+  const decode = (s: string) => { try { return decodeURIComponent(s); } catch { return s; } };
   if (pathMatch?.[1]) {
-    rawAt = decodeURIComponent(pathMatch[1]);
+    rawAt = decode(pathMatch[1]);
   } else if (hashMatch?.[1]) {
-    rawAt = decodeURIComponent(hashMatch[1]);
+    rawAt = decode(hashMatch[1]);
   }
 
   let searchStr = loc.search;

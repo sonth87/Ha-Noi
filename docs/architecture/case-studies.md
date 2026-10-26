@@ -1,6 +1,6 @@
 # Bài học từ sự cố (case study)
 
-Mục đích: mỗi lần một lỗi "đã sửa mà lại hỏng ở chỗ khác" xảy ra, ghi lại **vì sao nó lặp lại** và biến nó thành **luật cụ thể có test cưỡng chế**, để lần sau không phải sửa từng chỗ. Luật nằm ở [docs/ai/README.md](../ai/README.md) mục 3 (A17–A24). Mỗi case ghi: triệu chứng → nguyên nhân gốc → vì sao lặp lại → cách sửa → luật → rào chắn (test).
+Mục đích: mỗi lần một lỗi "đã sửa mà lại hỏng ở chỗ khác" xảy ra, ghi lại **vì sao nó lặp lại** và biến nó thành **luật cụ thể có test cưỡng chế**, để lần sau không phải sửa từng chỗ. Luật nằm ở [docs/ai/README.md](../ai/README.md) mục 3 (A17–A37); cách làm cụ thể ở [guidelines](../ai/guidelines.md). Mỗi case ghi: triệu chứng → nguyên nhân gốc → vì sao lặp lại → cách sửa → luật → rào chắn (test).
 
 Mẫu để thêm case mới ở cuối file. Một sự cố chỉ được coi là xong khi có **luật và rào chắn**, không chỉ bản sửa.
 
@@ -69,6 +69,76 @@ Mẫu để thêm case mới ở cuối file. Một sự cố chỉ được coi
 - **Luật**: A26 (bộ lọc/tính toán lặp lại dùng một hàm chung, không chép dán) và lợi ích phụ của việc tách hàm: tách phần thuần ra *để viết test*, không chỉ để giảm dòng.
 - **Rào chắn**: `view/chunkMerge.test.ts`.
 
+## CS-09 · Code viết cho một ngã tư chạy trên cả Hà Nội (2026-10-26, đánh giá toàn diện, ADR-059)
+- **Triệu chứng** (9 lỗi, tìm thấy khi đánh giá, phần lớn chưa ai báo):
+  - xe biến mất trên tuyến dài;
+  - rò bộ nhớ GPU khi "Nhìn xuyên";
+  - mô hình Phủ Tây Hồ vẽ trên 8 tòa, Khuê Văn Các trên 3, Chùa Quán Sứ trên 4;
+  - POV không lái được trên đường của chunk tải sau;
+  - tùy chọn MSAA không có tác dụng;
+  - phím tắt chết sau khi bấm một nút;
+  - một ký tự `%` lẻ trong link làm app không khởi động;
+  - bảng chất lượng trong tài liệu lệch code.
+- **Nguyên nhân gốc chung**: các giả định của phạm vi 130 m (một ngã tư, 123 tòa, dữ liệu nạp một lần) không còn đúng khi dữ liệu lên 16.835 tòa, 5.130 làn (dài tới 5,5 km) và được **stream** theo chunk:
+  1. Lọc xe theo **điểm đầu làn** (`lane.path[0]`): đúng khi làn dài 100 m, sai khi làn dài 5 km.
+  2. **Khớp catalog theo tên**: đúng khi mỗi tên là một tòa, sai khi một quần thể có nhiều way cùng tên.
+  3. **Chỉ mục dựng một lần** trong constructor (đường của POV): đúng khi dữ liệu nạp một lần, sai khi stream.
+  4. **Gỡ layer khỏi danh sách mà không giải phóng** (ô cắt của "Nhìn xuyên"): không ai thấy, vì rò từ từ.
+  5. **Tùy chọn chỉ đặt được lúc tạo tài nguyên** (`antialias`), nhưng giao diện cho đổi lúc chạy.
+  6. **Input ngoài không được bảo vệ** (`decodeURIComponent` trong constructor).
+  7. **Phím tắt bị chặn trên mọi `button`**, trong khi Chrome giữ focus ở nút sau khi bấm.
+  8. **Tài liệu ghi số liệu bằng tay**, code đổi sau đó.
+- **Vì sao lặp lại**: không có test nào chạy trên đúng hình dạng dữ liệu thật (làn dài, tên trùng, dữ liệu tới sau, input hỏng). Lỗi hình ảnh chỉ được phát hiện bằng mắt (A7) nên lỗi hiếm hoặc chậm (rò rỉ) không ai thấy.
+- **Sửa**:
+  - `view/trafficView.ts` lọc theo vị trí xe;
+  - `dropTileCut` giải phóng ô cắt, dựng tối đa 1 ô cắt mỗi khung;
+  - `resolveCatalogClaims` (import.ts): mục có `osmSource` chỉ gán cho đúng phần tử đó, không có thì một phần tử lớn nhất, còn lại dùng mô hình chung;
+  - `PovController.addStreets` + lưới ô 64 m cho đường;
+  - `setQuality` dựng lại renderer khi đổi MSAA;
+  - phím tắt chỉ bị chặn trong ô nhập liệu;
+  - `parseUrlState` không ném lỗi;
+  - bảng chất lượng sinh lại và có test.
+- **Luật**: A27 (lọc theo vị trí thật), A28 (vòng đời GPU), A29 (khớp bằng id, một mục một phần tử), A30 (tùy chọn có hiệu lực thật), A31 (dữ liệu stream tới mọi chỉ mục), A32 (việc mỗi khung theo phần nhìn thấy), A33 (input ngoài), A35 (tài liệu có test). Cách làm chi tiết: [guidelines](../ai/guidelines.md).
+- **Rào chắn**:
+  - `view/trafficView.test.ts` (làn 3 km, camera ở cuối);
+  - `osm-import/src/catalog.test.ts` (không mô hình riêng nào bị nhân bản, kiểm cả đường stream; mọi `osmSource` có trong dữ liệu);
+  - `view/povController.test.ts` (đường tới sau lái được);
+  - `view/urlState.test.ts` (link hỏng);
+  - `render/hygiene.test.ts` (`this.layers.delete` chỉ trong `disposeLayerObj`);
+  - `view/quality.test.ts › docs follow the code`.
+
+## CS-10 · Chữ do máy sinh lẫn vào nội dung (2026-10-26)
+- **Triệu chứng**:
+  - mô tả TAND Tối cao kết thúc bằng "đối칭" (chữ Hàn);
+  - "Khách sạn精品 Silk Path" (chữ Hán);
+  - chú thích code có "спиral" (chữ Kirin).
+- **Nguyên nhân gốc**: ~3.000 dòng mô tả trong catalog được viết nhanh bằng công cụ sinh văn bản, dán thẳng vào code, không qua kiểm.
+- **Vì sao nguy hiểm**: người xem đọc thấy chữ rác. Cùng nguồn đó có thể có lỗi sự kiện (năm, địa chỉ) mà không test nào bắt được.
+- **Sửa**: thay 3 chỗ; thêm test quét ký tự.
+- **Luật**: A34. Nội dung sự kiện cần nguồn ([guidelines](../ai/guidelines.md) §8).
+- **Rào chắn**:
+  - `render/hygiene.test.ts › clean text` (mã nguồn app + `core`, `osm-import`, `theme`);
+  - `osm-import/src/catalog.test.ts` (tên, alias, địa chỉ, mô tả của catalog).
+- **Còn lại**: 208 mô tả chưa được kiểm sự kiện từng câu. Việc này cần người dùng duyệt theo đợt (backlog).
+
+## CS-11 · Báo cáo đánh giá có nhận định chưa kiểm (2026-10-26)
+- **Triệu chứng**: bản đánh giá đầu tiên nói "`urlState` chưa có test" (thật ra đã có trong `view/quality.test.ts`), và nghi "Tòa án ở Hai Bà Trưng" là sai địa chỉ (thật ra là tên **phố** Hai Bà Trưng: "Số 48 Lý Thường Kiệt & 43 Hai Bà Trưng").
+- **Nguyên nhân gốc**: kết luận từ tìm kiếm theo tên file (`urlState.test.ts` không có) và từ đọc lướt, không đối chiếu lại nguồn.
+- **Sửa**: phát hiện khi bắt tay sửa; đính chính trong báo cáo.
+- **Luật**: A36. Mỗi nhận định trong đánh giá phải được đối chiếu lại; tách "đã xác minh" và "nghi vấn".
+- **Rào chắn**: quy trình (guidelines §11). Không có test tự động.
+
+## CS-12 · Vào chế độ lái lúc không muốn (2026-10-26, ADR-063)
+- **Triệu chứng**: người dùng "thỉnh thoảng ấn nhầm kiểu gì đó mà nó vào chế độ lái xe".
+- **Nguyên nhân gốc**:
+  - chạm vào nút Pegman mà ngón tay xê dịch dưới 8 px thì code thả người xuống giữa màn hình và vào chế độ lái;
+  - phím `P` chuyển thẳng sang lái tàu.
+  Cả hai biến một thao tác nhỏ, dễ nhầm, thành một thay đổi lớn của cả màn hình.
+- **Vì sao không ai thấy**: thao tác "chạm không kéo" được viết như một lối tắt có chủ ý, nhưng trên mobile nó trùng với chạm nhầm; không có test nào nói thao tác nào được phép vào chế độ.
+- **Sửa**: chỉ vào chế độ nhập vai từ menu hoặc khi kéo-thả Pegman lên bản đồ; chạm thì hiện gợi ý; `P` mở menu.
+- **Luật**: guidelines §7 (thay đổi lớn cần thao tác chủ ý; nút ≥ 44 px trên cảm ứng; menu là sheet có nút đóng, Esc, chạm ra ngoài).
+- **Rào chắn**: `view/entryPoints.test.ts` (không phím đơn nào đổi `povMode`). Thao tác chạm trên Pegman nằm trong React, chưa có test tự động (A7).
+
 ---
 
 ## Mẫu case mới
@@ -89,3 +159,6 @@ Mẫu để thêm case mới ở cuối file. Một sự cố chỉ được coi
 4. Lỗi này có thể xảy ra ở **chỗ khác cùng loại** không (cầu khác, hồ khác, công trình khác)? Nếu có, sửa ở chỗ chung. (A21)
 5. Việc dựng mới có trần **bộ nhớ và thời gian**, và có chạy lần đầu trong lúc người dùng thao tác không? (A22)
 6. Có **test trên dữ liệu thật** và **ảnh mặt bằng** cho trường hợp này chưa? (A24)
+7. Thuộc tính / bộ lọc này có còn đúng khi đối tượng **dài**, tên **trùng**, dữ liệu **tới sau** (stream), input **hỏng**? (A27, A29, A31, A33)
+8. Gỡ hay thay tài nguyên GPU có **giải phóng** cái cũ không? (A28)
+9. Vòng lặp mới có chạy **mỗi khung trên toàn bộ** dữ liệu không? (A32)

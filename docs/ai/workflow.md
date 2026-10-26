@@ -15,6 +15,7 @@
 
 ## Sau khi làm (Definition of Done cho một việc)
 - [ ] `pnpm typecheck && pnpm lint && pnpm test` ở gốc sạch (hoặc báo rõ lỗi nào và vì sao).
+- [ ] Đã đi qua [danh sách kiểm](guidelines.md#danh-sách-kiểm-trước-khi-báo-xong-bổ-sung-cho-workflow) 10 câu ở cuối guidelines.
 - [ ] `pnpm build` không lỗi (khi việc chạm tới cấu hình build hoặc trước khi đóng bước).
 - [ ] Đã nhờ người dùng xem trên dev server (A7), kèm hướng dẫn phím và click cần thử.
 - [ ] Checklist: `[~]` → `[x]`.

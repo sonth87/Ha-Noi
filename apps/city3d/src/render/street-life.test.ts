@@ -26,7 +26,14 @@ describe('street furniture in 3D', () => {
     for (const c of cells) for (const l of [c.poles, c.fixtures, c.trees, c.simpleTrees]) for (const g of l.surfaces.values()) expect(finite(g)).toBe(true);
     const lamps = new Set(cells.flatMap(c => [...c.fixtures.lamps.keys(), ...c.poles.lamps.keys()]));
     expect(lamps.has(STREET_LAMPS)).toBe(true);
-    for (const g of ['x', 'y'] as const) for (const l of ['stop', 'wait', 'go'] as const) expect(lamps.has(signalLamp(g, l))).toBe(true);
+    // every signal head belongs to a junction, and a junction has all six lights (two groups × three)
+    const junctions = new Set([...lamps].filter(l => l.startsWith('signal/')).map(l => l.split('/')[1]!));
+    expect(junctions.size).toBeGreaterThan(0);
+    expect([...junctions].every(j => j.length > 0)).toBe(true);
+    const j = [...junctions][0]!;
+    const groups = (['x', 'y'] as const).filter(g => lamps.has(signalLamp(j, g, 'go')));
+    expect(groups.length).toBeGreaterThan(0);
+    for (const g of groups) for (const l of ['stop', 'wait', 'go'] as const) expect(lamps.has(signalLamp(j, g, l))).toBe(true);
   });
 
   it('lights every lamp head on five faces and pools light under each', () => {

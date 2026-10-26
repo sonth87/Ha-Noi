@@ -63,13 +63,26 @@ Nút **Tùy chỉnh** (phím `G`) mở Drawer nổi bên phải:
 Chọn một mức (Thấp → Rất cao) hoặc chỉnh từng tùy chọn:
 - **Chi tiết nhà**: L0 chỉ khối · L1 có cửa sổ · L2 nhà đủ hình (tầng trệt, mái hiên, biển, ban công, mái) · L3 mọi chi tiết nhỏ (chậu cây, cục nóng, bồn nước, ăng-ten…).
 - **Tự giảm chi tiết khi thu nhỏ**: thu nhỏ đến mức chi tiết không còn nhìn ra thì tự vẽ ít đi (dòng trạng thái hiện mức đang vẽ, ví dụ "chi tiết L2"); nét viền nhạt dần, xe ở xa bỏ nét rồi bỏ viền, xe máy ẩn khi rất xa, cây thành dạng đơn giản, nên ở xa không thành vệt đen. Phóng to lại là chi tiết hiện dần.
-- **Mật độ xe** (0–100%, mặc định 30%), **Cột và dây điện**, **Cây** (không / đơn giản / đầy đủ).
+- **Mật độ xe** (0–100%, mặc định 30%): xe chạy trên các phố trong khoảng 600 m quanh chỗ đang xem, rẽ ở các ngã tư, đi tới đâu có xe tới đó. **Cột và dây điện**, **Cây** (không / đơn giản / đầy đủ).
 - **Tầm nhìn xa**: chỉ vẽ nhà, đồ phố và xe trong bán kính đã chọn quanh tâm nhìn (đường vẫn vẽ hết).
 - **Tự hạ mức khi chậm**: nếu máy chạy dưới 28 fps suốt 3 giây thì tự xuống một mức và báo trong bảng.
-- Cửa sổ, nét viền khối, nét cạnh, nét chi tiết (viền cửa), glow, khử răng cưa, độ phân giải.
+- Cửa sổ, nét viền khối, nét cạnh, nét chi tiết (viền cửa), glow, khử răng cưa, độ phân giải. Đổi **khử răng cưa** thì khung cảnh được dựng lại (chớp một chút): trình duyệt chỉ cho chọn khử răng cưa lúc tạo vùng vẽ.
 
 Máy yếu thì chọn **Thấp**. Lựa chọn được nhớ trên máy. Dòng dưới cùng của bảng cho biết số tam giác, cửa và nét đang vẽ; dòng trạng thái ở chân trang có fps.
 
 ## Dữ liệu
 
 Bản đồ (đường, mặt bằng nhà, cầu, vườn) lấy từ OpenStreetMap, © OpenStreetMap contributors. Số tầng của phần lớn nhà là **đoán theo luật** vì OSM không có; muốn sửa nhà nào thì xem [osm-import](../architecture/osm-import.md) §6 và sửa trong `packages/osm-import/src/area-nga-tu-thai-ha.ts`.
+
+## Lái xe (chế độ POV)
+
+- **W / ↑**: ga · **S / ↓**: phanh, giữ khi đã dừng thì lùi · **A D / ← →**: lái · **Space**: phanh tay (rẽ gắt hơn) · **V**: đổi góc camera gần / cao · **C**: nhìn thẳng lại · kéo chuột: nhìn quanh.
+- Xe đi tối đa khoảng 70 km/h, rẽ gọn ở tốc độ thấp. Chạm lề thì xe trượt dọc lề. Xe không tự bẻ lái.
+
+## Giao diện (ADR-063)
+
+- **Thanh trên**: *Khu vực* (bay tới một nơi), *Công trình* (danh sách để mở mô hình 3D hoặc xem trên bản đồ), *Trải nghiệm* (lái tàu, ngồi tàu, lái xe), Ngày/Đêm, *Tùy chỉnh* (màu bản đồ, nhìn xuyên, ngôn ngữ, đèn, đồ họa).
+- **Bấm vào một tòa nhà** để mở thẻ thông tin; nút **Mô hình 3D** mở riêng tòa đó trên đế. Trong mô hình có **Về bản đồ** và **Xem vị trí trên bản đồ**.
+- **Vào chế độ lái**: chọn trong *Trải nghiệm*, hoặc **kéo** biểu tượng người ở góc phải dưới thả vào một con phố hay đường ray Metro. Chạm vào biểu tượng chỉ hiện hướng dẫn. Thoát bằng nút **Thoát** hoặc Esc.
+- **Trên điện thoại**: menu và thẻ thông tin mở từ dưới lên; chạm vùng tối phía trên hoặc nút ✕ để đóng.
+- Phím tắt: `G` tùy chỉnh · `P` menu trải nghiệm · `Esc` đóng menu / thẻ / thoát chế độ lái.

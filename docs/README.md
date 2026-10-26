@@ -19,12 +19,13 @@ Tầm nhìn và yêu cầu sản phẩm hiện vẫn ở app cũ; sẽ viết l�
 | [architecture/house-spec.md](architecture/house-spec.md) | Đặc tả nhà của generator (mét) |
 | [architecture/city3d.md](architecture/city3d.md) | App 3D: cấu trúc, dựng hình, camera 2D/3D, màu, chất lượng |
 | [user/guide.md](user/guide.md) | Hướng dẫn dùng app 3D: chạy, phím, bảng chất lượng |
-| [architecture/case-studies.md](architecture/case-studies.md) | Sự cố đã gặp → nguyên nhân gốc → luật A17–A24 → rào chắn (test) |
+| [architecture/case-studies.md](architecture/case-studies.md) | Sự cố đã gặp → nguyên nhân gốc → luật A17–A37 → rào chắn (test) |
 | [architecture/decisions.md](architecture/decisions.md) | ADR-032 trở đi, câu hỏi mở |
 | [product/glossary.md](product/glossary.md) | Thuật ngữ Việt ↔ code |
 | [plan/roadmap.md](plan/roadmap.md) | M1–M5: mục tiêu, bàn giao, DoD, rủi ro |
 | [plan/checklist.md](plan/checklist.md) | Việc cụ thể từng bước, trạng thái |
-| [ai/README.md](ai/README.md) | Bối cảnh, bản đồ repo, luật A1–A15, lệnh, cách lấy dữ liệu OSM |
+| [ai/README.md](ai/README.md) | Bối cảnh, bản đồ repo, luật A1–A37, lệnh, cách lấy dữ liệu OSM |
+| [ai/guidelines.md](ai/guidelines.md) | Hướng dẫn kỹ thuật theo mảng + danh sách kiểm trước khi báo xong (từ các sự cố CS-01…CS-12) |
 | [ai/conventions.md](ai/conventions.md) | Phụ thuộc giữa các gói, TypeScript, đặt tên, test |
 | [ai/workflow.md](ai/workflow.md) | Quy trình một đầu việc, mẫu ADR |
 

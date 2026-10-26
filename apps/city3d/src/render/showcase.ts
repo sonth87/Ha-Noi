@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import {
   bbox,
+  centroid,
   houseStoreys,
   resolveHouse,
   type Building,
@@ -62,6 +63,8 @@ export interface ShowcaseItem {
   zoom: number;
   /** Half-size of the diorama plate (m), for clamping camera pan */
   radius: number;
+  /** where it stands on the city map (m), when it is on the map: "show on the map" flies here */
+  at?: Vec2;
 }
 
 export interface BuiltShowcase {
@@ -302,6 +305,7 @@ export function showcasesOf(city: City): ShowcaseItem[] {
   const norm = (s: string) => s.trim().toLowerCase();
   const catalogCoveredNames = new Set<string>();
   const catalogCoveredSources = new Set<string>();
+  const bySource = new Map(city.buildings.map(b => [b.source, b]));
 
   // 1. Curated 13-Category City Landmarks Catalog (208 iconic Hanoi relics, citadels, ministries, churches, pagodas, bridges...)
   if (city.landmarksCatalog) {
@@ -345,15 +349,13 @@ export function showcasesOf(city: City): ShowcaseItem[] {
         isBespoke: true,
         zoom: Number(zoom.toFixed(2)),
         radius,
+        ...(entry.osmSource && bySource.get(entry.osmSource) ? { at: centroid(bySource.get(entry.osmSource)!.footprint) } : {}),
       });
     }
   }
 
   // 2. Additional bespoke OSM landmarks not already represented in `landmarksCatalog`
   //    (e.g. Khuê Văn Các, Nhà sàn Bác Hồ, Văn Miếu Môn, Điện Đại Thành, Nhà Thái Học, VPBank Tower, Trung tâm Chiếu phim Quốc gia...)
-  const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
-  const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
-
   const osmLandmarks = city.buildings.filter(b => {
     if (!b.name || !b.model) return false;
     return !GENERIC_AUTO_MODELS.has(b.model);
@@ -368,31 +370,7 @@ export function showcasesOf(city: City): ShowcaseItem[] {
     if (seenNames.has(nKey) || catalogCoveredSources.has(b.source)) continue;
     seenNames.add(nKey);
 
-    const lv = maxLevels(b);
-    const h = Math.round(maxHeight(b));
-    const box = bbox(buildingBoundsPts(b));
-    const span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
-    const radius = Math.max(24, Math.round(span * 0.72 + 14));
-    const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
-    const cat = classifyOsmBuildingCategory(b);
-    out.push({
-      id: `bldg:${b.id}`,
-      countryCode: loc.countryCode,
-      countryName: loc.countryName,
-      cityId: loc.cityId,
-      cityName: loc.cityName,
-      district: b.district ?? 'Hà Nội',
-      categoryId: cat.id,
-      group: cat.title,
-      name: `${name} (${lv} tầng)`,
-      subtitle: `${b.address ? `${b.address} · ` : ''}${b.district ? `${b.district} · ` : ''}${b.description ?? `${lv} tầng (${h} m) · dữ liệu mặt bằng OpenStreetMap`}`,
-      levels: lv,
-      heightM: h,
-      address: b.address,
-      isBespoke: Boolean(b.model),
-      zoom: Number(zoom.toFixed(2)),
-      radius,
-    });
+    out.push(showcaseItemForBuilding(b, loc));
   }
 
   // 3. Elevated Metro Stations (Tuyến 2A Cát Linh – Hà Đông & Tuyến 3 Nhổn – Ga Hà Nội)
@@ -417,6 +395,7 @@ export function showcasesOf(city: City): ShowcaseItem[] {
       isBespoke: true,
       zoom: 3.4,
       radius: 46,
+      at: [st.at[0], st.at[1]],
     });
   }
 
@@ -424,6 +403,41 @@ export function showcasesOf(city: City): ShowcaseItem[] {
   out.sort((a, b) => (Number.parseInt(a.categoryId, 10) || 99) - (Number.parseInt(b.categoryId, 10) || 99));
 
   return out;
+}
+
+const maxLevels = (b: Building) => Math.max(...b.parts.map(p => p.floors.length));
+const maxHeight = (b: Building) => Math.max(...b.parts.map(p => p.z0 + p.floors.reduce((a, h) => a + h, 0)));
+
+/** The diorama entry of any building of the map: the curated list holds the landmarks, but every building can be
+    seen on its own plate from its popup (a generated tube house too). */
+export function showcaseItemForBuilding(b: Building, loc: ReturnType<typeof resolveCityHierarchy>): ShowcaseItem {
+  const name = b.name?.trim() || 'Công trình';
+  const lv = maxLevels(b);
+  const h = Math.round(maxHeight(b));
+  const box = bbox(buildingBoundsPts(b));
+  const span = Math.max(box.x1 - box.x0, box.y1 - box.y0);
+  const radius = Math.max(24, Math.round(span * 0.72 + 14));
+  const zoom = Math.max(2.2, Math.min(7.5, 220 / Math.max(span * 1.15, h * 1.25)));
+  const cat = classifyOsmBuildingCategory(b);
+  return {
+    id: `bldg:${b.id}`,
+    countryCode: loc.countryCode,
+    countryName: loc.countryName,
+    cityId: loc.cityId,
+    cityName: loc.cityName,
+    district: b.district ?? loc.cityName,
+    categoryId: cat.id,
+    group: cat.title,
+    name: `${name} (${lv} tầng)`,
+    subtitle: `${b.address ? `${b.address} · ` : ''}${b.district ? `${b.district} · ` : ''}${b.description ?? `${lv} tầng (${h} m) · dữ liệu mặt bằng OpenStreetMap`}`,
+    levels: lv,
+    heightM: h,
+    ...(b.address ? { address: b.address } : {}),
+    isBespoke: Boolean(b.model),
+    zoom: Number(zoom.toFixed(2)),
+    radius,
+    at: centroid(b.footprint),
+  };
 }
 
 /**
@@ -688,6 +702,11 @@ export function buildShowcase(city: City, id: string): BuiltShowcase | null {
         radius: Math.max(18, Math.round(Math.max(arch.w, arch.d) * 0.9 + 10)),
       };
     }
+  }
+  // any building of the map, from its popup (not only the curated landmarks)
+  if (!item && id.startsWith('bldg:')) {
+    const found = city.buildings.find(x => x.id === id.slice('bldg:'.length));
+    if (found) item = showcaseItemForBuilding(found, loc);
   }
   if (!item) return null;
 

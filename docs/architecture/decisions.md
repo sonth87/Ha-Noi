@@ -358,6 +358,185 @@ ADR-001 … ADR-031 là của app SVG, giữ nguyên ở [apps/svg/docs/architec
   6. **Độ tin cậy / bảo mật**: `webglcontextrestored` (dừng vẽ khi mất context, dựng lại kích thước khi có lại); `ErrorBoundary` có nút "Tải lại với đồ họa thấp"; `iconHtml` của extension chỉ nhận SVG đơn giản (`safeIcon.ts`); thêm CI (`.github/workflows/ci.yml`).
 - **Chưa làm (đã biết)**: dựng ô / import chunk vẫn chạy trên luồng chính (nên chuyển sang Web Worker); tải skeleton 4,9 MB trước khi vào app; chưa có đo fps thật trên tablet; đường viền ngoài Hà Nội (`HANOI_OUTER_BOUNDARY`) vẫn là đa giác tay vẽ; Cầu Nhật Tân chỉ còn mặt cầu mặc định từ OSM (cong 227 m nên mô hình hộp thẳng không dùng được, cần bộ dựng theo đường); 24 công trình biểu tượng chưa có đa giác OSM (Keangnam, Đình Vẽ, Times City…) chỉ xem được trong Diorama.
 
+### ADR-059 · Sửa sau đánh giá toàn diện: quy mô cả thành phố, vòng đời GPU, khớp catalog bằng id; thêm `three-mesh-bvh`; bộ quy tắc A27–A36
+- **Trạng thái**: Đã chốt (2026-10-26, người dùng đồng ý "sửa theo lộ trình" sau bản đánh giá `city3d`, và yêu cầu biến các vấn đề thành quy tắc, hướng dẫn).
+- **Bối cảnh**: dữ liệu đã lên 16.835 tòa, 4.378 ô, 5.130 làn (dài tới 5,5 km) và được stream theo chunk, trong khi nhiều phần code còn giả định phạm vi một ngã tư. Lần đánh giá tìm ra 9 lỗi (CS-09), chữ rác trong catalog (CS-10) và vài nút thắt hiệu năng đo được.
+- **Quyết định**:
+  1. **Lỗi (P0)**:
+     - lọc xe theo vị trí xe (`view/trafficView.ts`);
+     - giải phóng ô cắt "Nhìn xuyên" (`dropTileCut`), tối đa 1 ô cắt dựng lại mỗi khung;
+     - mục catalog có `osmSource` chỉ gán mô hình riêng cho đúng phần tử đó, không có thì cho một phần tử lớn nhất, còn lại dùng mô hình chung (`resolveCatalogClaims`);
+     - POV nhận đường của chunk tải sau (`PovController.addStreets`, lưới 64 m);
+     - đổi MSAA thì dựng lại renderer (unmount/mount; khi tự hạ mức thì không);
+     - phím tắt chỉ bị chặn trong ô nhập liệu;
+     - `parseUrlState` không ném lỗi với link hỏng;
+     - bảng chất lượng trong `city3d.md` sinh lại và có test.
+  2. **Quy mô (P1, A32)**: `view/spatialGrid.ts` và `view/tileIndex.ts`. Lưới cho ô nhà (256 m), ô công trình cao (512 m), ô đường, ô đồ phố, mặt bằng tòa. Các tập "đang hiện", "đã dựng", "đang cắt" thay cho các vòng lặp trên toàn bộ trong `detailStep`, `distanceStep`, `evictFarCaches`, `syncForegroundCut`, `shownStats` và picking. Trong POV, công trình cao chỉ thấy trong 3 km (trước đây không giới hạn, vào POV là dựng mọi ô cao của thành phố). Vào POV chỉ dựng đồng bộ các ô trong 180 m.
+  3. **Đèn (P1)**: `view/windowPainter.ts`. Đổi theme hay tỉ lệ cửa sáng chỉ tô các layer đang hiện; layer ẩn được tô lại khi hiện ra. Chuyển ngày/đêm 5 bước thay vì 10. Số đo: tô lại 155 layer mất 54 ms; trước đây chạy 10 lần cho mỗi lần đổi.
+  4. **Picking (P1)**: thêm phụ thuộc **`three-mesh-bvh@0.9.15`** (MIT, ghim đúng phiên bản như `three`). Lý do: raycast vào 945 nghìn tam giác của nền mất ~45 ms, mỗi 45 ms khi rê chuột; có BVH còn ~0,07 ms. Dùng `indirect: true` để giữ thứ tự tam giác (`Layer.ownerOf`, `floorAt` dựa vào nó; có test so với raycast thường). Chỉ geometry ≥ 20.000 tam giác mới có BVH, dựng từng cái lúc rảnh (`BvhBuilder`, tối đa ~107 ms một cái). Phương án đã cân nhắc: tự viết lưới tam giác 2D cho nền phẳng. Không chọn vì phải tự bảo trì, và không giúp được công trình nhiều tầng.
+  5. **Ingest chunk (P1)**:
+     - catalog địa điểm và catalog phố được cập nhật từng phần (`addBuildingsToCatalog`, `updateStreetCatalog`); trước đây dựng lại toàn bộ;
+     - mặt bằng tòa thêm theo tòa mới;
+     - ô đường và đồ phố của chunk dựng lúc rảnh (`view/idleQueue.ts`).
+     - Số đo (V8 profiler, 5 chunk): ingest 495 ms → 276 ms. Phần còn lại là mạng đường của chunk.
+  6. **Tách `CityView`** (3.346 → 3.270 dòng, chốt 3.275): `tileIndex.ts`, `windowPainter.ts`, `chunkStreamer.ts`, `idleQueue.ts`, `trafficView.ts`, `picking.ts`; `quickPlaces` sang `placeInfo.ts`. Snapshot `heading` tối đa 10 lần/giây.
+  7. **Importer chung không chứa dữ liệu thành phố**: `AreaConfig.skipBuildings` thay cho 2 id cứng trong `import.ts` (có test).
+  8. **Quy tắc**: luật A27–A36 (`docs/ai/README.md`), hướng dẫn theo mảng (`docs/ai/guidelines.md`), case study CS-09–CS-11.
+- **Chưa làm (để lần sau, cần người dùng chốt)**:
+  - tính sẵn mô hình thành phố / mạng đường lúc build (bỏ import trên luồng chính);
+  - worker lâu dài cho mạng đường của chunk;
+  - tách React theo selector;
+  - chuyển landmark Hà Nội trong `render/landmarks.ts` vào `landmarks/vn/ha-noi/`;
+  - catalog thành file dữ liệu có schema và nguồn;
+  - xe sinh quanh camera, đèn tín hiệu theo từng nút, xe rẽ;
+  - kiểm sự kiện 208 mô tả.
+- **Hệ quả**: đổi MSAA làm mất vài khung hình (dựng lại renderer). Công trình cao xa hơn 3 km không hiện trong POV. Thêm một phụ thuộc: chunk `three` của bản build tăng 548 → 617 KB (138 → 158 KB gzip).
+
+### ADR-060 · Đợt 2 sau đánh giá: khởi động trong worker (không tính sẵn lúc build), xe quanh camera, đèn theo từng nút, va chạm POV, landmark theo thành phố
+- **Trạng thái**: Đã chốt (2026-10-26, người dùng: "cứ làm tiếp đi" sau ADR-059).
+- **Quyết định**:
+  1. **Khởi động trong worker, không tính sẵn lúc build.**
+     - Số đo:
+       - `importArea` lúc khởi động mất 350–430 ms trên luồng chính (laptop);
+       - mô hình thành phố sau import nặng **12 MB JSON**, gấp đôi dữ liệu OSM thô (skeleton 4,9 MB + chunk).
+     - Tính sẵn lúc build sẽ bắt người dùng tải nhiều hơn, và thêm một loại file sinh sẵn có thể bị cũ.
+     - Vì vậy `view/baseWorker.ts` tự tải, import, dựng mạng đường, đồ phố, 6 batch nền rồi gửi về một lần. Luồng chính chỉ đổi batch thành layer.
+     - Worker lỗi hoặc quá 60 s thì app khởi động như cũ trên luồng chính.
+  2. **Chunk stream import trong worker sống lâu** (`chunkWorker.ts`, `chunkClient.ts`): mỗi chunk tốn 40–180 ms trên luồng chính. Đường skeleton gửi một lần lúc khởi tạo. Không có worker thì import tại chỗ (cùng hàm, có test).
+  3. **Xe quanh camera** (`TrafficArea`):
+     - Số đo: 40.475 xe cho cả thành phố ở mật độ 30%; giới hạn cũ 900 xe chỉ còn ~2% mật độ.
+     - Nay xe ở mọi làn đi qua vòng 800 m quanh tâm nhìn (≈1.760 xe ở 30%, bước mô phỏng 0,43 ms). Tối đa 4.000 xe.
+     - Chọn lại làn khi tâm nhìn đi quá 267 m. Xe đang chạy giữ trạng thái theo id.
+  4. **Đèn tín hiệu theo từng nút**:
+     - Core: `signalClusters` (các nút có đèn cách nhau < 40 m là một nút giao, gom bằng lưới ô và union-find), `signalOffset` (độ lệch pha theo id), `signalsOf`.
+     - Vạch dừng và cột đèn mang `junction`; lamp là `signal/<junction>/<x|y>/<light>`.
+     - `stepTraffic` nhận đèn theo từng nút (`SignalSource`).
+     - View (`SignalClock`) chỉ đổi lamp của nút quanh tầm nhìn. Nút gần gốc bản đồ (ngã tư Thái Hà) giữ chu kỳ gốc nên dòng trạng thái không đổi.
+  5. **Va chạm POV**:
+     - Xe người chơi bị đẩy khỏi xe máy tính và mất gần hết tốc độ (`separateFromTraffic`).
+     - Xe máy tính phanh khi xe người chơi ở phía trước trong làn của nó (`playerAhead`, tham số mới `obstacleAhead` của `stepTraffic`).
+  6. **Landmark theo thành phố (A16)**:
+     - `render/landmarks.ts` (2.860 dòng, toàn mô hình Hà Nội) chuyển sang `render/landmarks/vn/ha-noi/models.ts` bằng `git mv`.
+     - `render/landmarks.ts` mới chỉ ghép các thành phố qua giao diện `CityLandmarks`.
+     - Có test: chỉ lớp ghép được import từ thư mục của một thành phố.
+  7. **Catalog**:
+     - 41 mục khớp OSM theo tên được ghi `osmSource` tường minh (12 mục khớp nhiều tòa: chọn tòa lớn nhất, có chú thích "cần đối chiếu").
+     - Test: mục nào khớp được tòa theo tên thì phải có `osmSource`.
+     - **129/208 mục không có trong dữ liệu OSM** nên chỉ hiện trong diorama, không có trên bản đồ (A17).
+     - Giữ catalog ở dạng TypeScript có kiểu, không chuyển sang JSON: kiểu đã là schema và test đã kiểm dữ liệu; đổi định dạng không thêm độ đúng.
+  8. **Tách `mount()`**: bộ xử lý chuột, cảm ứng, picking chuyển sang `view/mapInput.ts` (giao diện `MapInputHost`); Pegman sang `view/pegman.ts`. `CityView.ts` còn 2.998 dòng (chốt 3.000).
+- **Chưa làm, có lý do**:
+  - **Xe rẽ ở nút giao.** Cần đồ thị làn có đường cong qua nút, luật nhường đường giữa các hướng rẽ, và cân bằng mật độ (bỏ vòng khép kín thì xe dồn về các làn cụt). Không kiểm được bằng mắt trong lần làm này (A7), nên thiết kế trước, làm sau.
+  - **Tách React theo selector**: cần đo bằng React Profiler trên trình duyệt trước (A25). `heading` đã giới hạn 10 lần/giây.
+  - **Kiểm sự kiện 208 mô tả**: người dùng duyệt theo đợt.
+- **Hệ quả**:
+  - Thêm 2 worker vào bản build (`baseWorker` 669 KB, `chunkWorker` 259 KB, tải song song).
+  - Đường của chunk tải sau chưa có làn xe; xe chỉ chạy trên mạng đường lúc khởi động (skeleton + 4 chunk đầu).
+  - Công trình cao xa hơn 3 km không hiện trong POV.
+
+### ADR-061 · Xe rẽ ở nút giao: lượt rẽ giữa các làn, đường cong Bézier, nhường chỗ ở làn đích
+- **Trạng thái**: Đã chốt (2026-10-26, người dùng: "chốt thiết kế, làm xong đi").
+- **Bối cảnh**:
+  - Làn xe là một tuyến đi thẳng qua các nút; xe tới cuối làn thì quay về đầu làn (mờ dần ở 8 m hai đầu).
+  - Ở ngã ba, xe "biến mất" ở cuối phố cụt và hiện lại ở đầu phố; không xe nào rẽ (backlog từ M5).
+- **Quyết định**:
+  1. **Lượt rẽ (`LaneTurn`, core `trafficLanes`)**: ở mỗi nút có ≥ 3 nhánh mà hai làn của **hai tuyến khác nhau** cùng đi qua, có một lượt rẽ từ làn đến (L) sang làn đi (M) khi:
+     - L tới được nút và M đi ra khỏi nút ≥ 15 m;
+     - góc giữa hai hướng từ 30° tới 150° (không quay đầu, không nhập làn song song);
+     - cao độ hai làn tại nút chênh < 0,6 m (không rẽ từ cầu xuống đường dưới).
+     Điểm rời làn L: trước nút một khoảng bằng nửa bề rộng đường cắt ngang (đúng chỗ ngay sau vạch dừng). Điểm vào làn M: sau nút một khoảng tương tự.
+  2. **Đường cong**: Bézier bậc 2 từ điểm rời tới điểm vào, điểm điều khiển là giao của hai tiếp tuyến (hai đường song song thì lấy trung điểm). Vì làn đã lệch về bên phải đường, rẽ phải đi vòng trong, rẽ trái đi vòng ngoài qua giữa nút, đúng chiều đường ở Việt Nam.
+  3. **Khi nào rẽ**:
+     - Giữa làn: mỗi lần tới một nút, xe quyết định một lần, rẽ với xác suất 25%. Quyết định tất định theo id xe và số lần đã quyết định.
+     - Cuối làn (làn kết thúc ở nút, như phố cụt ra ngã ba): xe **bắt buộc** rẽ, nên không còn quay về đầu làn ở đó.
+     - Chỉ chọn lượt hợp loại: xe máy không vào làn chỉ dành cho ô tô (cầu), ô tô không vào làn mép cho xe máy.
+  4. **Nhường và cân bằng**:
+     - Chỉ vào làn M khi chỗ vào trống (không xe cùng vệt trong 6 m trước và 4 m sau).
+     - Lượt rẽ tùy chọn mà không trống thì đi thẳng.
+     - Lượt bắt buộc thì đứng chờ ở điểm rời.
+     - Lượt tùy chọn còn bị bỏ khi làn M đã đông hơn làn L, để xe không dồn về một số làn sau khi bỏ vòng khép kín.
+  5. **Trong lúc rẽ**:
+     - Xe đi theo đường cong với tốc độ tối đa 4,5 m/s (xe máy 5 m/s), và chậm dần trước điểm rời.
+     - Với việc giữ khoảng cách, xe được tính là đã ở làn M, tại vị trí (điểm vào − quãng còn lại). Xe sau trên làn M vì thế thấy nó và giữ khoảng cách.
+     - Đèn tín hiệu không đổi: vạch dừng nằm trước điểm rời.
+     - Chưa có luật nhường giữa xe rẽ trái và xe đi thẳng ngược chiều. Ở tỉ lệ bản đồ ít thấy, và nằm ngoài phạm vi lần này.
+  6. **Vẽ**: `vehiclePoint` (core, thuần) cho vị trí, hướng, cao độ của xe kể cả khi đang rẽ; `placeVehicle` dùng nó. Đầu làn có lượt rẽ nối tới, và cuối làn có lượt rẽ bắt buộc, thì không mờ dần.
+- **Lý do**: dùng lại mạng đường và mô hình bám xe có sẵn; không cần đồ thị làn riêng, không đổi dữ liệu.
+- **Bổ sung khi làm** (test trên dữ liệu thật tìm ra, đã sửa):
+  - không sinh xe vào đoạn sau điểm rời bắt buộc;
+  - cuối làn chỉ coi là "nối" khi **mọi loại xe** chạy trên làn đó đều rời được (xe máy không lên được dốc cầu chỉ dành cho ô tô);
+  - **không rẽ vào bẫy**: tính cho từng loại xe xem từ một làn có thoát được không (tới một làn ≥ 150 m, hoặc một lượt rẽ dẫn tới làn thoát được), lan truyền ngược tới khi ổn định. Ví dụ thật: một ngõ cụt 38 m dồn 17 xe máy sau 2 phút;
+  - cân bằng theo **mật độ** chứ không theo số xe, có trần 1 xe / 10 m cho lượt rẽ tùy chọn.
+  - Hiệu năng (đo): kế hoạch "chưa tới nút" được nhớ để khỏi tìm lại mỗi khung; nhóm xe theo chỉ số và typed array thay cho `Map`; tìm chỗ trống bằng tìm kiếm nhị phân. Bán kính xe quanh camera 800 → 600 m. Một bước: 883 xe 1,18 ms (mặc định), 1.873 xe 2,9 ms (Rất cao).
+- **Hệ quả**: xe giữ trạng thái rẽ (`Vehicle.turn`, `Vehicle.plan`). Test:
+  - lượt rẽ trên mạng thật hợp lệ (không quay đầu, đầu cuối khớp làn);
+  - xe có rẽ và không xe nào nhảy vị trí;
+  - không chồng xe;
+  - không làn nào dồn quá 3 lần mật độ ban đầu;
+  - các test cũ (không vượt đèn đỏ, không đâm xe trước, xe nào cũng chạy) vẫn qua.
+
+### ADR-062 · Lái xe POV kiểu arcade
+- **Trạng thái**: Đã chốt (2026-10-26, người dùng: "khi điều khiển xe cũng đang hơi khó, không được như kiểu các game").
+- **Bối cảnh** (đọc từ code cũ):
+  1. **Tốc độ quay tỉ lệ với tốc độ xe** (mô hình xe đạp): ở 3 m/s quay 90° mất ~2,8 s, ở 52 km/h quay tới ~1,6 rad/s. Tức là ì ở ngã tư, giật khi chạy nhanh.
+  2. **Hỗ trợ giữ làn** tự xoay xe về đoạn đường gần nhất khi nhả phím; ở ngã tư nó kéo sang đường khác.
+  3. **Chạm lề** thì xe bị kéo vào và xoay mạnh theo hướng đường.
+  4. **Camera** gắn cứng theo hướng xe.
+  5. **Tăng tốc đều**, tối đa 52 km/h.
+- **Quyết định** (`view/carPhysics.ts`, thuần, có test):
+  1. **Lái**: vòng quay 5,5 m ở tốc độ thấp; tốc độ quay giới hạn 1,6 rad/s và giảm 35% khi tới tốc độ tối đa. Vô lăng theo phím 7/giây, tự trả về 10/giây. Lùi xe thì quay đúng chiều như xe thật.
+  2. **Ga, phanh**:
+     - tăng tốc mạnh lúc đầu, giảm dần tới 70 km/h (0–50 km/h dưới 2,5 s);
+     - phanh 18 m/s²;
+     - giữ phanh khi đã dừng thì lùi (tối đa 7 m/s);
+     - thả ga thì trôi nhẹ;
+     - Space là phanh tay, rẽ gắt hơn 1,45 lần.
+  3. **Không còn trợ lực tự lái.**
+  4. **Lề đường**: xe trượt dọc lề, chỉ mất phần tốc độ đâm vào lề; hướng xe giữ nguyên (`slideAlongCurb`).
+  5. **Camera**:
+     - bám theo kiểu lò xo, trễ hơn khi đi chậm;
+     - lùi xa thêm tới 22% và FOV rộng thêm tới 10° khi nhanh;
+     - nhìn hơi vào hướng đang rẽ.
+- **Hệ quả**: các con số cảm giác (bán kính quay, thời gian 0–50 km/h, quãng phanh, trượt lề, không tự lái) có test. Chưa thử bằng tay (A7), cần người dùng chạy thử và góp ý để chỉnh hằng số `CAR`.
+
+### ADR-063 · Làm lại vỏ giao diện: sheet chung, danh sách công trình mở rộng được, lối vào mô hình từ popup, chỉ vào chế độ nhập vai một cách chủ ý
+- **Trạng thái**: Đã chốt (2026-10-26, góp ý của người dùng: thỉnh thoảng tự vào chế độ lái; nút tắt khó bấm; khó thao tác trên mobile; danh sách công trình rối và không mở rộng được khi có nhiều thành phố; chỉ xem được mô hình bằng cách chọn trong danh sách; giao diện chưa hiện đại).
+- **Nguyên nhân đọc từ code**:
+  1. **Chạm nhẹ vào nút Pegman** (xê dịch < 8 px) thả người xuống giữa màn hình và vào luôn chế độ lái. Nút nằm sát nút 2D/3D.
+  2. **Phím `P`** chuyển thẳng sang lái tàu.
+  3. **Vùng bấm nhỏ**: nút đóng popup 26 px, nút trên dock 36 px.
+  4. **Popover trên mobile** vẫn thả từ thanh trên, không có nền mờ để chạm ra ngoài là đóng.
+  5. **Danh sách công trình**: hàng pill quốc gia/thành phố và cột danh mục không mở rộng được; mỗi mục chỉ có một hành động.
+  6. **Toàn bộ giao diện dùng font mono, chữ hoa giãn cách, cỡ 9–12 px.**
+- **Quyết định**:
+  1. **Vào chế độ nhập vai chỉ bằng thao tác chủ ý**: chọn trong menu "Trải nghiệm", hoặc **kéo** Pegman thả lên bản đồ. Chạm vào Pegman chỉ hiện gợi ý. Phím `P` mở menu thay vì vào thẳng. Có test: không phím đơn nào đổi `povMode`.
+  2. **Một khung `Sheet` cho mọi menu và bảng**:
+     - máy tính: thẻ nổi;
+     - điện thoại (≤ 640 px): bottom sheet có thanh kéo trên nền mờ;
+     - luôn có tiêu đề, nút đóng 40 px (44 px trên màn cảm ứng), Esc và chạm ra ngoài để đóng;
+     - sự kiện con trỏ và cuộn không lọt xuống bản đồ.
+  3. **Thanh trên gọn**: Khu vực · Công trình · Trải nghiệm | Ngày/Đêm · Tùy chỉnh. Màu bản đồ, nhìn xuyên, ngôn ngữ chuyển vào Tùy chỉnh; phím tắt vẫn giữ.
+  4. **Danh sách công trình** (`view/explore.ts`, có test):
+     - phạm vi chọn bằng select (quốc gia → thành phố → phường);
+     - tìm kiếm không dấu;
+     - nhóm là chip cuộn ngang;
+     - sắp xếp "Gần đây" (theo tâm khung nhìn), A–Z hoặc Cao nhất;
+     - hiện 40 mục mỗi lần;
+     - mỗi dòng có hai hành động: mở **mô hình 3D**, và **xem trên bản đồ** (bay tới, phóng to, mở popup).
+  5. **Lối vào mô hình từ popup**:
+     - mọi tòa trên bản đồ (kể cả nhà ống do generator sinh) mở được mô hình riêng (`bldg:<id>` dựng theo yêu cầu; tòa thuộc catalog mở mô hình catalog);
+     - trong mô hình có thanh "Về bản đồ" và "Xem vị trí trên bản đồ";
+     - link URL nhận cả `bldg:<id>`.
+  6. **Kiểu chữ và kích thước**:
+     - font sans hệ thống cho giao diện (không tải thêm, đủ dấu tiếng Việt), chữ 13–18 px;
+     - font mono của iso-glow giữ cho nhãn trên bản đồ (A8);
+     - bo góc 10–20 px; vùng bấm ≥ 40 px (44 px cảm ứng).
+  7. **Mobile**: popup thông tin thành bottom sheet; thanh trên chỉ còn icon; nút lái 68 px, chỉ hiện trên màn cảm ứng; thanh trạng thái chỉ còn fps và ghi nguồn OSM (A15).
+  8. **Code**: `App.tsx` 1.540 → ~200 dòng, tách thành `Sheet`, `Explorer`, `Menus`, `SettingsSheet`, `Overlays`, `icons`; CSS mới ở `ui/shell.css`; bỏ các phần CSS cũ không còn dùng.
+- **Hệ quả**:
+  - Chưa kiểm bằng mắt (A7), người dùng cần xem trên máy tính và điện thoại.
+  - Hai thao tác cũ đã đổi: chạm Pegman không còn vào chế độ lái; phím `P` mở menu.
+
 ---
 
 ## Câu hỏi mở

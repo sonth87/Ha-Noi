@@ -210,6 +210,11 @@ export function renderPopupCardDom(params: {
   const { popupEl, entry, floor, isLit, locale, sdk, customActions, onToggleLamps, onClose, onOpenShowcase } = params;
   popupEl.dataset.category = entry.category;
   popupEl.replaceChildren();
+  // a grip at the top of the card when it is docked as a bottom sheet on a phone (ADR-063)
+  const grip = document.createElement('span');
+  grip.className = 'popup-grip';
+  grip.setAttribute('aria-hidden', 'true');
+  popupEl.appendChild(grip);
 
   const header = document.createElement('div');
   header.className = 'popup-header';
@@ -246,8 +251,9 @@ export function renderPopupCardDom(params: {
   closeBtn.type = 'button';
   closeBtn.className = 'popup-close';
   closeBtn.title = t('popup.close', undefined, locale);
+  closeBtn.setAttribute('aria-label', t('popup.close', undefined, locale));
   closeBtn.innerHTML =
-    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
+    '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>';
   closeBtn.addEventListener('click', onClose);
   headRight.appendChild(closeBtn);
   header.append(badgeWrap, headRight);
@@ -290,7 +296,7 @@ export function renderPopupCardDom(params: {
       const scId = entry.showcaseId;
       const scBtn = document.createElement('button');
       scBtn.type = 'button';
-      scBtn.className = 'popup-btn';
+      scBtn.className = 'popup-btn primary';
       scBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg><span></span>`;
       scBtn.querySelector('span')!.textContent = t('popup.viewShowcase', undefined, locale);
       scBtn.addEventListener('click', () => onOpenShowcase(scId));

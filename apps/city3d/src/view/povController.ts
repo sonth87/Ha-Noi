@@ -19,6 +19,7 @@ import {
   streetZ,
   trainAt,
   type City,
+  type Street,
   type Track,
   type TrainPhase,
   type Vec2,
@@ -27,6 +28,10 @@ import { V } from '@render/batch';
 import type { Detail } from '@render/city';
 import { vehicleModel, type VehiclePart } from '@render/vehicles';
 import { POV_CONFIG, type PovMode } from './constants';
+import { separateFromTraffic, type PlacedVehicle } from './trafficView';
+import { CAR, slideAlongCurb, stepCar } from './carPhysics';
+
+const ROAD_CELL = 64;
 
 export interface TrainInstanceRef {
   track: Track;
@@ -141,6 +146,11 @@ export class PovController {
   // Pre-indexed bridge & drivable carriageway segments
   private readonly bridgeSegments: BridgeSegment[] = [];
   private readonly roadSegments: DrivableRoadSegment[] = [];
+  /** traffic vehicles placed near the player's car last frame (CityView › trafficStep) */
+  private nearTraffic: readonly PlacedVehicle[] = [];
+  /** road segments by 64 m cell, each in every cell its padded bbox touches: the per-frame curb test reads one cell (A25) */
+  private readonly roadGrid = new Map<string, DrivableRoadSegment[]>();
+  private readonly streetLabelSeen = new Map<string, { x: number; y: number; heading: number; len: number; isPrimary: boolean }>();
   private readonly miniMapLabels: MiniMapLabel[] = [];
 
   // Current player position & heading on the ground plane (for mini-map & culling)
@@ -174,13 +184,31 @@ export class PovController {
 
   constructor(private readonly city: City, private readonly panBounds: { x0: number; y0: number; x1: number; y1: number }) {
     this.camera = new THREE.PerspectiveCamera(POV_CONFIG.FOV_CAB, 16 / 9, POV_CONFIG.NEAR, POV_CONFIG.FAR);
-    this.indexRoadsAndBridges();
+    this.indexRoadsAndBridges(city.streets);
   }
 
-  private indexRoadsAndBridges(): void {
-    const seenStreetNames = new Map<string, { x: number; y: number; heading: number; len: number; isPrimary: boolean }>();
+  setNearTraffic(list: readonly PlacedVehicle[]): void { this.nearTraffic = list; }
 
-    for (const st of this.city.streets) {
+  /** streets of a map chunk that arrived after start: without this the car could not drive on them (CS-09) */
+  addStreets(streets: readonly Street[]): void {
+    this.indexRoadsAndBridges(streets);
+  }
+
+  private addRoadSegment(seg: DrivableRoadSegment): void {
+    this.roadSegments.push(seg);
+    const pad = seg.carriageHalfWidth + 14;
+    const i0 = Math.floor((Math.min(seg.a[0], seg.b[0]) - pad) / ROAD_CELL), i1 = Math.floor((Math.max(seg.a[0], seg.b[0]) + pad) / ROAD_CELL);
+    const j0 = Math.floor((Math.min(seg.a[1], seg.b[1]) - pad) / ROAD_CELL), j1 = Math.floor((Math.max(seg.a[1], seg.b[1]) + pad) / ROAD_CELL);
+    for (let i = i0; i <= i1; i++) for (let j = j0; j <= j1; j++) {
+      const k = `${i},${j}`, list = this.roadGrid.get(k);
+      if (list) list.push(seg); else this.roadGrid.set(k, [seg]);
+    }
+  }
+
+  private indexRoadsAndBridges(streets: readonly Street[]): void {
+    const seenStreetNames = this.streetLabelSeen;
+
+    for (const st of streets) {
       if (st.kind === 'footway' || st.kind === 'steps') continue;
       const totalLen = polylineLength(st.path);
       if (totalLen < 2) continue;
@@ -213,7 +241,7 @@ export class PovController {
           const a = st.path[i - 1]!, b = st.path[i]!, len = dist(a, b);
           if (len > 0.2) {
             const heading = Math.atan2(b[1] - a[1], b[0] - a[0]);
-            this.roadSegments.push({
+            this.addRoadSegment({
               a,
               b,
               s0: acc,
@@ -243,6 +271,7 @@ export class PovController {
       }
     }
 
+    this.miniMapLabels.length = 0;
     for (const [name, info] of seenStreetNames) {
       this.miniMapLabels.push({
         name: name.replace(/^(Phố|Đường)\s+/i, ''),
@@ -897,48 +926,15 @@ export class PovController {
     const wantHandbrake = this.keysPressed.has(' ') || this.touchControls.has('handbrake');
 
     const c = this.car;
+    // arcade handling (carPhysics.ts, ADR-062)
+    stepCar(c, { throttle: wantThrottle, brake: wantBrake, left: wantLeft, right: wantRight, handbrake: wantHandbrake }, dt);
+    c.x = Math.max(this.panBounds.x0, Math.min(this.panBounds.x1, c.x));
+    c.y = Math.max(this.panBounds.y0, Math.min(this.panBounds.y1, c.y));
 
-    // Longitudinal acceleration / braking / reverse
-    if (wantHandbrake) {
-      if (Math.abs(c.speed) < 0.4) c.speed = 0;
-      else c.speed -= Math.sign(c.speed) * POV_CONFIG.DRIVE_BRAKE * 1.35 * dt;
-    } else if (wantThrottle) {
-      const accel = c.speed < 0 ? POV_CONFIG.DRIVE_BRAKE : POV_CONFIG.DRIVE_ACCEL;
-      c.speed = Math.min(POV_CONFIG.DRIVE_MAX_SPEED, c.speed + accel * dt);
-    } else if (wantBrake) {
-      const decel = c.speed > 0 ? POV_CONFIG.DRIVE_BRAKE : POV_CONFIG.DRIVE_ACCEL * 0.75;
-      c.speed = Math.max(-POV_CONFIG.DRIVE_REVERSE_MAX_SPEED, c.speed - decel * dt);
-    } else {
-      // Natural rolling resistance
-      if (Math.abs(c.speed) < 0.18) c.speed = 0;
-      else c.speed -= Math.sign(c.speed) * POV_CONFIG.DRIVE_DRAG * dt;
-    }
-
-    // Steering input: in Three.js (X = x, Z = y), +heading turns RIGHT (D), -heading turns LEFT (A)
-    const targetSteer = (wantRight ? 1 : 0) - (wantLeft ? 1 : 0);
-    if (targetSteer !== 0) {
-      c.steer = Math.max(-1, Math.min(1, c.steer + targetSteer * POV_CONFIG.DRIVE_STEER_RATE * dt * 2.4));
-    } else {
-      const returnStep = POV_CONFIG.DRIVE_STEER_RATE * dt * 3.8;
-      if (Math.abs(c.steer) <= returnStep) c.steer = 0;
-      else c.steer -= Math.sign(c.steer) * returnStep;
-    }
-
-    // Bicycle kinematics
-    if (Math.abs(c.speed) > 0.02) {
-      const speedFactor = 1 / (1 + Math.abs(c.speed) * 0.055);
-      const maxSteerAngle = 0.52 * speedFactor;
-      const wheelAngle = c.steer * maxSteerAngle;
-      const wheelbase = 2.75;
-      c.heading = wrapAngle(c.heading + (c.speed / wheelbase) * Math.tan(wheelAngle) * dt);
-      c.x += Math.cos(c.heading) * c.speed * dt;
-      c.y += Math.sin(c.heading) * c.speed * dt;
-      c.x = Math.max(this.panBounds.x0, Math.min(this.panBounds.x1, c.x));
-      c.y = Math.max(this.panBounds.y0, Math.min(this.panBounds.y1, c.y));
-    }
-
+    // Do not drive through the traffic (CS-09), then keep to the carriageway, which wins
+    separateFromTraffic(c, this.nearTraffic);
     // Constrain car strictly to the road carriageway (`lòng đường`) and gently assist lane alignment
-    const streetName = this.constrainCarToRoad(dt, targetSteer);
+    const streetName = this.constrainCarToRoad();
 
     // Compute road elevation (smoothly climbs overpasses when aligned with bridge direction)
     const { z: targetZ, pitch: targetPitch } = this.sampleRoadElevation(c.x, c.y, c.heading, c.z);
@@ -962,15 +958,21 @@ export class PovController {
       }
     }
 
-    // Smoothly align chase camera behind the car
+    // Chase camera on a spring (ADR-062): it swings round a little after the car instead of being bolted to it,
+    // pulls back and widens its view with speed, and looks a little into the turn
     const angleDiff = wrapAngle(c.heading - c.chaseYaw);
-    const followSpeed = this.mode === 'drive-cabin' ? 8.5 : 6.5;
+    const pace = Math.min(1, Math.abs(c.speed) / CAR.MAX_SPEED);
+    const followSpeed = (this.mode === 'drive-cabin' ? 3.6 : 2.8) + pace * 2.2;
     c.chaseYaw = wrapAngle(c.chaseYaw + angleDiff * Math.min(1, dt * followSpeed));
-    const camYaw = c.chaseYaw + this.lookYaw;
+    const camYaw = c.chaseYaw + this.lookYaw + c.steer * 0.12 * pace;
+    const baseFov = this.mode === 'drive-cabin' ? POV_CONFIG.FOV_DRIVE_CABIN : POV_CONFIG.FOV_DRIVE_TOP;
+    const fov = baseFov + 10 * pace;
+    if (Math.abs(this.camera.fov - fov) > 0.05) { this.camera.fov += (fov - this.camera.fov) * Math.min(1, dt * 4); this.camera.updateProjectionMatrix(); }
+    const pull = 1 + 0.22 * pace;
 
     if (this.mode === 'drive-cabin') {
       // Close third-person chase camera behind the car ('Góc nhìn gần / Sau xe')
-      const distBack = POV_CONFIG.DRIVE_CLOSE_DISTANCE * Math.cos(this.lookPitch * 0.35);
+      const distBack = POV_CONFIG.DRIVE_CLOSE_DISTANCE * pull * Math.cos(this.lookPitch * 0.35);
       const heightUp = POV_CONFIG.DRIVE_CLOSE_HEIGHT + Math.sin(this.lookPitch) * 2.4;
 
       const camX = c.x - Math.cos(camYaw) * distBack;
@@ -987,7 +989,7 @@ export class PovController {
       this.camera.lookAt(this.tmpTarget);
     } else {
       // High overhead third-person chase camera ('Góc nhìn cao / Toàn cảnh')
-      const distBack = POV_CONFIG.DRIVE_TOP_DISTANCE * Math.cos(this.lookPitch * 0.45);
+      const distBack = POV_CONFIG.DRIVE_TOP_DISTANCE * pull * Math.cos(this.lookPitch * 0.45);
       const heightUp = POV_CONFIG.DRIVE_TOP_HEIGHT + Math.sin(this.lookPitch) * 6;
 
       const camX = c.x - Math.cos(camYaw) * distBack;
@@ -1016,20 +1018,19 @@ export class PovController {
   }
 
   /** Keep the car inside the road carriageway (`lòng đường`) and gently assist straight-line lane keeping */
-  private constrainCarToRoad(dt: number, targetSteer: number): string {
+  private constrainCarToRoad(): string {
     if (!this.roadSegments.length) return '';
     const c = this.car;
     const p: Vec2 = [c.x, c.y];
 
     let bestSeg: DrivableRoadSegment | null = null;
     let bestClosest: Vec2 = p;
-    let bestDist = Infinity;
     let bestNormRatio = Infinity;
 
     let alignedSeg: DrivableRoadSegment | null = null;
     let bestAlignDot = 0.72; // ~44 degrees
 
-    for (const seg of this.roadSegments) {
+    for (const seg of this.roadGrid.get(`${Math.floor(c.x / ROAD_CELL)},${Math.floor(c.y / ROAD_CELL)}`) ?? []) {
       // Quick bounding box filter
       const pad = seg.carriageHalfWidth + 14;
       if (
@@ -1052,7 +1053,6 @@ export class PovController {
       const ratio = proj.d / seg.carriageHalfWidth;
       if (ratio < bestNormRatio) {
         bestNormRatio = ratio;
-        bestDist = proj.d;
         bestClosest = proj.at;
         bestSeg = seg;
       }
@@ -1068,37 +1068,9 @@ export class PovController {
 
     if (!bestSeg) return '';
 
-    // 1. Gentle straight-lane alignment assist when cruising without active steering input
-    if (targetSteer === 0 && Math.abs(c.speed) > 0.35 && alignedSeg) {
-      const roadDir =
-        Math.cos(c.heading - alignedSeg.heading) >= 0
-          ? alignedSeg.heading
-          : wrapAngle(alignedSeg.heading + Math.PI);
-      const diff = wrapAngle(roadDir - c.heading);
-      if (Math.abs(diff) < 0.38) {
-        c.heading = wrapAngle(c.heading + diff * Math.min(1, dt * 2.8));
-      }
-    }
-
-    // 2. Hard carriageway curb constraint: prevent driving onto sidewalks or through buildings
-    if (bestDist > bestSeg.carriageHalfWidth) {
-      const dx = c.x - bestClosest[0];
-      const dy = c.y - bestClosest[1];
-      const dLen = Math.hypot(dx, dy) || 1;
-      c.x = bestClosest[0] + (dx / dLen) * bestSeg.carriageHalfWidth;
-      c.y = bestClosest[1] + (dy / dLen) * bestSeg.carriageHalfWidth;
-
-      // Slide smoothly along the curb tangent in the direction of motion
-      const moveHeading = c.speed >= 0 ? c.heading : wrapAngle(c.heading + Math.PI);
-      const roadDir =
-        Math.cos(moveHeading - bestSeg.heading) >= 0
-          ? bestSeg.heading
-          : wrapAngle(bestSeg.heading + Math.PI);
-      const targetHeading = c.speed >= 0 ? roadDir : wrapAngle(roadDir + Math.PI);
-      const err = wrapAngle(targetHeading - c.heading);
-      c.heading = wrapAngle(c.heading + err * Math.min(1, dt * 7.0));
-      c.speed *= Math.max(0.84, 1 - dt * 1.4);
-    }
+    // No lane assist: the car goes where it is pointed (it used to turn itself toward the nearest road, at a
+    // junction often the wrong one). Past the edge of the carriageway it slides along the curb (ADR-062).
+    slideAlongCurb(c, bestClosest, bestSeg.carriageHalfWidth);
 
     return alignedSeg?.name || bestSeg.name;
   }
@@ -1381,7 +1353,8 @@ export class PovController {
 
     // Always keep landmarks in front of the camera visible on the skyline
     if (isLandmark) {
-      return fwd > -radius - 95;
+      const far = POV_CONFIG.CULL_LANDMARK_DIST + radius;
+      return fwd > -radius - 95 && dx * dx + dz * dz <= far * far;
     }
 
     // Keep a generous radius around the vehicle/train so turning or looking around never shows empty space

@@ -2,7 +2,7 @@
 
 Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật file này **mỗi khi** một việc đổi trạng thái. Checklist của app SVG cũ (P0–P5) ở [apps/svg/docs/plan/checklist.md](../../apps/svg/docs/plan/checklist.md) (đóng băng).
 
-**Bước hiện tại: M5 — đường và nút giao, đồ phố, giao thông, chất lượng đầy đủ; code xong, chờ người dùng xem trên `pnpm dev:3d`. (M4 chưa commit.)**
+**Bước hiện tại: M5 — đường và nút giao, đồ phố, giao thông, chất lượng đầy đủ; code xong, chờ người dùng xem trên `pnpm dev:3d`. Đang làm: sửa theo đánh giá toàn diện (ADR-059, mục cuối trước Backlog).**
 
 ## Chốt phương án (2026-10-21)
 - [x] Thử three.js trên trang riêng (ADR-031, `apps/svg/lab-3d.html`)
@@ -108,6 +108,80 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Tách `CityView.ts` bước 3: `chunkMerge.ts` (sửa lỗi lọc feature, CS-08)
 - [ ] Tách `CityView.ts` bước 4+: chunk + cache ô, `mount()` (city3d.md §8)
 - [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
+
+## Đánh giá toàn diện và sửa theo lộ trình (2026-10-26, ADR-059)
+- [x] Đánh giá toàn diện `city3d` (ưu, nhược, lỗi, hiệu năng, mở rộng); người dùng đồng ý sửa theo lộ trình P0–P3
+- [x] Bộ quy tắc: luật A27–A36 (`docs/ai/README.md`), [guidelines](../ai/guidelines.md) theo 11 mảng + danh sách kiểm 10 câu, case study CS-09 / CS-10 / CS-11
+- [x] P0 · 9 lỗi, mỗi lỗi có rào chắn:
+  - xe trên tuyến dài (`trafficView.test.ts`);
+  - rò GPU khi nhìn xuyên (`hygiene.test.ts`);
+  - mô hình riêng bị nhân bản: Phủ Tây Hồ ×8, Khuê Văn Các ×3, Quán Sứ ×4 (`catalog.test.ts`, có kiểm đường stream);
+  - POV trên đường chunk mới (`povController.test.ts`);
+  - MSAA (dựng lại renderer);
+  - phím tắt sau khi bấm nút;
+  - link hỏng (`urlState.test.ts`);
+  - chữ rác Hàn / Hán / Kirin (`hygiene.test.ts`, `catalog.test.ts`);
+  - bảng chất lượng lệch tài liệu (`quality.test.ts › docs follow the code`).
+- [x] P1 · Quy mô và hiệu năng (số đo trong ADR-059):
+  - lưới không gian + tập đang hiện cho mọi vòng lặp mỗi khung (chốt chặn A32);
+  - đèn tô trễ (một lần tô lại toàn bộ: 54 ms);
+  - picking BVH (45 ms → 0,07 ms; thêm `three-mesh-bvh@0.9.15`);
+  - ingest chunk 495 → 276 ms (catalog từng phần, mặt bằng từng phần, đường + đồ phố lúc rảnh);
+  - POV không dựng mọi ô cao của thành phố;
+  - heading ≤ 10 lần/giây.
+- [x] P2 (một phần): tách `CityView` 3.346 → 3.270 dòng (`tileIndex`, `windowPainter`, `chunkStreamer`, `idleQueue`, `trafficView`, `picking`); importer chung không còn id Hà Nội (`skipBuildings`)
+- [ ] Người dùng xem trên `pnpm dev:3d` (chưa ai kiểm bằng mắt, A7):
+  - xe trên đường dài (Láng, Nguyễn Trãi) không biến mất;
+  - Phủ Tây Hồ, Văn Miếu, Quán Sứ chỉ còn một mô hình riêng;
+  - rê chuột mượt;
+  - bấm Ngày/Đêm không khựng;
+  - vào POV không khựng;
+  - kéo sang khu mới: đường, cây, cột điện hiện sau khi thả tay;
+  - đổi khử răng cưa có tác dụng;
+  - bấm một nút rồi dùng WASD;
+  - nhìn xuyên ở zoom rất gần.
+- [x] P1 đợt 2 (ADR-060): khởi động trong worker (tải + import + mạng đường + nền; không tính sẵn lúc build vì mô hình 12 MB > OSM 6 MB); import chunk trong worker sống lâu
+- [ ] P1 còn lại: tách React theo selector (đo bằng React Profiler trên trình duyệt trước, A25)
+- [x] P2 đợt 2 (ADR-060):
+  - landmark Hà Nội vào `landmarks/vn/ha-noi/models.ts`, `render/landmarks.ts` chỉ ghép thành phố (`CityLandmarks`, có test);
+  - `mapInput.ts` + `pegman.ts` tách khỏi `mount()` (`CityView` 2.998 dòng);
+  - 41 mục catalog có `osmSource` tường minh, kèm test "khớp tên thì phải có id".
+- [ ] P2 còn lại:
+  - `TileCache` (phần GPU của ô);
+  - 129/208 mục catalog không có trong dữ liệu OSM, chỉ hiện trong diorama: tải thêm dữ liệu hoặc chấp nhận;
+  - 12 mục khớp nhiều tòa cần người dùng đối chiếu tòa đã chọn (chú thích "check against the real site" trong catalog).
+- Giữ catalog dạng TypeScript có kiểu, không chuyển JSON (ADR-060 mục 7)
+- [x] P3 đợt 2 (ADR-060): xe quanh camera (vòng 800 m, tối đa 4.000 xe); đèn tín hiệu theo từng nút (lệch pha theo id); va chạm xe người chơi với xe máy tính, xe máy tính phanh sau xe người chơi
+- [ ] P3 còn lại:
+  - xe trên đường của chunk tải sau;
+  - kiểm sự kiện 208 mô tả (người dùng duyệt theo đợt).
+- [ ] Người dùng xem trên `pnpm dev:3d` (đợt 2):
+  - trang mở không đứng hình trong lúc tải;
+  - kéo sang khu mới không khựng;
+  - phố có xe ở mọi nơi đang xem;
+  - các ngã tư đổi đèn lệch nhau, ngã tư Thái Hà khớp dòng trạng thái;
+  - lái xe POV: không đi xuyên xe khác, xe phía sau dừng lại;
+  - landmark Hà Nội vẫn đủ như trước;
+  - rê chuột, click tầng, chạm đúp, Pegman vẫn đúng (code input đã chuyển module).
+
+## Xe rẽ ở nút và lái xe kiểu game (2026-10-26, ADR-061, ADR-062)
+- [x] Chốt thiết kế xe rẽ (ADR-061) và làm: lượt rẽ giữa các làn, Bézier, rẽ bắt buộc ở cuối làn, nhường chỗ ở làn đích, cân bằng theo mật độ, không rẽ vào bẫy (theo loại xe)
+- [x] Test trên dữ liệu thật (2 phút quanh ngã tư): không xe nào nhảy, > 10% xe rẽ, không chồng xe, không làn nào quá sức chứa, xe nào cũng đi > 30 m
+- [x] Hiệu năng giao thông đo lại: 883 xe 1,18 ms / bước (bán kính 600 m)
+- [x] Lái xe kiểu arcade (`carPhysics.ts`): rẽ gọn ở tốc độ thấp, 70 km/h, phanh tay, không tự lái, trượt dọc lề, camera lò xo + FOV theo tốc độ; có test các con số cảm giác
+- [ ] Người dùng xem trên `pnpm dev:3d`:
+  - xe rẽ ở ngã tư trông tự nhiên (đường cong, không xuyên vỉa hè);
+  - không còn xe biến mất ở cuối phố cụt;
+  - lái xe POV dễ hơn, góp ý hằng số `CAR` (tốc độ, độ nhạy lái, camera)
+- [x] Luật nhường: xe rẽ trái chờ xe đi thẳng ngược chiều (test: 0 lần cắt ngang; tắt luật thì có 5)
+
+## Làm lại giao diện (2026-10-26, ADR-063, CS-12)
+- [x] Nguyên nhân tự vào chế độ lái: chạm Pegman (thả giữa màn hình), phím `P` → chỉ vào bằng menu hoặc kéo-thả; test `entryPoints.test.ts`
+- [x] `Sheet` chung cho mọi menu và bảng (nút đóng 40/44 px, Esc, chạm ra ngoài, bottom sheet trên điện thoại)
+- [x] Danh sách công trình mở rộng được (select phạm vi, tìm không dấu, chip nhóm, sắp xếp theo khung nhìn / A–Z / cao nhất, phân trang, 2 hành động mỗi dòng); test `explore.test.ts`
+- [x] Lối vào mô hình 3D từ popup cho mọi tòa; thanh mô hình có "Xem vị trí trên bản đồ"
+- [x] Giao diện: font sans hệ thống, cỡ chữ và vùng bấm lớn hơn, thanh trên gọn, popup mới, dock, thanh nhập vai, nút lái cho cảm ứng
+- [ ] Người dùng xem trên máy tính và điện thoại: thanh trên, 3 menu, bảng Tùy chỉnh, popup tòa nhà (nút Mô hình 3D), mô hình (Về bản đồ / Xem vị trí), chạm và kéo Pegman, chế độ lái (thanh trên, nút lái), chế độ Kính / Mờ / Đặc
 
 ## Backlog
 - Mở rộng thêm sang các phường ngoại thành / quận khác của Hà Nội (đã có trọn vẹn 6 khu vực trung tâm: Đống Đa, Ba Đình, Hoàn Kiếm, Tây Hồ, Hai Bà Trưng, Thanh Xuân — ADR-054)

@@ -185,11 +185,13 @@ function samplePolyline(path: readonly Vec2[], target: number): { pt: Vec2; dir:
 }
 
 /** Build the catalog of named streets from the City model once */
-export function buildStreetCatalog(city: City): StreetEntry[] {
+/** `onlyNames`: build the entries of these street names only (a chunk added segments to them) */
+export function buildStreetCatalog(city: Pick<City, 'streets'>, onlyNames?: ReadonlySet<string>): StreetEntry[] {
   const byName = new Map<string, Street[]>();
   for (const s of city.streets) {
     const name = s.name?.trim();
     if (!name || s.kind === 'footway' || s.kind === 'steps' || s.kind === 'link') continue;
+    if (onlyNames && !onlyNames.has(name)) continue;
     const list = byName.get(name);
     if (list) list.push(s);
     else byName.set(name, [s]);
@@ -294,8 +296,16 @@ export function buildStreetCatalog(city: City): StreetEntry[] {
     });
   }
 
-  // Sort by tier (1 first), then by totalLength descending
-  return entries.sort((a, b) => a.tier - b.tier || b.totalLength - a.totalLength || a.name.localeCompare(b.name, 'vi'));
+  return entries.sort(byStreetRank);
+}
+
+/** by tier (1 first), then by length, longest first */
+const byStreetRank = (a: StreetEntry, b: StreetEntry) => a.tier - b.tier || b.totalLength - a.totalLength || a.name.localeCompare(b.name, 'vi');
+
+/** A chunk brought streets: rebuild only the names it touched and merge them in (A31, CS-09: rebuilding the
+    whole catalog on every chunk cost ~11 ms of the ~100 ms a chunk took on the main thread). */
+export function updateStreetCatalog(catalog: readonly StreetEntry[], city: Pick<City, 'streets'>, names: ReadonlySet<string>): StreetEntry[] {
+  return [...catalog.filter(e => !names.has(e.name)), ...buildStreetCatalog(city, names)].sort(byStreetRank);
 }
 
 /** Select and de-collide visible street labels for the current viewport and mode */

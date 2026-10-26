@@ -63,6 +63,8 @@ export const HA_NOI_AREA_CONFIG = {
     buildings: HA_NOI_BUILDING_OVERRIDES,
   },
   landmarksCatalog: HA_NOI_LANDMARKS_CATALOG,
+  // drawn in full by drawDenNgocSon: the unnamed bridgehead box by Cầu Thê Húc and Đình Trấn Ba
+  skipBuildings: ['osm:way/1220021892', 'osm:way/178995271'],
 };
 
 export {

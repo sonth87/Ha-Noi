@@ -5,6 +5,7 @@ import '@fontsource/dm-mono/500.css';
 import '@my-city/theme/tokens.css';
 import { PALETTES, accentCss } from '@my-city/theme';
 import '@ui/app.css';
+import '@ui/shell.css';
 import { App } from '@ui/App';
 import { ErrorBoundary } from '@ui/ErrorBoundary';
 

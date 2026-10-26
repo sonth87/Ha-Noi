@@ -43,7 +43,8 @@ Không có trong bảng thì bỏ qua. Vòng trong của multipolygon (sân tron
 
 1. Chiếu mọi node.
 2. Đường: phân loại, áp luật bề rộng / vỉa hè / cầu, cắt theo biên (mỗi đoạn một `Street`).
-3. Tòa nhà và phần nhà; số tầng từ OSM, nếu không có thì theo luật.
+3. Tòa nhà và phần nhà; số tầng từ OSM, nếu không có thì theo luật. Tòa trong `AreaConfig.skipBuildings` bị bỏ, vì mô hình dựng tay đã vẽ chúng. `import.ts` không chứa id OSM của thành phố nào; có test kiểm.
+   - **Catalog công trình** (A29, CS-09): một mục catalog khớp với tòa theo `osmSource`, hoặc theo tên / alias. Một mục là **một** công trình: mục có `osmSource` chỉ gán mô hình riêng cho đúng phần tử đó; không có thì gán cho phần tử lớn nhất trùng tên. Các tòa trùng tên còn lại (các way của một quần thể) dùng mô hình chung (chùa, đền, tượng đài…) hoặc khối thường (`resolveCatalogClaims`). Rào chắn: `catalog.test.ts` kiểm cả đường import một lần lẫn đường stream (skeleton + từng chunk), và kiểm mọi `osmSource` có trong dữ liệu.
 4. Vùng (way kín và multipolygon), cắt theo biên.
 5. Điểm; nút giao = node nơi **từ 3 nhánh đường xe chạy** trở lên gặp nhau (đầu way tính 1, node giữa way tính 2); có đèn nếu trong vòng 20 m có `traffic_signals`.
 6. Cạnh mặt tiền của mỗi tòa, nhà sinh cho tòa nhỏ.

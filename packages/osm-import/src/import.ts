@@ -39,6 +39,8 @@ export interface AreaConfig {
   places?: CityPlace[];
   /** curated 13-category landmark catalog for the city/region */
   landmarksCatalog?: readonly CityLandmarkCatalogEntry[];
+  /** OSM buildings left out because a hand-built model already draws them (source ids, e.g. 'osm:way/1') */
+  skipBuildings?: readonly string[];
   overrides: Overrides;
 }
 
@@ -52,6 +54,39 @@ export interface ImportReport {
   droppedHoles: number;
   /** buildings whose front edge was not near any street */
   noStreet: string[];
+}
+
+export interface CatalogClaim {
+  /** index of the building in the list being built */
+  index: number;
+  entry: CityLandmarkCatalogEntry;
+  source: string;
+  area: number;
+  /** the model the building gets from the generic rules (pagoda, temple, monument…) when it is not the landmark itself */
+  generic: string | undefined;
+}
+
+/** One catalog entry is one landmark, so its own model goes on one building. Name matching hits every
+    building of a complex ("Phủ Tây Hồ" is 8 OSM ways): when the entry names its OSM element only that
+    building keeps the model, otherwise the largest one does. The others fall back to the generic model.
+    (docs/architecture/case-studies.md CS-09) */
+export function resolveCatalogClaims(buildings: Building[], claims: readonly CatalogClaim[]): void {
+  const byEntry = new Map<string, CatalogClaim[]>();
+  for (const c of claims) {
+    const list = byEntry.get(c.entry.id);
+    if (list) list.push(c); else byEntry.set(c.entry.id, [c]);
+  }
+  for (const list of byEntry.values()) {
+    const entry = list[0]!.entry;
+    const exact = entry.osmSource ? list.find(c => c.source === entry.osmSource) : undefined;
+    const winner = exact ?? (entry.osmSource ? undefined : list.reduce((a, b) => (b.area > a.area ? b : a)));
+    for (const c of list) {
+      if (c === winner) continue;
+      const b = buildings[c.index]!;
+      const { model: _model, isSignatureLandmark: _sig, ...rest } = b;
+      buildings[c.index] = c.generic ? { ...rest, model: c.generic, isSignatureLandmark: true } : rest;
+    }
+  }
 }
 
 const src = (type: string, id: number) => `osm:${type}/${id}`;
@@ -366,10 +401,13 @@ export function importArea(
     }
   }
 
-  // Filter out unnamed bridgehead box way/1220021892 and Đình Trấn Ba way/178995271 (both rendered in full 3D detail by drawDenNgocSon)
-  const filteredKeep = keep.filter(b => b.source !== 'osm:way/1220021892' && b.source !== 'osm:way/178995271');
+  // buildings a hand-built model draws itself (the area config says which; no city's ids in this file, CS-09)
+  const skip = new Set(cfg.skipBuildings ?? []);
+  const filteredKeep = skip.size ? keep.filter(b => !skip.has(b.source)) : keep;
 
-  const buildings: Building[] = filteredKeep.map(b => {
+  // a catalog entry is one landmark: its own model goes on one building only (see resolveCatalogClaims)
+  const catalogClaims: CatalogClaim[] = [];
+  const buildings: Building[] = filteredKeep.map((b, buildingIndex) => {
     const c = centroid(b.ring);
     const campusCell = campusGrid.get(`${Math.floor(c[0] / FG)},${Math.floor(c[1] / FG)}`);
     const campus = campusCell?.find(cp => inRect(c, cp.box) && pointInRing(c, cp.ring));
@@ -433,9 +471,8 @@ export function importArea(
     const address = formatOsmAddress(b.t, facing?.street.name) ?? campus?.address;
     const district = cfg.districtOf?.(c);
     const description = (name ? cfg.heritageNotes?.[name.trim()] : undefined) ?? catEntry?.description;
-    const autoModel =
-      catEntry?.model ??
-      (isMonumentOrArtwork
+    const genericModel =
+      isMonumentOrArtwork
         ? /cảm tử|quyết tử/iu.test(nNorm)
           ? 'tuong-dai-cam-tu'
           : 'statue-monument-plaza'
@@ -447,7 +484,9 @@ export function importArea(
               ? 'traditional-pagoda'
               : /^(đền|đình|miếu|phủ)\b/i.test(nTrim) || b.t.building === 'temple' || b.t.building === 'shrine'
                 ? 'traditional-temple'
-                : undefined);
+                : undefined;
+    const autoModel = catEntry?.model ?? genericModel;
+    if (catEntry?.model) catalogClaims.push({ index: buildingIndex, entry: catEntry, source: b.source, area: baseArea, generic: genericModel });
     return {
       id: b.id, name, kind, footprint: b.ring, parts, levelsFrom: fromOsm ? 'osm' : 'rule', front, house,
       ...(autoModel ? { model: autoModel, isSignatureLandmark: Boolean(nTrim || catEntry) } : {}),
@@ -458,6 +497,7 @@ export function importArea(
       source: b.source,
     };
   });
+  resolveCatalogClaims(buildings, catalogClaims);
 
   // ---------- 4. areas ----------
   const areas: Area[] = [];

@@ -11,7 +11,7 @@
    model's own frame for the view to place with each vehicle. `placeVehicle` turns a vehicle of the
    traffic model into an instance matrix. Pure. */
 import * as THREE from 'three';
-import { TRACKS, laneAt, normalizeRing, type Lane, type Vehicle, type VehicleKind, type Vec2 } from '@my-city/core';
+import { TRACKS, laneAt, normalizeRing, vehiclePoint, type Lane, type Vehicle, type VehicleKind, type Vec2 } from '@my-city/core';
 import { V, Batch } from './batch';
 
 export type VehiclePart = 'body' | 'top' | 'glass' | 'wheel' | 'head' | 'tail' | 'sign' | 'beam';
@@ -285,12 +285,13 @@ function beam(out: number[], nose: number, k: number) {
 
 const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), pos = new THREE.Vector3(), scl = new THREE.Vector3(), Y = new THREE.Vector3(0, 1, 0);
 
-/** the instance matrix of a vehicle: at the middle of its length along the lane, on its track,
-    turned to the lane; scaled in over the first and out over the last 8 m of the lane */
+/** the instance matrix of a vehicle: at the middle of its length along the lane (or along the curve of the turn
+    it is taking, ADR-061), on its track, turned to the way it goes; scaled in over the first and out over the last
+    8 m of a lane, except at an end where vehicles come and go by turning */
 export function placeVehicle(c: Vehicle, lane: Lane, out: THREE.Matrix4 = m4): THREE.Matrix4 {
-  const mid = c.s + c.len / 2, at = laneAt(lane, mid % lane.length), off = TRACKS[c.track]!;
+  const mid = c.s + c.len / 2, at = c.turn ? vehiclePoint(c, []) : laneAt(lane, mid % lane.length), off = TRACKS[c.track]!;
   const x = at.p[0] - Math.sin(at.heading) * off, y = at.p[1] + Math.cos(at.heading) * off;
-  const fade = Math.max(0, Math.min(1, mid / 8, (lane.length - mid) / 8));
+  const fade = c.turn ? 1 : Math.max(0, Math.min(1, lane.joinedStart ? 1 : mid / 8, lane.joinedEnd ? 1 : (lane.length - mid) / 8));
   pos.copy(V(x, y, at.z + 0.12));
   // model nose is +x; three.js turns about +y, and the city's y is three's z, so the angle flips
   q.setFromAxisAngle(Y, -at.heading);

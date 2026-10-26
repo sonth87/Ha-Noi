@@ -56,6 +56,9 @@ importers:
       three:
         specifier: 0.170.0
         version: 0.170.0
+      three-mesh-bvh:
+        specifier: 0.9.15
+        version: 0.9.15(three@0.170.0)
     devDependencies:
       '@types/react':
         specifier: ^19.3.0
@@ -990,6 +993,11 @@ packages:
 
   std-env@4.3.0:
     resolution: {integrity: sha512-OtU/EgQ1kIm5KwqQpBC6ZEMXrZRui11w8zgfTWp8cdO9B8OaPsbA8bTHO2P+HNo1VlUTGMVBwPhydu6poeXiag==}
+
+  three-mesh-bvh@0.9.15:
+    resolution: {integrity: sha512-9xdEDkCzFoT8VPFH9DznwFSdbaIEjMvM106Iqq7TJurrIheUKDcdW4prfJTCxryih4XS/UxWs0H3K4MLMRFyOQ==}
+    peerDependencies:
+      three: '>= 0.159.0'
 
   three@0.170.0:
     resolution: {integrity: sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ==}
@@ -1947,6 +1955,10 @@ snapshots:
   source-map-js@1.2.2: {}
 
   std-env@4.3.0: {}
+
+  three-mesh-bvh@0.9.15(three@0.170.0):
+    dependencies:
+      three: 0.170.0
 
   three@0.170.0: {}
 

@@ -49,7 +49,7 @@ export const AREA_CONFIGS: Readonly<Record<string, AreaConfig>> = areaRegistry;
 const cityCache = new Map<string, { city: City; report: ImportReport }>();
 const chunkCityCache = new Map<string, City>();
 
-function getAreaConfig(areaId: string): AreaConfig {
+export function getAreaConfig(areaId: string): AreaConfig {
   const direct = AREA_CONFIGS[areaId];
   if (direct) return direct;
   try {

@@ -94,6 +94,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'mountain-pagoda-complex',
     floors: [4.6, 3.8],
     footprintSize: [26, 36],
+    // matched by name, made explicit (CS-09): largest of 7 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1317836185',
     description: 'Đại Bi Tự trên bán đảo Nghi Tàm bên Hồ Tây – kiệt tác kiến trúc gỗ cổ truyền gồm 3 nếp chùa chồng diêm 2 tầng 8 mái đao cong như những đóa sen nở.',
   },
   {
@@ -108,6 +110,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'traditional-pagoda',
     floors: [4.6, 3.6],
     footprintSize: [24, 32],
+    // matched by name, made explicit (CS-09): largest of 19 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1443727509',
     description: 'Di tích lịch sử Quốc gia Sùng Phúc Tự dựng từ năm 1676 trên phố Chùa Bộc, gắn liền với chiến thắng Đống Đa mùa xuân Kỷ Dậu 1789 và có pho tượng Đức Ông mang chân dung vua Quang Trung.',
   },
   {
@@ -524,6 +528,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'french-colonial-university',
     floors: [5.0, 4.5, 4.2],
     footprintSize: [50, 26],
+    // matched by name, made explicit (CS-09): largest of 2 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/704159205',
     description: 'Trường Đại học Dược Hà Nội (Trường Y – Dược Đông Dương thành lập năm 1902 bởi bác sĩ Alexandre Yersin) tại 13–15 Lê Thánh Tông.',
   },
   {
@@ -552,6 +558,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'french-colonial-university',
     floors: [5.0, 4.6, 4.2],
     footprintSize: [52, 26],
+    // matched by name, made explicit (CS-09): largest of 19 OSM buildings with this name; check against the real site
+    osmSource: 'osm:relation/16802105',
     description: 'Bệnh viện Trung ương Quân đội 108 (khởi nguyên từ Quân y viện Đồn Thủy thời Pháp bên bờ sông Hồng) tại số 1 Trần Hưng Đạo.',
   },
   {
@@ -566,6 +574,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'french-colonial-university',
     floors: [4.8, 4.4, 4.0],
     footprintSize: [52, 26],
+    // matched by name, made explicit (CS-09): largest of 8 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/136258990',
     description: 'Bệnh viện Bạch Mai (Nhà thương Cống Vọng thành lập năm 1911) với các tòa nhà y khoa kiến trúc Pháp cổ trên trục đường Giải Phóng.',
   },
   {
@@ -580,6 +590,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'french-colonial-university',
     floors: [4.8, 4.4, 4.0],
     footprintSize: [50, 24],
+    // matched by name, made explicit (CS-09): largest of 7 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/1526322739',
     description: 'Bệnh viện Việt Đức (Nhà thương Bảo hộ Phủ Doãn thành lập năm 1906) tại số 40 Tràng Thi với khu nhà phẫu thuật kiến trúc Pháp cổ.',
   },
   {
@@ -744,6 +756,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'fine-arts-museum',
     floors: [4.8, 4.4, 4.0],
     footprintSize: [36, 22],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/704147333',
     description: 'Bảo tàng Công an Nhân dân bên hồ Thiền Quang lưu giữ lịch sử truyền thống lực lượng Công an Nhân dân Việt Nam.',
   },
   {
@@ -853,6 +867,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(4.5, 4), ...rep(3.7, 21)],
     footprintSize: [38, 28],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/481822477',
     description: 'Tòa tháp văn phòng hạng A BIDV Tower cao 25 tầng (106 m) tại 194 Trần Quang Khải với mặt dựng kính uốn cong hiện đại.',
   },
   {
@@ -1019,6 +1035,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [5.5, 5.2, 5.0, 4.8],
     footprintSize: [78, 52],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/840041412',
     description: 'Đại trung tâm thương mại Nhật Bản AEON Mall Long Biên cao 4 tầng bên cầu Vĩnh Tuy và trục đường Cổ Linh.',
   },
   {
@@ -1094,6 +1112,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(4.2, 4), ...rep(3.5, 14)],
     footprintSize: [38, 26],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/839886261',
     description: 'Tòa tháp trụ sở Tập đoàn Geleximco cao 18 tầng bên hồ Hoàng Cầu, quận Đống Đa.',
   },
   {
@@ -1128,6 +1148,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'metropole-hotel',
     floors: [4.6, 4.0, 3.8, 3.8, 3.6, 3.6],
     footprintSize: [56, 32],
+    // matched by name, made explicit (CS-09): largest of 4 OSM buildings with this name; check against the real site
+    osmSource: 'osm:way/37933426',
     description: 'Khách sạn 5 sao lâu đời nhất Hà Nội (khánh thành năm 1901) tại số 15 Ngô Quyền với kiến trúc Pháp cổ điển sơn trắng, cửa chớp xanh lá, mái vòm sắt rèn và hầm trú ẩn lịch sử.',
   },
   {
@@ -1143,6 +1165,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(4.8, 5), ...rep(3.6, 24)],
     footprintSize: [56, 36],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/846122944',
     description: 'Tổ hợp Khách sạn 5 sao dát vàng Grand Plaza Hanoi và tháp văn phòng Charmvit Tower cao 29 tầng trên đại lộ Trần Duy Hưng.',
   },
   {
@@ -1202,6 +1226,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(4.5, 4), ...rep(3.5, 16)],
     footprintSize: [42, 28],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/1497610110',
     description: 'Khách sạn 5 sao Pan Pacific Hà Nội cao 20 tầng tại đầu đường Thanh Niên với hình khối kính vát bậc thang hướng tầm nhìn toàn cảnh ra Hồ Tây và hồ Trúc Bạch.',
   },
   {
@@ -1216,6 +1242,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'luxury-hotel-tower',
     floors: [...rep(4.5, 3), ...rep(3.5, 15)],
     footprintSize: [44, 28],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/479019014',
     description: 'Khách sạn 5 sao Sheraton Hà Nội cao 18 tầng nằm ngay bên bờ Hồ Tây trên bán đảo Nghi Tàm – Xuân Diệu.',
   },
   {
@@ -1261,6 +1289,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'metropole-hotel',
     floors: [4.8, 4.0, 3.8, 3.8, 3.6, 3.6, 3.6],
     footprintSize: [48, 30],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/37933051',
     description: 'Khách sạn 5 sao Hilton Hanoi Opera nằm ngay cạnh Nhà hát Lớn Hà Nội với ngôn ngữ kiến trúc Tân cổ điển Pháp đồng điệu.',
   },
   {
@@ -1334,7 +1364,7 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'metropole-hotel',
     floors: [4.4, 3.6, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5, 3.5],
     footprintSize: [28, 22],
-    description: 'Khách sạn精品 Silk Path Hà Nội trên phố Hàng Bông cổ kính nối liền khu Phố cổ và Cửa Nam.',
+    description: 'Khách sạn boutique Silk Path Hà Nội trên phố Hàng Bông cổ kính nối liền khu Phố cổ và Cửa Nam.',
   },
   {
     id: 'khach-san-movenpick-ha-noi',
@@ -1378,6 +1408,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     facade: 'glass',
     floors: [...rep(4.4, 4), ...rep(3.4, 23)],
     footprintSize: [42, 28],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/704147367',
     description: 'Khách sạn Mường Thanh Grand Hà Nội tại khu đô thị Bắc Linh Đàm, cửa ngõ phía Nam Thủ đô.',
   },
 
@@ -1509,6 +1541,8 @@ export const HA_NOI_LANDMARKS_PART2: readonly CityLandmarkCatalogEntry[] = [
     model: 'indoor-sports-arena',
     floors: [5.5, 5.0, 4.5, 4.0],
     footprintSize: [64, 52],
+    // matched by name, made explicit (CS-09): same name, the only OSM building; check against the real site
+    osmSource: 'osm:way/698273241',
     description: 'Cung Thể thao Tổng hợp Quần Ngựa (xây dựng trên nền trường đua ngựa thời Pháp năm 2003 phục vụ SEA Games 22) với mái vòm elip khung thép vượt nhịp lớn.',
   },
   {

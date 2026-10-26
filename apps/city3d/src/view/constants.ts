@@ -94,6 +94,8 @@ export const POV_CONFIG = {
   DRIVE_DRAG: 3.2,
   DRIVE_STEER_RATE: 2.2,
   CULL_MAX_DIST: 440,
+  /** landmarks stay on the skyline out to here (was unbounded: entering POV built every tall tile of the city, CS-09) */
+  CULL_LANDMARK_DIST: 3000,
   CULL_FURN_DIST: 240,
   CULL_VEHICLE_DIST: 250,
   LOD_L3_DIST: 110,

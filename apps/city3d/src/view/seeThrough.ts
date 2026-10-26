@@ -4,7 +4,7 @@
    2. For Buildings (`tòa nhà`): when zoomed in very close (`zoom >= 19.0` or `15.0` at low tilt),
       hides the entire foreground occluding building `A` in the camera's center sightline (`camera -> A -> B`)
       so the viewer sees completely through `A` to the buildings/scene `B` behind it. */
-import { centroid, floorZ, pointInRing, type City, type Vec2 } from '@my-city/core';
+import { centroid, floorZ, pointInRing, type Building, type City, type Vec2 } from '@my-city/core';
 import type { Tile } from '@render/city';
 import { SEE_THROUGH } from './constants';
 
@@ -20,17 +20,18 @@ export interface BldgBounds {
 
 export function buildBuildingBoundsIndex(tiles: readonly { tile: Tile }[]): BldgBounds[] {
   const out: BldgBounds[] = [];
-  tiles.forEach((ts, tileIdx) => {
-    for (const b of ts.tile.buildings) {
-      const c = centroid(b.footprint);
-      let r = 4;
-      for (const p of b.footprint) r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]));
-      let topZ = 4;
-      for (const part of b.parts) topZ = Math.max(topZ, floorZ(part, part.floors.length));
-      out.push({ id: b.id, tileIdx, cx: c[0], cy: c[1], r, topZ, footprint: b.footprint });
-    }
-  });
+  tiles.forEach((ts, tileIdx) => { for (const b of ts.tile.buildings) out.push(buildingBounds(b, tileIdx)); });
   return out;
+}
+
+/** one building's entry (a streamed chunk appends its own, CS-09) */
+export function buildingBounds(b: Building, tileIdx: number): BldgBounds {
+  const c = centroid(b.footprint);
+  let r = 4;
+  for (const p of b.footprint) r = Math.max(r, Math.hypot(p[0] - c[0], p[1] - c[1]));
+  let topZ = 4;
+  for (const part of b.parts) topZ = Math.max(topZ, floorZ(part, part.floors.length));
+  return { id: b.id, tileIdx, cx: c[0], cy: c[1], r, topZ, footprint: b.footprint };
 }
 
 export interface ForegroundCutInput {

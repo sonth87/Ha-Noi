@@ -1251,7 +1251,7 @@ function drawJwMarriottHanoi(B: Batch, b: Building, level: Detail) {
   // Mặt hồ nước cảnh quan ôm trọn khối khách sạn
   B.flat('water', localRect(ob, -hw - 5.0, hw + 5.0, -hd - 8.0, -hd + 2.0), 0.08, 'detail', b.id);
 
-  // 5 khối спиral / lượn sóng nối tiếp nhau theo hình dáng rồng cuộn vươn ra mặt hồ
+  // 5 khối xoắn / lượn sóng nối tiếp nhau theo hình dáng rồng cuộn vươn ra mặt hồ
   const segments = 5;
   const segW = (hw * 1.9) / segments;
   for (let i = 0; i < segments; i++) {

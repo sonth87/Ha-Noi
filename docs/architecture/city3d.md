@@ -7,8 +7,8 @@ Vẽ **bất kỳ** mô hình thành phố nào ([city-model](city-model.md)) b�
 | Thư mục | Chứa | Được dùng | Cấm |
 |---|---|---|---|
 | `src/render/` | Mô hình thành phố → geometry three.js (`buildCityGeometry`). Không vật liệu, không DOM | core, three | React, DOM, `view/`, `ui/` |
-| `src/view/` | `CityView`: điều phối renderer, camera, vật liệu, đèn, ngày/đêm; cùng các mô-đun tách biệt: `constants.ts` (hằng số), `i18n.ts` (đa ngôn ngữ `vi`/`en`), `povController.ts` (góc nhìn phối cảnh POV tàu Metro & tự lái ô tô kèm Frustum-Cone Culling), `sdk.ts` (Public SDK, Event Bus & Extension API), `seeThrough.ts` (shader nhìn xuyên ga tàu & tòa nhà), `overlayDom.ts` (nhãn 3D, tooltip, popup), `placeInfo.ts` (tra cứu địa điểm/công trình từ `CityModel`), `urlState.ts` (đồng bộ URL), `quality.ts`, `lights.ts` | mọi thứ | — |
-| `src/ui/` | Vỏ React theo thiết kế nổi tràn viền Mẫu 1 (ADR-056): 2 cụm thanh công cụ nổi phía trên (điều hướng Khu vực / Công trình / POV bên trái; chọn nhanh 4 ô màu bản đồ / Nhìn xuyên / Ngày-Đêm / Ngôn ngữ `VI/EN` / Tùy chỉnh bên phải), Drawer cài đặt nổi phân 3 tab (`Giao diện`, `Ánh sáng`, `Đồ họa`), bộ tạo hiệu ứng khúc xạ thấu kính `liquidGlass.ts` (`sonth87/liquid-glass`: `Off` đặc mặc định / `Tint` mờ / `Glass` thấu kính), HUD lái xe/tàu, và viên thuốc trạng thái kèm ghi nguồn ở góc dưới trái | `view/`, `@my-city/*` | three, `render/` |
+| `src/view/` | `CityView`: điều phối renderer, camera, vật liệu, đèn, ngày/đêm; cùng các mô-đun tách biệt: `constants.ts` (hằng số), `i18n.ts` (đa ngôn ngữ `vi`/`en`), `povController.ts` (góc nhìn phối cảnh POV tàu Metro & tự lái ô tô kèm Frustum-Cone Culling), `sdk.ts` (Public SDK, Event Bus & Extension API), `seeThrough.ts` (shader nhìn xuyên ga tàu & tòa nhà), `overlayDom.ts` (nhãn 3D, tooltip, popup), `placeInfo.ts` (tra cứu địa điểm/công trình từ `CityModel`), `urlState.ts` (đồng bộ URL), `quality.ts`, `lights.ts`; quy mô và vòng đời (ADR-059): `spatialGrid.ts` + `tileIndex.ts` (lưới không gian, tập ô đang hiện / đã dựng / đang cắt, LRU), `windowPainter.ts` (đèn, màu cửa, tô trễ), `picking.ts` (BVH cho picking), `chunkStreamer.ts` (chọn và thử lại chunk), `idleQueue.ts` (việc lúc rảnh), `trafficView.ts` (xe quanh camera, lọc theo vị trí, va chạm với xe người chơi), `signalClock.ts` (đèn theo từng nút), `chunkClient.ts` + `chunkWorker.ts` (import chunk trong worker), `mapInput.ts` (chuột, cảm ứng, picking), `pegman.ts` | mọi thứ | — |
+| `src/ui/` | Vỏ React (ADR-063): `App.tsx` (tải + ghép), thanh trên (Khu vực · Công trình · Trải nghiệm · Ngày/Đêm · Tùy chỉnh), `Sheet.tsx` (khung chung của mọi menu: thẻ nổi trên máy tính, bottom sheet trên điện thoại, nút đóng 40/44 px, Esc, chạm ra ngoài), `Explorer.tsx` (danh sách công trình, dữ liệu ở `view/explore.ts`), `Menus.tsx` (khu vực, chế độ nhập vai), `SettingsSheet.tsx` (giao diện, đèn, đồ họa), `Overlays.tsx` (dock camera + Pegman, thanh mô hình 3D, thanh nhập vai + nút lái, thanh trạng thái), `icons.tsx`, `liquidGlass.ts` (ADR-056); CSS: `app.css` (bề mặt kính, nhãn trên bản đồ, bảng điều khiển) + `shell.css` (các khối giao diện) | `view/`, `@my-city/*` | three, `render/` |
 
 Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `CityView` (`useSyncExternalStore`); snapshot đổi khi có sự kiện (chế độ, góc, bảng màu bản đồ, màu nhấn, đèn, chất lượng, ngôn ngữ) và fps tối đa 2 lần/giây, không theo từng frame. `CityView` xuất bản `view.sdk` (và `window.MyCitySDK`) để tích hợp Extension / Plugin bên ngoài (ADR-052).
 
@@ -38,7 +38,7 @@ Luật cưỡng chế bằng ESLint gốc. React chỉ đọc snapshot của `Ci
 - **Vùng**: tô phẳng theo loại, có viền.
 - **Công trình trên đế (`showcase.ts`, ADR-048)**: `showcasesOf(city)` và `buildShowcase(city, id)` dựng từng công trình lớn từ OSM (Việt Tower, Novotel, MIPEC, VPBank, PeakView, Hoàng Cầu Skyline, Oriental Tower, Vincom…, các ga Metro 2A) hoặc 5 mẫu kiến trúc Hà Nội độc lập ở mức L3 đặt giữa đế mô hình vát góc kiểu `iso-glow` (có viền chìm, 4 ốc góc, đoạn đường trước nhà, vỉa hè lát gạch, đèn đường + vùng sáng đêm và cây 3D). Dùng chung pipeline `Batch`/`Layer` nên Ngày/Đêm, cửa sáng và click tầng hoạt động như trên bản đồ.
 - **Đèn**: mỗi cửa sổ thuộc một tầng (`<id tòa>/<n>`); bật một tầng là ghi lại đúng đoạn màu của các đỉnh thuộc tầng đó trong buffer `color`, **mỗi cửa một sắc độ** (`render/lights.ts`: rất sáng / sáng / mờ / vẫn tắt theo seed, ADR-038).
-- **Click**: tia chiếu trúng tam giác tường/kính/mái → bảng đoạn tam giác theo tòa (tìm nhị phân) → tòa → tầng theo độ cao điểm trúng (`floorAt`).
+- **Click**: tia chiếu trúng tam giác tường/kính/mái → bảng đoạn tam giác theo tòa (tìm nhị phân) → tòa → tầng theo độ cao điểm trúng (`floorAt`). Ứng viên chỉ là các ô đang hiện (`tileIndex`). Geometry ≥ 20.000 tam giác (nền toàn thành phố, ~945 nghìn) có BVH `three-mesh-bvh` dựng lúc rảnh, chế độ `indirect` để `faceIndex` giữ nguyên (ADR-059; 45 ms → 0,07 ms mỗi lần rê chuột).
 
 ## 3. Camera (`CityView` & `PovController`)
 
@@ -50,7 +50,7 @@ Hệ thống camera kép gồm `OrthographicCamera` cho bản đồ và `Perspec
 
 ## 4. Mức chi tiết theo zoom (ADR-036, ADR-049)
 
-Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: các ô trong tầm nhìn dựng ngay ở mức thấp; sau đó mỗi khung hình (khi người dùng không đang kéo/chụm cảm ứng) dựng thêm một ô trong tầm nhìn ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại. Mỗi khung chỉ dựng trong ngân sách thời gian (6 ms di động, 10 ms máy tính; luôn dựng ít nhất một ô) để tablet không bị khựng; lớp tổng quan công trình zoom xa dựng ở L0 lúc rảnh và dựng lại khi chunk mới thêm công trình (ADR-058).
+Camera trực giao không có "xa", vật chỉ nhỏ đi khi thu nhỏ. `detailFor(px/m)`: dưới 4,5 px cho 1 m → L1, 4,5–9 px → L2, từ 9 px → L3, không vượt "Chi tiết nhà" người dùng chọn (ADR-044). Nét, xe, cây giảm theo các mốc `FAR` (nhạt dần từ 8 tới 2,5 px/m). Mở trang: các ô trong tầm nhìn dựng ngay ở mức thấp; sau đó mỗi khung hình (khi người dùng không đang kéo/chụm cảm ứng) dựng thêm một ô trong tầm nhìn ở mức cần, ô gần tâm nhìn trước (bảng chất lượng báo số ô còn chờ). Ô đã dựng được giữ lại, đổi qua lại không phải dựng lại. Mỗi khung chỉ xét các ô mà **lưới không gian** trả về quanh tâm nhìn (256 m; công trình cao 512 m), và ẩn các ô vừa ra khỏi tầm từ tập "đang hiện". Không vòng lặp nào mỗi khung duyệt toàn bộ 4.400 ô (A32, chốt chặn trong `hygiene.test.ts`). Mỗi khung chỉ dựng trong ngân sách thời gian (6 ms di động, 10 ms máy tính; luôn dựng ít nhất một ô) để tablet không bị khựng; lớp tổng quan công trình zoom xa dựng ở L0 lúc rảnh và dựng lại khi chunk mới thêm công trình (ADR-058).
 
 ## 5. Đèn (ADR-039)
 
@@ -58,20 +58,36 @@ Nút **Ngày / Đêm** (phím N hoặc T) đổi cùng lúc giao diện sáng �
 
 ## 5b. Giao thông và đèn tín hiệu
 
-Mỗi khung hình: thời gian mô phỏng tăng, `signalsAt` cho pha; đổi pha thì bật / tắt các lamp đèn tín hiệu; `stepTraffic` cho mọi xe đi; chỉ các xe nằm trong tầm nhìn mới được gom vào đầu `InstancedMesh` (`o.count = vis`) và biến đổi nét cạnh (`instanceCount`). Chân trang hiện màu đèn và số giây còn lại của Tây Sơn (`x`) và Thái Hà (`y`).
+**Xe quanh camera** (`view/trafficView.ts › TrafficArea`, ADR-060): xe có ở mọi làn đi qua vòng 600 m quanh tâm nhìn, theo mật độ đã chọn (tối đa 4.000 xe); tâm nhìn đi quá 267 m thì chọn lại làn, xe đang chạy giữ trạng thái. Làn lấy từ mạng đường lúc khởi động (đường của chunk tải sau chưa có xe).
+
+**Đèn theo từng nút** (ADR-060): các nút có đèn cách nhau < 40 m là một nút giao (`signalClusters`); mỗi nút có độ lệch pha riêng (`signalOffset`), nên các nút không đổi đèn cùng lúc. Vạch dừng, cột đèn và lamp (`signal/<nút>/<x|y>/<stop|wait|go>`) mang id nút; `SignalClock` chỉ đổi lamp của các nút quanh tầm nhìn. Nút gần gốc bản đồ (ngã tư Thái Hà) giữ chu kỳ gốc.
+
+**Xe rẽ ở nút** (ADR-061): ở mỗi nút ≥ 3 nhánh, làn của hai tuyến khác nhau được nối bằng lượt rẽ (`LaneTurn`, Bézier bậc 2 từ ngay sau vạch dừng tới sau nút).
+- Giữa làn, 25% số xe rẽ; cuối làn thì bắt buộc rẽ, nên không còn quay về đầu làn ở đó.
+- Xe chỉ vào làn đích khi có chỗ, khi làn đích không dày hơn làn đang đi, và chỉ khi loại xe đó thoát ra được từ làn đích.
+- Đang rẽ thì đi 4,5–5 m/s; với việc giữ khoảng cách, xe được tính như đã ở làn đích.
+- `vehiclePoint` (core) cho vị trí xe để vẽ.
+
+**Lái xe POV** (ADR-062): mô hình arcade `view/carPhysics.ts` (vòng quay 5,5 m, tối đa 70 km/h, không tự lái, trượt dọc lề), camera bám kiểu lò xo, FOV rộng dần theo tốc độ.
+
+**Xe của người chơi (POV lái xe)**: không đi xuyên xe khác (`separateFromTraffic`); xe máy tính phía sau phanh khi xe người chơi chắn làn (`playerAhead` → `stepTraffic(..., obstacleAhead)`).
+
+Mỗi khung hình: thời gian mô phỏng tăng; `stepTraffic` cho mọi xe đi với đèn của từng nút; chỉ các xe nằm trong tầm nhìn mới được gom vào đầu `InstancedMesh` (`o.count = vis`) và biến đổi nét cạnh (`instanceCount`). Chân trang hiện màu đèn và số giây còn lại của Tây Sơn (`x`) và Thái Hà (`y`) ở ngã tư chính.
 
 ## 6. Màu và chất lượng
 
 - Màu chỉ từ token CSS của `@my-city/theme` (đọc lại khi đổi theme): nền `--bg`; mặt đất và tường `--body`; mái, vỉa hè, tôn/sắt, bạt `--deck`; kính và nước `--glass`; lòng đường `--recess`; vạch `--line`; cỏ và cây chậu `--panel`; nét viền và cạnh `--line`; nét chi tiết `--detail`; cửa tắt `--recess`, cửa sáng `--accent`; đèn báo `--accent-hi`.
 - Glow (bloom) chỉ ở theme tối và khi bật trong chất lượng; ngưỡng sáng 0,5 nên chỉ màu nhấn mới tỏa. Khi bloom tắt (như ở chế độ Ngày), renderer vẽ trực tiếp không qua `EffectComposer` (ADR-049).
-- Chất lượng (`view/quality.ts`): 4 mức **Thấp / Trung bình / Cao / Rất cao** (mặc định **Cao** trên máy tính, **Trung bình** trên điện thoại/cảm ứng); chỉnh tay một tùy chọn thì thành **Tùy chỉnh**, chỉnh về đúng bộ của một mức thì trở lại tên mức đó. Có: chi tiết nhà tối đa (L0–L3), tự giảm khi thu nhỏ, độ phân giải (×1–×3), khử răng cưa (MSAA 4×), glow, cửa sổ, 3 lớp nét. Nhớ theo máy (localStorage; không có vẫn chạy).
+- Chất lượng (`view/quality.ts`): MSAA chỉ đặt được lúc tạo ngữ cảnh WebGL, nên đổi MSAA thì `CityView` dựng lại renderer (unmount/mount, giữ camera); việc tự hạ mức không đổi MSAA (ADR-059). 4 mức **Thấp / Trung bình / Cao / Rất cao** (mặc định **Cao** trên máy tính, **Trung bình** trên điện thoại/cảm ứng); chỉnh tay một tùy chọn thì thành **Tùy chỉnh**, chỉnh về đúng bộ của một mức thì trở lại tên mức đó. Có: chi tiết nhà tối đa (L0–L3), tự giảm khi thu nhỏ, độ phân giải (×1–×3), khử răng cưa (MSAA 4×), glow, cửa sổ, 3 lớp nét. Nhớ theo máy (localStorage; không có vẫn chạy).
 
 | Mức | Chi tiết nhà | Tự giảm | Xe | Cột + dây | Cây | Tầm nhìn | Tự hạ mức | Độ phân giải | MSAA | Glow | Nét chi tiết |
 |---|---|---|---|---|---|---|---|---|---|---|---|
-| Thấp | L1 | có | 30% | — | đơn giản | 150 m | có | ×1 | — | — | — |
-| Trung bình | L2 | có | 60% | có | đơn giản | 250 m | có | ×1,5 | có | có | — |
-| Cao (mặc định) | L3 | có | 100% | có | đầy đủ | hết | có | ×2 | có | có | có |
-| Rất cao | L3 | không | 100% | có | đầy đủ | hết | không | ×3 | có | có | có |
+| Thấp | L1 | có | 15% | — | đơn giản | 400 m | có | ×1 | — | — | — |
+| Trung bình | L2 | có | 30% | có | đơn giản | 700 m | có | ×1,5 | — | — | — |
+| Cao (mặc định) | L3 | có | 30% | có | đầy đủ | 1200 m | có | ×2 | có | có | có |
+| Rất cao | L3 | không | 60% | có | đầy đủ | hết | không | ×3 | có | có | có |
+
+**Đèn và đổi theme**: đổi theme hay tỉ lệ cửa sáng chỉ tô lại các layer đang hiện; layer của ô / ô đường / ô đồ phố đang ẩn được tô khi hiện lại (`windowPainter.freshen`). Chuyển ngày/đêm 5 bước, mỗi bước 100 ms.
 
 **Tự hạ mức**: fps dưới 28 suốt 3 giây (không tính lúc đang dựng ô hoặc tab bị ẩn) thì xuống một mức; bảng chất lượng báo đã tự hạ. Không tự nâng lại. **Tầm nhìn xa**: ẩn ô nhà, ô đồ phố và xe xa tâm nhìn hơn khoảng đã chọn; lớp nền (đường, vùng) vẫn vẽ hết.
 
@@ -81,9 +97,23 @@ Test Node (không cần WebGL): `render/city.test.ts`: hình học hữu hạn, 
 
 ## 8. Khởi động, Web Worker và đường tách `CityView`
 
-- **Khởi động** (`ui/App.tsx`): skeleton và 4 chunk đầu tải song song → `importArea` → **`view/prebuild.ts` đưa `view/baseWorker.ts` (Web Worker) dựng mạng đường, đồ phố và 6 batch của nền bản đồ** (`render/city.ts › buildMapBaseBatches`) rồi gửi về dạng typed array (`render/batchTransfer.ts`); luồng chính chỉ đổi batch thành layer (`layersOfBase`) và nhận kết quả bằng `primeRoadNetwork` / `primeRenderNetwork` / `primeFurniture`. Không có Worker, city không clone được, worker lỗi hoặc quá 45 s thì `prebuildBase` trả `null` và `CityView` tự dựng như cũ. Worker **không làm khởi động nhanh hơn** (khứ hồi ~2,4 s ≈ dựng trên luồng chính) mà giữ trang không bị đứng. Biên giới worker có test (`render/worker-transfer.test.ts`: clone được, kết quả khứ hồi giống hệt dựng trực tiếp).
-- **Bộ nhớ**: ô nhà, ô đường nội bộ và ô đồ phố xa bị giải phóng theo LRU khi vượt trần (`evictFarCaches`: 260 / 44 / 84 trên máy tính, 110 / 18 / 36 trên di động).
-- **Tách `CityView.ts`** (3.913 → 3.346 dòng; chốt chặn kích thước ở `render/hygiene.test.ts`, hạ mỗi lần tách):
-  - **Đã tách**: `view/overlayLabels.ts` (`OverlayLabels`: nhãn phố, thẻ địa điểm, tên phường / thành phố; giao diện `OverlayHost`, test vòng đời `overlayLabels.test.ts`); `view/sdk.ts › createCitySDK` (mặt SDK công khai; giao diện `SdkHost`, test `sdk.test.ts`); `view/chunkMerge.ts` (`mergeChunk`, `chunkSubCity`, `chunkBounds`: phần dữ liệu thuần của `ingestCityChunk`, test `chunkMerge.test.ts`).
-  - **Chưa tách**, theo độ gắn kết: (1) phần còn lại của `ingestCityChunk` (làm mới ô, ô đường nội bộ, ô đồ phố: đụng GPU layer và nhóm three.js), `streamViewportChunks` và `evictFarCaches`: lớp `TileCache`; (2) `mount()` (609 dòng) tách theo giai đoạn (renderer, camera và điều khiển, sự kiện chuột / cảm ứng, vòng lặp); (3) `mountShowcase`, `syncUrlState`.
+- **Khởi động** (`ui/App.tsx`, ADR-060):
+  - **`view/baseWorker.ts` làm cả phần nặng**: tải skeleton và 4 chunk đầu, `importArea`, dựng mạng đường, đồ phố và 6 batch nền (`buildMapBaseBatches`).
+  - Worker gửi `city` về bằng structured clone, batch bằng typed array chuyển giao (`render/batchTransfer.ts`).
+  - Luồng chính (`view/prebuild.ts › startInWorker`) chỉ đổi batch thành layer và `prime*` các bộ nhớ đệm.
+  - Không có Worker, worker lỗi hoặc quá 60 s thì app tải và import trên luồng chính như trước.
+  - Không tính sẵn mô hình lúc build: mô hình sau import nặng 12 MB, gấp đôi OSM thô (ADR-060).
+  - Chunk stream về sau import trong `view/chunkWorker.ts` (sống suốt phiên, qua `chunkClient.ts`).
+  - Biên giới worker có test (`render/worker-transfer.test.ts`, `view/chunkClient.test.ts`).
+- **Bộ nhớ**: ô nhà, ô đường nội bộ và ô đồ phố xa bị giải phóng theo LRU khi vượt trần (`evictFarCaches` + `lruEvictions`: 260 / 44 / 84 trên máy tính, 110 / 18 / 36 trên di động). Số đã dựng đọc từ tập `built*`, nên khung hình dưới trần không tốn gì. Gỡ một layer chỉ qua `disposeLayerObj` / `freeTile` / `freeLocal` / `freeCell` / `dropTileCut` (A28).
+- **Chunk tới** (`ingestCityChunk`, A31):
+  - đưa tòa mới vào ô, lưới, catalog địa điểm (`addBuildingsToCatalog`), catalog phố (`updateStreetCatalog`), mặt bằng nhìn xuyên và chỉ mục đường của POV (`pov.addStreets`);
+  - ô đường nội bộ và đồ phố của chunk (cần mạng đường của chunk, ~45 ms) dựng **lúc rảnh** qua `IdleQueue`.
+  - Số đo (5 chunk, V8 profiler): 495 ms → 276 ms. Phần còn lại là `roadNetwork` + `localStreetTilesOf` của chunk; hướng tiếp theo là worker hoặc tính sẵn lúc build (ADR-059 mục "chưa làm").
+- **POV**: công trình cao thấy tới 3 km (`CULL_LANDMARK_DIST`). Vào POV chỉ dựng đồng bộ các ô trong 180 m quanh xe/tàu; phần còn lại dựng theo ngân sách khung.
+- **Tách `CityView.ts`** (3.913 → 2.998 dòng; chốt chặn kích thước ở `render/hygiene.test.ts`, hạ mỗi lần tách):
+  - **Đã tách (ADR-060)**: `mapInput.ts` (bộ xử lý input của `mount()`), `pegman.ts`, `signalClock.ts` → 2.998 dòng, chốt 3.000.
+  - **Đã tách (ADR-059)**: `tileIndex.ts` (trạng thái ô + lưới + LRU), `windowPainter.ts` (đèn), `chunkStreamer.ts` (chọn chunk, thử lại), `idleQueue.ts`, `trafficView.ts`, `picking.ts`; `quickPlaces` sang `placeInfo.ts`.
+  - **Đã tách trước đó**: `view/overlayLabels.ts` (`OverlayLabels`: nhãn phố, thẻ địa điểm, tên phường / thành phố; giao diện `OverlayHost`, test vòng đời `overlayLabels.test.ts`); `view/sdk.ts › createCitySDK` (mặt SDK công khai; giao diện `SdkHost`, test `sdk.test.ts`); `view/chunkMerge.ts` (`mergeChunk`, `chunkSubCity`, `chunkBounds`: phần dữ liệu thuần của `ingestCityChunk`, test `chunkMerge.test.ts`).
+  - **Chưa tách**, theo độ gắn kết: (1) phần GPU của ô (`ensure`, `free*`, `syncTileVisibility`) thành một lớp `TileCache` dùng `TileIndex`; (2) phần còn lại của `mount()` (renderer, camera và điều khiển, vòng lặp); (3) `mountShowcase`, `syncUrlState`.
   - Hai bước đã làm chỉ **kiểm bằng typecheck, lint, test**; theo A7 cần người dùng xem trên dev server: nhãn phố, thẻ địa điểm và tên phường có hiện, bấm vào nhãn có bay tới, đổi ngôn ngữ có vẽ lại; SDK: `window.MyCitySDK.flyTo(...)`.

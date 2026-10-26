@@ -1,6 +1,6 @@
 /* Street furniture in 3D (M5, ADR-037, ADR-047), from core's streetFurniture: poles with crossarms, lamp
    posts and lamps on poles (their heads light at night: lamp "street/lamps"), traffic signal posts
-   (three lights per head, lamps "signal/<group>/<stop|wait|go>", lit by the view from the signal
+   (three lights per head, lamps "signal/<junction>/<group>/<stop|wait|go>", lit by the view from the signal
    phase), pools of light on the ground under the lamps (shown at night in the dark theme), trees in
    two looks (full: flared root base, tapered trunk, forked 3D limbs and multi-lobed 3-tone shaded
    canopy in three habits with scalloped foliage contours and leaf ticks; simple: multi-pad crown,
@@ -36,7 +36,8 @@ export interface FurnitureBucket {
 }
 
 export const STREET_LAMPS = 'street/lamps';
-export const signalLamp = (group: 'x' | 'y', light: 'stop' | 'wait' | 'go') => `signal/${group}/${light}`;
+/** one junction's light of one direction group (each junction runs its own clock, core signalClusters) */
+export const signalLamp = (junction: string, group: 'x' | 'y', light: 'stop' | 'wait' | 'go') => `signal/${junction}/${group}/${light}`;
 
 const POLE_H = 8.5;
 
@@ -148,7 +149,7 @@ function signal(B: Batch, p: Prop) {
   (['stop', 'wait', 'go'] as const).forEach((light, k) => {
     const zc = z1 - 0.18 - k * 0.33, r = 0.11;
     const pt = (y: number, z: number) => V(f[0] + v[0] * y, f[1] + v[1] * y, z);
-    B.window(signalLamp(p.group ?? 'x', light), [pt(-r, zc - r), pt(r, zc - r), pt(r, zc + r), pt(-r, r + zc)], n);
+    B.window(signalLamp(p.junction ?? '', p.group ?? 'x', light), [pt(-r, zc - r), pt(r, zc - r), pt(r, zc + r), pt(-r, r + zc)], n);
   });
 }
 

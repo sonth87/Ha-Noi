@@ -1,7 +1,7 @@
 /* Landmark spots that are placed as offsets from a real-map anchor must stay in step with the OSM data. */
 import { describe, expect, it } from 'vitest';
 import { loadCity } from '@my-city/osm-import';
-import { NGOC_SON_MAP_CENTRE } from './landmarks';
+import { NGOC_SON_MAP_CENTRE } from './landmarks/vn/ha-noi/index';
 import { orientedBoxOf } from './landmarks/shared';
 
 const { city } = loadCity('nga-tu-thai-ha');

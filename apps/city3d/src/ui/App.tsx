@@ -1,27 +1,21 @@
-/* The shell around the scene: top bar, the scene, the quality panel, status line and the data credit
-   (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+/* The shell around the scene (ADR-063): loading, then the top bar with its menus, the settings sheet, the camera
+   dock, the bars of a 3D model and of an immersive view, and the status line with the data credit (A15). React
+   only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { roadNetwork, streetFurniture } from '@my-city/core';
 import { loadCityStreamingInitAsync } from '@my-city/osm-import';
-import { MAP_PALETTES, PALETTES, accentKey } from '@my-city/theme';
-import { CityView, type PegmanDropPreview } from '@view/CityView';
-import { prebuildBase } from '@view/prebuild';
-import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
-import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
-import { lightOn } from '@view/lights';
-import { PLACE_INFO_MODES, type PlaceInfoMode } from '@view/placeInfo';
-import { STREET_LABEL_MODES, type StreetLabelMode } from '@view/streetLabels';
+import { CityView } from '@view/CityView';
+import { startInWorker } from '@view/prebuild';
+import { DEFAULT_AREA_ID } from '@view/constants';
+import { getLocale, t } from '@view/i18n';
 import { frameForCity, parseUrlState } from '@view/urlState';
-import { LightsPanel } from './LightsPanel';
+import { Explorer } from './Explorer';
+import { Icon, type IconName } from './icons';
 import { LoadingScreen, type LoadingProgress } from './LoadingScreen';
-import { QualityPanel } from './QualityPanel';
-import {
-  applyUiGlassToRoot,
-  loadUiGlassSettings,
-  saveUiGlassSettings,
-  type UiGlassMode,
-  type UiGlassSettings,
-} from './liquidGlass';
+import { PlacesMenu, PovMenu } from './Menus';
+import { MapDock, PovBar, ShowcaseBar, StatusBar } from './Overlays';
+import { SettingsSheet } from './SettingsSheet';
+import { applyUiGlassToRoot, loadUiGlassSettings, saveUiGlassSettings, type UiGlassSettings } from './liquidGlass';
 
 let shared: CityView | null = null;
 let sharedPromise: Promise<CityView> | null = null;
@@ -65,47 +59,45 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         percent: 22,
         label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu khung bản đồ Hà Nội...',
       });
-      // skeleton and the first chunks download together (they used to go one after the other)
       const initialChunkKeys = computeInitialViewportChunkKeys();
-      const loading = loadCityStreamingInitAsync(DEFAULT_AREA_ID, initialChunkKeys);
-      loading.catch(() => { /* reported by the await below */ });
+      let counts: { buildings: number; streets: number; stations: number } | undefined;
+      const imported = (c: typeof counts) => {
+        counts = c;
+        onProgress({
+          step: 3,
+          percent: 72,
+          label: isEn ? '3/5 · Building road network, flyovers & Metro...' : '3/5 · Đang dựng mạng lưới giao thông & tuyến Metro...',
+          ...(c ? { counts: c } : {}),
+        });
+      };
       await yieldToBrowser();
       onProgress({
         step: 2,
         percent: 48,
         label: isEn ? '2/5 · Decoding buildings, lakes & terrain...' : '2/5 · Đang giải mã công trình, sông hồ & địa hình...',
       });
-      const { city, loadedChunks } = await loading;
-      const counts = {
-        buildings: city.buildings.length,
-        streets: city.streets.length,
-        stations: city.stations.length,
-      };
-
-      onProgress({
-        step: 3,
-        percent: 72,
-        label: isEn ? '3/5 · Building road network, flyovers & Metro...' : '3/5 · Đang dựng mạng lưới giao thông & tuyến Metro...',
-        counts,
-      });
-      await yieldToBrowser();
-
+      // download, import, road network, furniture and the map base all run in a worker so the page stays
+      // responsive (ADR-059); if that fails the main thread does it the old way
+      const started = await startInWorker(DEFAULT_AREA_ID, initialChunkKeys, imported);
+      let built: CityView;
+      if (started) {
+        built = new CityView(started.city, started.loadedChunks, started.prebuilt);
+      } else {
+        const { city, loadedChunks } = await loadCityStreamingInitAsync(DEFAULT_AREA_ID, initialChunkKeys);
+        imported({ buildings: city.buildings.length, streets: city.streets.length, stations: city.stations.length });
+        await yieldToBrowser();
+        const net = roadNetwork(city);
+        await yieldToBrowser();
+        streetFurniture(city, net);
+        built = new CityView(city, loadedChunks, null);
+      }
       onProgress({
         step: 4,
         percent: 92,
         label: isEn ? '4/5 · Initializing 3D landmarks & place catalog...' : '4/5 · Đang khởi tạo công trình biểu tượng & địa danh...',
-        counts,
+        ...(counts ? { counts } : {}),
       });
       await yieldToBrowser();
-      // road network, street furniture and the map base are built in a worker; if that is not possible the
-      // main thread does them here, one after the other, as it always did
-      const prebuilt = await prebuildBase(city);
-      if (!prebuilt) {
-        const net = roadNetwork(city);
-        await yieldToBrowser();
-        streetFurniture(city, net);
-      }
-      const built = new CityView(city, loadedChunks, prebuilt);
 
       onProgress({
         step: 5,
@@ -131,180 +123,6 @@ if (import.meta.hot) {
     sharedPromise = null;
   });
 }
-
-// Lucide-style crisp inline SVG icons
-const IconBox = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-    <line x1="12" y1="22.08" x2="12" y2="12" />
-  </svg>
-);
-
-const IconMapPin = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
-    <circle cx="12" cy="10" r="3" />
-  </svg>
-);
-
-const IconSearch = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="11" cy="11" r="8" />
-    <path d="m21 21-4.3-4.3" />
-  </svg>
-);
-
-const IconChevronDown = () => (
-  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="m6 9 6 6 6-6" />
-  </svg>
-);
-
-const IconHome = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" />
-  </svg>
-);
-
-const IconSun = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="4" />
-    <path d="M12 2v2M12 20v2m-7.07-14.93 1.41 1.41m11.32 11.32 1.41 1.41M2 12h2m16 0h2m-14.93 7.07 1.41-1.41m11.32-11.32 1.41-1.41" />
-  </svg>
-);
-
-const IconMoon = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
-  </svg>
-);
-
-const IconSliders = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <line x1="4" x2="4" y1="21" y2="14" />
-    <line x1="4" x2="4" y1="10" y2="3" />
-    <line x1="12" x2="12" y1="21" y2="12" />
-    <line x1="12" x2="12" y1="8" y2="3" />
-    <line x1="20" x2="20" y1="21" y2="16" />
-    <line x1="20" x2="20" y1="12" y2="3" />
-    <line x1="2" x2="6" y1="14" y2="14" />
-    <line x1="10" x2="14" y1="8" y2="8" />
-    <line x1="18" x2="22" y1="16" y2="16" />
-  </svg>
-);
-
-const IconSignpost = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M18 6H5a2 2 0 0 0-2 2v3a2 2 0 0 0 2 2h13l4-3.5L18 6Z" />
-    <path d="M12 13v8" />
-    <path d="M12 3v3" />
-  </svg>
-);
-
-const IconInfo = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 16v-4" />
-    <path d="M12 8h.01" />
-  </svg>
-);
-
-const IconPlus = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-    <path d="M12 5v14M5 12h14" />
-  </svg>
-);
-
-const IconMinus = () => (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-    <path d="M5 12h14" />
-  </svg>
-);
-
-const IconRotateCw = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-    <path d="M21 3v5h-5" />
-  </svg>
-);
-
-/** Rotating compass needle (North red/accent tip + South light tip) */
-const IconCompassNeedle = ({ heading }: { heading: number }) => (
-  <svg
-    width="20"
-    height="20"
-    viewBox="0 0 24 24"
-    aria-hidden="true"
-    className="compass-needle-svg"
-    style={{ transform: `rotate(${-heading}deg)` }}
-  >
-    <polygon points="12,2.2 15.4,12 8.6,12" className="compass-north-tip" />
-    <polygon points="12,21.8 15.4,12 8.6,12" className="compass-south-tip" />
-    <circle cx="12" cy="12" r="1.8" className="compass-pivot" />
-  </svg>
-);
-
-/** Google Maps–style crosshair "My Location" icon */
-const IconMyLocation = () => (
-  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="7" />
-    <circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none" />
-    <line x1="12" y1="2" x2="12" y2="5" />
-    <line x1="12" y1="19" x2="12" y2="22" />
-    <line x1="2" y1="12" x2="5" y2="12" />
-    <line x1="19" y1="12" x2="22" y2="12" />
-  </svg>
-);
-
-/** Google Maps–style Pegman standing figure icon for drag-and-drop Street / Metro POV */
-const IconPegman = () => (
-  <svg width="18" height="20" viewBox="0 0 24 26" fill="currentColor" aria-hidden="true" className="pegman-svg">
-    <circle cx="12" cy="4.6" r="3.3" />
-    <path d="M8.2 9.2c-1.3 0-2.3 1-2.3 2.3v4.4c0 .8.6 1.4 1.3 1.4h.9v6.1c0 .9.7 1.6 1.6 1.6h.8c.8 0 1.4-.6 1.4-1.4v-4.6h.2v4.6c0 .8.6 1.4 1.4 1.4h.8c.9 0 1.6-.7 1.6-1.6v-6.1h.9c.7 0 1.3-.6 1.3-1.4v-4.4c0-1.3-1-2.3-2.3-2.3H8.2Z" />
-  </svg>
-);
-
-const IconArrowLeft = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="m12 19-7-7 7-7" />
-    <path d="M19 12H5" />
-  </svg>
-);
-
-const IconSeeThrough = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z" />
-    <circle cx="12" cy="12" r="3" />
-  </svg>
-);
-
-const IconGlobe = () => (
-  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" />
-    <path d="M2 12h20" />
-  </svg>
-);
-
-const IconPov = () => (
-  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="12" r="3" />
-    <line x1="12" y1="2" x2="12" y2="9" />
-    <line x1="4.93" y1="19.07" x2="9.88" y2="14.12" />
-    <line x1="19.07" y1="19.07" x2="14.12" y2="14.12" />
-  </svg>
-);
-
-const POV_MODE_I18N: Record<PovMode, { label: TranslationKey; sub?: TranslationKey; tag: string }> = {
-  map: { label: 'pov.mode.map', tag: '3D' },
-  'metro-cab': { label: 'pov.mode.metro-cab', sub: 'pov.sub.metro-cab', tag: 'METRO' },
-  'metro-passenger': { label: 'pov.mode.metro-passenger', sub: 'pov.sub.metro-passenger', tag: 'METRO' },
-  'drive-cabin': { label: 'pov.mode.drive-cabin', sub: 'pov.sub.drive-cabin', tag: 'CAR' },
-  'drive-top': { label: 'pov.mode.drive-top', sub: 'pov.sub.drive-top', tag: 'CAR' },
-};
 
 export function App() {
   const [readyView, setReadyView] = useState<CityView | null>(() => shared);
@@ -369,1170 +187,107 @@ export function App() {
   return <AppShell view={readyView} />;
 }
 
+type Menu = 'places' | 'landmarks' | 'pov' | null;
+
 function AppShell({ view: v }: { view: CityView }) {
   const s = useSyncExternalStore(v.subscribe, v.getSnapshot);
   const loc = s.locale;
   const host = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
-  const [panel, setPanel] = useState(false);
-  const [drawerTab, setDrawerTab] = useState<'appearance' | 'lights' | 'quality'>('appearance');
-  const [uiGlass, setUiGlass] = useState<UiGlassSettings>(() => loadUiGlassSettings());
-  const [openMenu, setOpenMenu] = useState<'showcase' | 'place' | 'pov' | null>(null);
-  const [scCountry, setScCountry] = useState<string>('vn');
-  const [scCity, setScCity] = useState<string>('vn/ha-noi');
-  const [scDistrict, setScDistrict] = useState<string>('ALL');
-  const [scSearch, setScSearch] = useState('');
-  const [scCat, setScCat] = useState<string>('ALL');
-  const [plSearch, setPlSearch] = useState('');
-  const [plCat, setPlCat] = useState<string>('ALL');
-  const [activePlaceId, setActivePlaceId] = useState('home');
-  const [pegmanDrag, setPegmanDrag] = useState<{
-    clientX: number;
-    clientY: number;
-    preview: PegmanDropPreview | null;
-  } | null>(null);
-  const menuWrapRef = useRef<HTMLDivElement>(null);
+  const topRef = useRef<HTMLElement>(null);
+  const [menu, setMenu] = useState<Menu>(null);
+  const [settings, setSettings] = useState(false);
+  const [glass, setGlass] = useState<UiGlassSettings>(() => loadUiGlassSettings());
+  const [hint, setHint] = useState<string | null>(null);
 
-  const updateUiGlass = (patch: Partial<UiGlassSettings>) => {
-    setUiGlass(prev => {
-      const next = { ...prev, ...patch };
-      saveUiGlassSettings(next);
-      return next;
-    });
-  };
+  const onGlass = (patch: Partial<UiGlassSettings>) => setGlass(prev => { const next = { ...prev, ...patch }; saveUiGlassSettings(next); return next; });
+  const toggle = (m: Exclude<Menu, null>) => { setSettings(false); setMenu(cur => (cur === m ? null : m)); };
 
-  useEffect(() => {
-    v.mount(host.current!);
-    return () => v.unmount();
-  }, [v]);
-
-  useEffect(() => {
-    applyUiGlassToRoot(shellRef.current, uiGlass);
-  }, [uiGlass, panel, drawerTab, openMenu, s.showcase, s.povMode]);
-
+  useEffect(() => { v.mount(host.current!); return () => v.unmount(); }, [v]);
+  useEffect(() => { applyUiGlassToRoot(shellRef.current, glass); }, [glass, menu, settings, s.showcase, s.povMode]);
   useEffect(() => {
     const el = shellRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => {
-      applyUiGlassToRoot(el, uiGlass);
-    });
+    const ro = new ResizeObserver(() => applyUiGlassToRoot(el, glass));
     ro.observe(el);
     return () => ro.disconnect();
-  }, [uiGlass]);
-
+  }, [glass]);
   useEffect(() => {
-    const onDownOutside = (e: PointerEvent) => {
-      if (openMenu && menuWrapRef.current && !menuWrapRef.current.contains(e.target as Node)) {
-        setOpenMenu(null);
-      }
-    };
-    addEventListener('pointerdown', onDownOutside);
-    return () => removeEventListener('pointerdown', onDownOutside);
-  }, [openMenu]);
+    if (!hint) return;
+    const id = setTimeout(() => setHint(null), 4200);
+    return () => clearTimeout(id);
+  }, [hint]);
 
+  // a press outside an open menu closes it (on a phone the sheet's backdrop does it); the top bar is not outside
+  useEffect(() => {
+    if (!menu) return;
+    const onDown = (e: PointerEvent) => { if (!topRef.current?.contains(e.target as Node)) setMenu(null); };
+    addEventListener('pointerdown', onDown);
+    return () => removeEventListener('pointerdown', onDown);
+  }, [menu]);
+
+  // keys: Esc closes the innermost thing first (menu, settings, then the view handles popup and POV);
+  // P opens the immersive-view menu (it used to jump straight into a train); G the settings
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement | null)?.closest('input, select, button')) {
-        if (e.key === 'Escape' && openMenu) {
-          setOpenMenu(null);
-          e.preventDefault();
-        }
-        return;
-      }
-      if (e.key === 'Escape' && openMenu) { setOpenMenu(null); e.preventDefault(); return; }
-      if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey) { setPanel(p => !p); e.preventDefault(); return; }
+      const target = e.target as HTMLElement | null;
+      const typing = target?.closest('input, select, textarea, [contenteditable="true"]');
+      const pressing = target?.closest('button') && (e.key === ' ' || e.key === 'Enter');
+      if (e.key === 'Escape' && (menu || settings)) { setMenu(null); setSettings(false); e.preventDefault(); return; }
+      if (typing || pressing || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = e.key.toLowerCase();
+      if (k === 'g') { setMenu(null); setSettings(x => !x); e.preventDefault(); return; }
+      if (k === 'p') { toggle('pov'); e.preventDefault(); return; }
       if (v.key(e)) e.preventDefault();
     };
     const onUp = (e: KeyboardEvent) => v.keyUp(e);
+    const onBlur = () => { for (const k of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' ']) v.keyUp(new KeyboardEvent('keyup', { key: k })); };
     addEventListener('keydown', onKey);
     addEventListener('keyup', onUp);
-    const onBlur = () => { for (const k of ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright']) v.keyUp(new KeyboardEvent('keyup', { key: k })); };
     addEventListener('blur', onBlur);
     return () => { removeEventListener('keydown', onKey); removeEventListener('keyup', onUp); removeEventListener('blur', onBlur); };
-  }, [v, openMenu]);
+  }, [v, menu, settings]);
 
-  const scCountries = useMemo(() => {
-    const map = new Map<string, { code: string; name: string; count: number }>();
-    for (const x of v.showcases) {
-      const cur = map.get(x.countryCode);
-      if (cur) cur.count++;
-      else map.set(x.countryCode, { code: x.countryCode, name: x.countryName, count: 1 });
-    }
-    return Array.from(map.values());
-  }, [v.showcases]);
-
-  const scCities = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; count: number }>();
-    for (const x of v.showcases) {
-      if (x.countryCode !== scCountry) continue;
-      const cur = map.get(x.cityId);
-      if (cur) cur.count++;
-      else map.set(x.cityId, { id: x.cityId, name: x.cityName, count: 1 });
-    }
-    return Array.from(map.values());
-  }, [v.showcases, scCountry]);
-
-  const scDistricts = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const x of v.showcases) {
-      if (x.countryCode !== scCountry || x.cityId !== scCity) continue;
-      const d = x.district?.trim();
-      if (!d) continue;
-      map.set(d, (map.get(d) ?? 0) + 1);
-    }
-    return Array.from(map.entries())
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name, 'vi'));
-  }, [v.showcases, scCountry, scCity]);
-
-  const scGeoFiltered = useMemo(() => {
-    const q = scSearch.trim().toLowerCase();
-    return v.showcases.filter(item => {
-      if (item.countryCode !== scCountry) return false;
-      if (item.cityId !== scCity) return false;
-      if (scDistrict !== 'ALL' && item.district !== scDistrict) return false;
-      if (!q) return true;
-      return (
-        item.name.toLowerCase().includes(q) ||
-        item.subtitle.toLowerCase().includes(q) ||
-        item.group.toLowerCase().includes(q) ||
-        (item.district?.toLowerCase().includes(q) ?? false) ||
-        (item.address?.toLowerCase().includes(q) ?? false)
-      );
-    });
-  }, [v.showcases, scCountry, scCity, scDistrict, scSearch]);
-
-  const scCategories = useMemo(() => {
-    const map = new Map<string, { id: string; title: string; count: number }>();
-    for (const item of scGeoFiltered) {
-      const cur = map.get(item.categoryId);
-      if (cur) cur.count++;
-      else map.set(item.categoryId, { id: item.categoryId, title: item.group, count: 1 });
-    }
-    return Array.from(map.values()).sort(
-      (a, b) => (Number.parseInt(a.id, 10) || 99) - (Number.parseInt(b.id, 10) || 99),
-    );
-  }, [scGeoFiltered]);
-
-  const groupedShowcases = useMemo(() => {
-    const list = scCat === 'ALL' ? scGeoFiltered : scGeoFiltered.filter(x => x.categoryId === scCat);
-    const groups = new Map<string, { categoryId: string; title: string; items: typeof list }>();
-    for (const item of list) {
-      const g = groups.get(item.categoryId);
-      if (g) g.items.push(item);
-      else groups.set(item.categoryId, { categoryId: item.categoryId, title: item.group, items: [item] });
-    }
-    return Array.from(groups.values()).sort(
-      (a, b) => (Number.parseInt(a.categoryId, 10) || 99) - (Number.parseInt(b.categoryId, 10) || 99),
-    );
-  }, [scGeoFiltered, scCat]);
-
-  const plGroups = useMemo(() => Array.from(new Set(v.places.map(x => x.group))), [v.places]);
-  const currentShowcase = s.showcase ? v.showcases.find(x => x.id === s.showcase) ?? null : null;
-  const currentPlace = v.places.find(x => x.id === activePlaceId) ?? v.places[0]!;
-
-  const filteredPlaces = useMemo(() => {
-    const q = plSearch.trim().toLowerCase();
-    return v.places.filter(item => {
-      if (plCat !== 'ALL' && item.group !== plCat) return false;
-      if (!q) return true;
-      return item.name.toLowerCase().includes(q) || item.group.toLowerCase().includes(q);
-    });
-  }, [v.places, plSearch, plCat]);
-
-  const signalLabel = {
-    go: t('footer.signal.go', undefined, loc),
-    wait: t('footer.signal.wait', undefined, loc),
-    stop: t('footer.signal.stop', undefined, loc),
-  } as const;
-
-  const streetNames = STREET_LABEL_NAMES_I18N[loc];
-  const placeNames = PLACE_INFO_NAMES_I18N[loc];
+  const item = v.showcaseItem(s.showcase);
+  const nav = (m: Exclude<Menu, null>, icon: IconName, label: string) => (
+    <button type="button" className="nav-btn" aria-expanded={menu === m} onClick={() => toggle(m)} title={label}>
+      <Icon name={icon} /><span className="nav-label">{label}</span>
+    </button>
+  );
 
   return (
     <div className="shell" ref={shellRef}>
       <main>
         <div className="stage" ref={host} aria-label={t('stage.aria', { mode: s.mode }, loc)}>
-          {/* Floating Top-Left Navigation Pill & Top-Right Quick Actions Pill */}
-          <header className="floating-top" ref={menuWrapRef} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-            <div className="top-left-anchor">
-              <div className="top-left-bar ui-surface">
-                <b className="brand"><i className="dot" />My City · 3D</b>
-                <span className="bar-sep" aria-hidden="true" />
-
-                {/* Searchable & Categorized Popover Trigger for Khu vực */}
-                <div className="popover-wrap">
-                  <button
-                    type="button"
-                    className="picker-trigger"
-                    aria-expanded={openMenu === 'place'}
-                    aria-label={t('top.places.aria', undefined, loc)}
-                    onClick={() => setOpenMenu(m => (m === 'place' ? null : 'place'))}
-                  >
-                    <IconMapPin />
-                    <span className="picker-label">{currentPlace.name}</span>
-                    <IconChevronDown />
-                  </button>
-                </div>
-
-                {/* Searchable & Categorized Popover Trigger for Công trình (Showcases) */}
-                <div className="popover-wrap">
-                  <button
-                    type="button"
-                    className="picker-trigger"
-                    aria-expanded={openMenu === 'showcase'}
-                    aria-label={t('top.showcases.aria', undefined, loc)}
-                    onClick={() => setOpenMenu(m => (m === 'showcase' ? null : 'showcase'))}
-                  >
-                    <IconBox />
-                    <span className="picker-label">
-                      {currentShowcase ? currentShowcase.name : t('top.showcases', { count: v.showcases.length }, loc)}
-                    </span>
-                    <IconChevronDown />
-                  </button>
-                </div>
-
-                {currentShowcase && (
-                  <button type="button" className="icon-btn" onClick={() => v.setShowcase(null)} title={t('top.backToMap.title', undefined, loc)}>
-                    <IconArrowLeft />
-                    <span className="btn-text">{t('top.backToMap', undefined, loc)}</span>
-                  </button>
-                )}
-
-                {/* POV & Interactive Driving Picker Trigger */}
-                <div className="popover-wrap">
-                  <button
-                    type="button"
-                    className="picker-trigger"
-                    aria-expanded={openMenu === 'pov'}
-                    aria-pressed={s.povMode !== 'map'}
-                    title={t('pov.button.title', undefined, loc)}
-                    onClick={() => setOpenMenu(m => (m === 'pov' ? null : 'pov'))}
-                  >
-                    <IconPov />
-                    <span className="picker-label">
-                      {s.povMode === 'map'
-                        ? t('pov.button', undefined, loc)
-                        : t(POV_MODE_I18N[s.povMode].label, undefined, loc)}
-                    </span>
-                    <kbd>P</kbd>
-                    <IconChevronDown />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  className="icon-btn"
-                  onClick={() => {
-                    setActivePlaceId('home');
-                    v.flyTo([0, 0]);
-                  }}
-                  title={t('top.home.title', undefined, loc)}
-                  aria-label={t('top.home', undefined, loc)}
-                >
-                  <IconHome />
-                  <span className="btn-text">{t('top.home', undefined, loc)}</span>
-                  <kbd>H</kbd>
-                </button>
-              </div>
-
-              {openMenu === 'place' && (
-                <div className="popover-panel ui-surface" role="dialog" aria-label={t('top.places.dialog', undefined, loc)}>
-                  <div className="popover-search">
-                    <IconSearch />
-                    <input
-                      type="search"
-                      placeholder={t('top.places.search', undefined, loc)}
-                      value={plSearch}
-                      onChange={e => setPlSearch(e.target.value)}
-                      autoFocus
-                    />
-                  </div>
-                  <div className="popover-tabs">
-                    <button
-                      type="button"
-                      aria-pressed={plCat === 'ALL'}
-                      onClick={() => setPlCat('ALL')}
-                    >
-                      {t('top.places.all', { count: v.places.length }, loc)}
-                    </button>
-                    {plGroups.map(g => (
-                      <button
-                        key={g}
-                        type="button"
-                        aria-pressed={plCat === g}
-                        onClick={() => setPlCat(g)}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="popover-list">
-                    {filteredPlaces.map(p => (
-                      <button
-                        key={p.id}
-                        type="button"
-                        className={`popover-item ${activePlaceId === p.id ? 'active' : ''}`}
-                        onClick={() => {
-                          setActivePlaceId(p.id);
-                          v.flyTo(p.at);
-                          setOpenMenu(null);
-                        }}
-                      >
-                        <div className="popover-item-main">
-                          <b>{p.name}</b>
-                        </div>
-                        <em className="popover-tag">{p.group}</em>
-                      </button>
-                    ))}
-                    {filteredPlaces.length === 0 && (
-                      <div className="popover-empty">{t('top.places.empty', undefined, loc)}</div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {openMenu === 'showcase' && (
-                <div
-                  className="popover-panel showcase-explorer ui-surface"
-                  role="dialog"
-                  aria-label={t('top.showcases.dialog', undefined, loc)}
-                >
-                  {/* 1. Hierarchical Location Bar: Quốc gia → Tỉnh/Thành phố → Quận/Huyện */}
-                  <div className="showcase-geo-bar">
-                    <div className="showcase-geo-group">
-                      <span className="showcase-geo-label">{t('top.showcases.country', undefined, loc)}</span>
-                      <div className="showcase-geo-pills">
-                        {scCountries.map(c => (
-                          <button
-                            key={c.code}
-                            type="button"
-                            className="showcase-geo-pill"
-                            aria-pressed={scCountry === c.code}
-                            onClick={() => {
-                              setScCountry(c.code);
-                              setScDistrict('ALL');
-                              setScCat('ALL');
-                            }}
-                          >
-                            <span className="geo-code">{c.code.toUpperCase()}</span>
-                            <b>{c.name}</b>
-                            <em>{c.count}</em>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <span className="showcase-geo-sep" aria-hidden="true">/</span>
-
-                    <div className="showcase-geo-group">
-                      <span className="showcase-geo-label">{t('top.showcases.city', undefined, loc)}</span>
-                      <div className="showcase-geo-pills">
-                        {scCities.map(ct => (
-                          <button
-                            key={ct.id}
-                            type="button"
-                            className="showcase-geo-pill"
-                            aria-pressed={scCity === ct.id}
-                            onClick={() => {
-                              setScCity(ct.id);
-                              setScDistrict('ALL');
-                              setScCat('ALL');
-                            }}
-                          >
-                            <b>{ct.name}</b>
-                            <em>{ct.count}</em>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="showcase-geo-group showcase-district-group">
-                      <span className="showcase-geo-label">{t('top.showcases.district', undefined, loc)}</span>
-                      <select
-                        className="showcase-district-select"
-                        value={scDistrict}
-                        aria-label={t('top.showcases.district', undefined, loc)}
-                        onChange={e => setScDistrict(e.target.value)}
-                      >
-                        <option value="ALL">
-                          {t('top.showcases.allDistricts', { count: scDistricts.length }, loc)}
-                        </option>
-                        {scDistricts.map(d => (
-                          <option key={d.name} value={d.name}>
-                            {d.name} ({d.count})
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-
-                  {/* 2. Search Bar & Quick Return-to-Map Action */}
-                  <div className="showcase-search-row">
-                    <div className="popover-search showcase-search-box">
-                      <IconSearch />
-                      <input
-                        type="search"
-                        placeholder={t('top.showcases.search', undefined, loc)}
-                        value={scSearch}
-                        onChange={e => setScSearch(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className={`showcase-map-btn ${!s.showcase ? 'active' : ''}`}
-                      onClick={() => {
-                        v.setShowcase(null);
-                        setOpenMenu(null);
-                      }}
-                      title={t('top.showcases.mapSub', undefined, loc)}
-                    >
-                      <IconGlobe />
-                      <span>{t('top.showcases.mapTitle', undefined, loc)}</span>
-                    </button>
-                  </div>
-
-                  {/* 3. Two-Column Split Explorer: Left Category Sidebar + Right Grouped Landmark Cards */}
-                  <div className="showcase-body">
-                    <aside className="showcase-sidebar" aria-label={t('top.showcases.categories', undefined, loc)}>
-                      <button
-                        type="button"
-                        className="showcase-cat-btn"
-                        aria-pressed={scCat === 'ALL'}
-                        onClick={() => setScCat('ALL')}
-                      >
-                        <span className="cat-title">{t('top.showcases.allCategories', undefined, loc)}</span>
-                        <em className="cat-count">{scGeoFiltered.length}</em>
-                      </button>
-                      {scCategories.map(cat => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          className="showcase-cat-btn"
-                          aria-pressed={scCat === cat.id}
-                          onClick={() => setScCat(cat.id)}
-                        >
-                          <span className="cat-title">{cat.title}</span>
-                          <em className="cat-count">{cat.count}</em>
-                        </button>
-                      ))}
-                    </aside>
-
-                    <div className="showcase-content">
-                      {groupedShowcases.map(group => (
-                        <section key={group.categoryId} className="showcase-cat-section">
-                          <header className="showcase-cat-header">
-                            <b>{group.title}</b>
-                            <em>{t('top.showcases.resultCount', { count: group.items.length }, loc)}</em>
-                          </header>
-                          <div className="showcase-grid">
-                            {group.items.map(item => {
-                              const cleanTitle = item.name.replace(/\s*\(\d+\s*tầng\)$/i, '');
-                              return (
-                                <button
-                                  key={item.id}
-                                  type="button"
-                                  className={`showcase-card ${s.showcase === item.id ? 'active' : ''}`}
-                                  onClick={() => {
-                                    v.setShowcase(item.id);
-                                    setOpenMenu(null);
-                                  }}
-                                >
-                                  <div className="showcase-card-top">
-                                    <b className="showcase-card-title">{cleanTitle}</b>
-                                    <div className="showcase-badges">
-                                      {item.district && (
-                                        <span className="sc-badge sc-badge-district">{item.district}</span>
-                                      )}
-                                      {item.levels !== undefined && item.heightM !== undefined && (
-                                        <span className="sc-badge sc-badge-dim">
-                                          {t(
-                                            'top.showcases.floorsHeight',
-                                            { levels: item.levels, height: item.heightM },
-                                            loc,
-                                          )}
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <span className="showcase-card-sub">{item.subtitle}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </section>
-                      ))}
-                      {groupedShowcases.length === 0 && (
-                        <div className="popover-empty">{t('top.showcases.empty', undefined, loc)}</div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {openMenu === 'pov' && (
-                <div className="popover-panel ui-surface" role="dialog" aria-label={t('pov.button', undefined, loc)}>
-                  <div className="popover-list">
-                    {POV_MODES.map(pm => {
-                      const meta = POV_MODE_I18N[pm];
-                      return (
-                        <button
-                          key={pm}
-                          type="button"
-                          className={`popover-item ${s.povMode === pm ? 'active' : ''}`}
-                          onClick={() => {
-                            v.setPovMode(pm);
-                            setOpenMenu(null);
-                          }}
-                        >
-                          <div className="popover-item-main">
-                            <b>{t(meta.label, undefined, loc)}</b>
-                            {meta.sub && <span>{t(meta.sub, undefined, loc)}</span>}
-                          </div>
-                          <em className="popover-tag">{meta.tag}</em>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Top-Right Quick Actions Pill: Visual Map Color Swatches + X-ray + Day/Night + Locale + Settings Drawer */}
-            <div className="top-right-bar ui-surface">
-              <div className="palette-swatch-bar" role="group" aria-label={t('drawer.mapColors', undefined, loc)}>
-                {MAP_PALETTES.map(([id, swatches]) => {
-                  const titleKey = `top.palette.${id}` as TranslationKey;
-                  const active = s.mapPalette === id;
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`swatch-pill-btn ${active ? 'active' : ''}`}
-                      aria-pressed={active}
-                      title={t(titleKey, undefined, loc)}
-                      aria-label={t(titleKey, undefined, loc)}
-                      onClick={() => v.setMapPalette(id)}
-                    >
-                      <span className="swatch-quad" aria-hidden="true">
-                        {swatches.map((c, idx) => (
-                          <i key={idx} style={{ background: c }} />
-                        ))}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              <span className="bar-sep" aria-hidden="true" />
-
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => v.toggleSeeThrough()}
-                aria-pressed={s.seeThrough}
-                title={t('top.seeThrough.title', undefined, loc)}
-                aria-label={t('top.seeThrough', undefined, loc)}
-              >
-                <IconSeeThrough />
-                <span className="btn-text">{t('top.seeThrough', undefined, loc)}</span>
-                <kbd>X</kbd>
-              </button>
-
-              <button
-                type="button"
-                className="icon-only-btn"
-                onClick={() => v.toggleDayNight()}
-                aria-pressed={s.night}
-                aria-label={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
+          <header className="top-bar" ref={topRef} onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
+            <nav className="top-group ui-surface" aria-label="My City">
+              <span className="brand"><i className="dot" /><b>My City</b></span>
+              {nav('places', 'mapPin', t('nav.places', undefined, loc))}
+              {nav('landmarks', 'cube', t('nav.landmarks', undefined, loc))}
+              {nav('pov', 'view', t('nav.experience', undefined, loc))}
+            </nav>
+            <div className="top-group ui-surface">
+              <button type="button" className="nav-btn icon-only" onClick={() => v.toggleDayNight()} aria-pressed={s.night}
                 title={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}
-              >
-                {s.night ? <IconMoon /> : <IconSun />}
-                <kbd>N</kbd>
+                aria-label={s.night ? t('top.night.onTitle', undefined, loc) : t('top.night.offTitle', undefined, loc)}>
+                <Icon name={s.night ? 'moon' : 'sun'} />
               </button>
-
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => v.toggleLocale()}
-                title={t('top.locale.title', undefined, loc)}
-                aria-label={t('top.locale.title', undefined, loc)}
-              >
-                <IconGlobe />
-                <span>{LOCALE_LABELS[loc]}</span>
-              </button>
-
-              <button
-                type="button"
-                className="icon-btn"
-                onClick={() => setPanel(p => !p)}
-                aria-pressed={panel}
-                title={t('top.settings.title', undefined, loc)}
-                aria-label={t('top.settings', undefined, loc)}
-              >
-                <IconSliders />
-                <span className="btn-text">{t('top.settings', undefined, loc)}</span>
-                <kbd>G</kbd>
+              <button type="button" className="nav-btn" aria-expanded={settings} onClick={() => { setMenu(null); setSettings(x => !x); }} title={t('top.settings.title', undefined, loc)}>
+                <Icon name="sliders" /><span className="nav-label">{t('nav.settings', undefined, loc)}</span>
               </button>
             </div>
+            {menu === 'places' && <PlacesMenu v={v} locale={loc} onClose={() => setMenu(null)} />}
+            {menu === 'landmarks' && <Explorer v={v} locale={loc} current={s.showcase} onClose={() => setMenu(null)} />}
+            {menu === 'pov' && <PovMenu v={v} locale={loc} active={s.povMode} onClose={() => setMenu(null)} />}
           </header>
 
-          {/* Floating Right Tabbed Settings Drawer */}
-          {panel && (
-            <aside className="panel ui-surface" onPointerDown={e => e.stopPropagation()} onDoubleClick={e => e.stopPropagation()}>
-              <div className="drawer-header">
-                <div className="drawer-tabs" role="tablist">
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={drawerTab === 'appearance'}
-                    aria-pressed={drawerTab === 'appearance'}
-                    onClick={() => setDrawerTab('appearance')}
-                  >
-                    {t('drawer.tab.appearance', undefined, loc)}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={drawerTab === 'lights'}
-                    aria-pressed={drawerTab === 'lights'}
-                    onClick={() => setDrawerTab('lights')}
-                  >
-                    {t('drawer.tab.lights', undefined, loc)}
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={drawerTab === 'quality'}
-                    aria-pressed={drawerTab === 'quality'}
-                    onClick={() => setDrawerTab('quality')}
-                  >
-                    {t('drawer.tab.quality', undefined, loc)}
-                  </button>
-                </div>
-                <button
-                  type="button"
-                  className="drawer-close"
-                  onClick={() => setPanel(false)}
-                  aria-label="Close"
-                >
-                  ×
-                </button>
-              </div>
+          {settings && <SettingsSheet v={v} s={s} glass={glass} onGlass={onGlass} onClose={() => setSettings(false)} />}
 
-              <div className="drawer-body">
-                {drawerTab === 'appearance' && (
-                  <>
-                    <section>
-                      <h2>{t('drawer.uiSurface', undefined, loc)}</h2>
-                      <div className="ui-mode-seg" role="group" aria-label={t('drawer.uiSurface', undefined, loc)}>
-                        {(['off', 'tint', 'glass'] as const).map((m: UiGlassMode) => {
-                          const key = `drawer.uiMode.${m}` as TranslationKey;
-                          return (
-                            <button
-                              key={m}
-                              type="button"
-                              aria-pressed={uiGlass.mode === m}
-                              onClick={() => updateUiGlass({ mode: m })}
-                            >
-                              {t(key, undefined, loc)}
-                            </button>
-                          );
-                        })}
-                      </div>
-
-                      {uiGlass.mode !== 'off' && (
-                        <label className="opt slider-row">
-                          <span>{t('drawer.uiTransparency', undefined, loc)}</span>
-                          <input
-                            type="range"
-                            min={10}
-                            max={90}
-                            step={5}
-                            value={uiGlass.transparency}
-                            onChange={e => updateUiGlass({ transparency: +e.target.value })}
-                          />
-                          <strong className="slider-val">{uiGlass.transparency}%</strong>
-                        </label>
-                      )}
-
-                      {uiGlass.mode === 'glass' && (
-                        <label className="opt slider-row">
-                          <span>{t('drawer.uiLensScale', undefined, loc)}</span>
-                          <input
-                            type="range"
-                            min={0}
-                            max={180}
-                            step={10}
-                            value={uiGlass.lensScale}
-                            onChange={e => updateUiGlass({ lensScale: +e.target.value })}
-                          />
-                          <strong className="slider-val">{uiGlass.lensScale}</strong>
-                        </label>
-                      )}
-                    </section>
-
-                    <section>
-                      <h2>{t('drawer.mapColors', undefined, loc)}</h2>
-                      <div className="palette-grid" role="group" aria-label={t('drawer.mapColors', undefined, loc)}>
-                        {MAP_PALETTES.map(([id, swatches]) => {
-                          const labelKey = `top.palette.${id}` as TranslationKey;
-                          const active = s.mapPalette === id;
-                          return (
-                            <button
-                              key={id}
-                              type="button"
-                              className={`palette-card ${active ? 'active' : ''}`}
-                              aria-pressed={active}
-                              onClick={() => v.setMapPalette(id)}
-                            >
-                              <div className="palette-bars" aria-hidden="true">
-                                {swatches.map((c, idx) => (
-                                  <i key={idx} style={{ background: c }} />
-                                ))}
-                              </div>
-                              <span className="palette-card-label">{t(labelKey, undefined, loc)}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-
-                    <section>
-                      <h2>{t('drawer.accentColors', undefined, loc)}</h2>
-                      <div className="accent-grid" role="group" aria-label={t('drawer.accentColors', undefined, loc)}>
-                        {PALETTES.city.map(a => {
-                          const key = accentKey(a);
-                          const [name, , darkHi, lightAccent] = a;
-                          const active = s.accent === key;
-                          return (
-                            <button
-                              key={key}
-                              type="button"
-                              className={`accent-swatch ${active ? 'active' : ''}`}
-                              aria-pressed={active}
-                              title={name}
-                              aria-label={name}
-                              onClick={() => v.setAccent(key)}
-                            >
-                              <span
-                                className="accent-dot"
-                                style={{ background: s.night ? darkHi : lightAccent }}
-                              />
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </section>
-
-                    <section>
-                      <h2>{t('drawer.mapDisplay', undefined, loc)}</h2>
-                      <label className="opt" title={t('top.streetLabels.title', undefined, loc)}>
-                        <IconSignpost />
-                        <span>{t('top.streetLabels', undefined, loc)}</span>
-                        <select
-                          aria-label={t('top.streetLabels', undefined, loc)}
-                          value={s.streetLabels}
-                          onChange={e => v.setStreetLabels(e.target.value as StreetLabelMode)}
-                        >
-                          {STREET_LABEL_MODES.map(m => (
-                            <option key={m} value={m}>{streetNames[m]}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="opt" title={t('top.placeInfo.title', undefined, loc)}>
-                        <IconInfo />
-                        <span>{t('top.placeInfo', undefined, loc)}</span>
-                        <select
-                          aria-label={t('top.placeInfo', undefined, loc)}
-                          value={s.placeInfo}
-                          onChange={e => v.setPlaceInfo(e.target.value as PlaceInfoMode)}
-                        >
-                          {PLACE_INFO_MODES.map(m => (
-                            <option key={m} value={m}>{placeNames[m]}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="opt switch-row" title={t('top.seeThrough.title', undefined, loc)}>
-                        <span>{t('top.seeThrough', undefined, loc)} <kbd>X</kbd></span>
-                        <input
-                          type="checkbox"
-                          className="switch-input"
-                          checked={s.seeThrough}
-                          onChange={e => v.setSeeThrough(e.target.checked)}
-                        />
-                      </label>
-                    </section>
-                  </>
-                )}
-
-                {drawerTab === 'lights' && (
-                  <LightsPanel lights={s.lights} locale={loc} onChange={p => v.setLights(p)} />
-                )}
-
-                {drawerTab === 'quality' && (
-                  <QualityPanel
-                    quality={s.quality}
-                    locale={loc}
-                    stats={s.stats}
-                    detail={s.detail}
-                    pending={s.pending}
-                    lowered={s.lowered}
-                    onChange={q => v.setQuality(q)}
-                  />
-                )}
-              </div>
-            </aside>
-          )}
-
-          {currentShowcase && (
-            <div className="plaque ui-surface">
-              <b>{currentShowcase.name}</b>
-              <span>{currentShowcase.subtitle}</span>
-            </div>
-          )}
-
-          {s.povMode !== 'map' && (
-            <>
-              <div className="pov-hud ui-surface" onPointerDown={e => e.stopPropagation()}>
-                <div className="pov-hud-top">
-                  <div className="pov-speed">
-                    <strong>{s.povSpeedKmh}</strong>
-                    <span>km/h</span>
-                  </div>
-                  <div className="pov-meta">
-                    <b>{t(POV_MODE_I18N[s.povMode].label, undefined, loc)}</b>
-                    {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
-                      <span>
-                        {t(`pov.status.${s.povTrainPhase}` as TranslationKey, undefined, loc)}
-                        {s.povLocationName ? ` · ${s.povLocationName}` : ''}
-                      </span>
-                    )}
-                    {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
-                      <span>
-                        {s.povLocationName ? `${s.povLocationName} · ` : ''}
-                        {t(POV_MODE_I18N[s.povMode].sub!, undefined, loc)}
-                      </span>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    className="pov-exit-btn"
-                    onClick={() => v.setPovMode('map')}
-                  >
-                    {t('pov.hud.exit', undefined, loc)}
-                  </button>
-                </div>
-
-                <div className="pov-hud-modes">
-                  {(['metro-cab', 'metro-passenger', 'drive-cabin', 'drive-top'] as const).map(pm => (
-                    <button
-                      key={pm}
-                      type="button"
-                      aria-pressed={s.povMode === pm}
-                      onClick={() => v.setPovMode(pm)}
-                    >
-                      {t(POV_MODE_I18N[pm].label, undefined, loc)}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="pov-hud-actions">
-                  {(s.povMode === 'metro-cab' || s.povMode === 'metro-passenger') && (
-                    <button
-                      type="button"
-                      onClick={() => v.nextPovTrain()}
-                    >
-                      {t('pov.hud.nextTrain', { index: s.povTrainIndex + 1, total: s.povTrainTotal }, loc)}
-                    </button>
-                  )}
-                  {s.povMode === 'metro-passenger' && (
-                    <button
-                      type="button"
-                      onClick={() => v.togglePovWindowSide()}
-                    >
-                      {t('pov.hud.windowSide', undefined, loc)}
-                    </button>
-                  )}
-                  {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => v.toggleDriveCamera()}
-                      >
-                        {t('pov.hud.switchDriveCam', undefined, loc)}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => v.resetPovCar()}
-                      >
-                        {t('pov.hud.resetCar', undefined, loc)}
-                      </button>
-                    </>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => v.centerPovLook()}
-                  >
-                    {t('pov.hud.centerLook', undefined, loc)}
-                  </button>
-                </div>
-              </div>
-
-              <div className="pov-minimap-wrap" onPointerDown={e => e.stopPropagation()}>
-                <canvas
-                  ref={el => v.setMiniMapCanvas(el)}
-                  className="pov-minimap-canvas"
-                />
-                {s.povLocationName && (
-                  <div className="pov-minimap-label ui-surface">{s.povLocationName}</div>
-                )}
-              </div>
-            </>
-          )}
-
-          {(s.povMode === 'drive-cabin' || s.povMode === 'drive-top') && (
-            <div className="drive-touch-pad" onPointerDown={e => e.stopPropagation()}>
-              <div className="drive-steer-group ui-surface">
-                <button
-                  type="button"
-                  className="drive-pad-btn"
-                  onPointerDown={() => { v.setDriveTouchControl('left', true); v.setDriveTouchControl('right', false); }}
-                  onPointerUp={() => v.setDriveTouchControl('left', false)}
-                  onPointerCancel={() => v.setDriveTouchControl('left', false)}
-                  onPointerLeave={() => v.setDriveTouchControl('left', false)}
-                  aria-label="Steer Left"
-                >
-                  ◄ A
-                </button>
-                <button
-                  type="button"
-                  className="drive-pad-btn"
-                  onPointerDown={() => { v.setDriveTouchControl('right', true); v.setDriveTouchControl('left', false); }}
-                  onPointerUp={() => v.setDriveTouchControl('right', false)}
-                  onPointerCancel={() => v.setDriveTouchControl('right', false)}
-                  onPointerLeave={() => v.setDriveTouchControl('right', false)}
-                  aria-label="Steer Right"
-                >
-                  D ►
-                </button>
-              </div>
-              <div className="drive-pedal-group ui-surface">
-                <button
-                  type="button"
-                  className="drive-pad-btn brake"
-                  onPointerDown={() => { v.setDriveTouchControl('brake', true); v.setDriveTouchControl('throttle', false); }}
-                  onPointerUp={() => v.setDriveTouchControl('brake', false)}
-                  onPointerCancel={() => v.setDriveTouchControl('brake', false)}
-                  onPointerLeave={() => v.setDriveTouchControl('brake', false)}
-                  aria-label="Brake / Reverse"
-                >
-                  ▼ S
-                </button>
-                <button
-                  type="button"
-                  className="drive-pad-btn throttle"
-                  onPointerDown={() => { v.setDriveTouchControl('throttle', true); v.setDriveTouchControl('brake', false); }}
-                  onPointerUp={() => v.setDriveTouchControl('throttle', false)}
-                  onPointerCancel={() => v.setDriveTouchControl('throttle', false)}
-                  onPointerLeave={() => v.setDriveTouchControl('throttle', false)}
-                  aria-label="Throttle"
-                >
-                  ▲ W
-                </button>
-              </div>
-            </div>
-          )}
-
-          {s.povMode === 'map' && (
-            <>
-              {pegmanDrag?.preview && (
-                <div
-                  className="pegman-drop-target"
-                  data-kind={pegmanDrag.preview.kind}
-                  style={{
-                    transform: `translate3d(${pegmanDrag.preview.screenX.toFixed(1)}px, ${pegmanDrag.preview.screenY.toFixed(1)}px, 0)`,
-                  }}
-                >
-                  <span className="pegman-target-ring" />
-                  <span className="pegman-target-core" />
-                </div>
-              )}
-
-              {pegmanDrag && (
-                <div
-                  className="pegman-drag-ghost"
-                  data-kind={pegmanDrag.preview?.kind ?? 'car'}
-                  style={{
-                    transform: `translate3d(${pegmanDrag.clientX.toFixed(1)}px, ${pegmanDrag.clientY.toFixed(1)}px, 0)`,
-                  }}
-                >
-                  <div className="pegman-ghost-figure">
-                    <IconPegman />
-                  </div>
-                  <div className="pegman-ghost-badge">
-                    {pegmanDrag.preview
-                      ? pegmanDrag.preview.kind === 'metro'
-                        ? t(
-                            'cam.pegman.dropMetro',
-                            { train: pegmanDrag.preview.trainIndex + 1, label: pegmanDrag.preview.label },
-                            loc,
-                          )
-                        : t('cam.pegman.dropCar', { label: pegmanDrag.preview.label }, loc)
-                      : t('cam.pegman.hint', undefined, loc)}
-                  </div>
-                </div>
-              )}
-
-              <div
-                className="map-dock"
-                role="group"
-                aria-label={t('cam.aria', undefined, loc)}
-                onPointerDown={e => e.stopPropagation()}
-                onDoubleClick={e => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="dock-btn compass-btn ui-surface"
-                  onClick={() => v.resetNorth()}
-                  title={t(
-                    'cam.compass',
-                    { dir: t(`cam.dir.${s.view}` as TranslationKey, undefined, loc), deg: s.heading },
-                    loc,
-                  )}
-                  aria-label={t(
-                    'cam.compass',
-                    { dir: t(`cam.dir.${s.view}` as TranslationKey, undefined, loc), deg: s.heading },
-                    loc,
-                  )}
-                >
-                  <IconCompassNeedle heading={s.heading} />
-                  <span className="compass-dir-tag">
-                    {t(`cam.dir.${s.view}` as TranslationKey, undefined, loc).slice(0, 1)}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  className="dock-btn rot90-btn ui-surface"
-                  onClick={e => v.rotate(e.shiftKey ? -1 : 1)}
-                  title={t('cam.rot90', undefined, loc)}
-                  aria-label={t('cam.rot90', undefined, loc)}
-                >
-                  <IconRotateCw />
-                  <span className="rot90-tag">90°</span>
-                </button>
-
-                {!s.showcase && (
-                  <button
-                    type="button"
-                    className="dock-btn loc-btn ui-surface"
-                    onClick={() => v.goToMyLocation()}
-                    title={t('cam.myLocation', undefined, loc)}
-                    aria-label={t('cam.myLocation', undefined, loc)}
-                  >
-                    <IconMyLocation />
-                  </button>
-                )}
-
-                <div className="dock-zoom-pill ui-surface">
-                  <button
-                    type="button"
-                    className="dock-zoom-btn"
-                    onClick={() => v.zoom(1.28)}
-                    title={t('cam.zoomIn', undefined, loc)}
-                    aria-label={t('cam.zoomIn', undefined, loc)}
-                  >
-                    <IconPlus />
-                  </button>
-                  <span className="dock-zoom-sep" aria-hidden="true" />
-                  <button
-                    type="button"
-                    className="dock-zoom-btn"
-                    onClick={() => v.zoom(1 / 1.28)}
-                    title={t('cam.zoomOut', undefined, loc)}
-                    aria-label={t('cam.zoomOut', undefined, loc)}
-                  >
-                    <IconMinus />
-                  </button>
-                </div>
-
-                <button
-                  type="button"
-                  className="dock-btn mode3d-btn ui-surface"
-                  onClick={() => v.toggleMode()}
-                  aria-pressed={s.mode === '3d'}
-                  title={t('top.mode.title', undefined, loc)}
-                >
-                  {s.mode === '2d' ? '2D' : '3D'}
-                </button>
-
-                {!s.showcase && (
-                  <button
-                    type="button"
-                    className={`dock-btn pegman-btn ui-surface${pegmanDrag ? ' is-dragging' : ''}`}
-                    title={t('cam.pegman', undefined, loc)}
-                    aria-label={t('cam.pegman', undefined, loc)}
-                    onPointerDown={e => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      const startX = e.clientX;
-                      const startY = e.clientY;
-                      setPegmanDrag({
-                        clientX: startX,
-                        clientY: startY,
-                        preview: v.previewPegmanDrop(startX, startY),
-                      });
-
-                      const onMove = (ev: PointerEvent) => {
-                        setPegmanDrag({
-                          clientX: ev.clientX,
-                          clientY: ev.clientY,
-                          preview: v.previewPegmanDrop(ev.clientX, ev.clientY),
-                        });
-                      };
-                      const onEnd = (ev: PointerEvent) => {
-                        window.removeEventListener('pointermove', onMove);
-                        window.removeEventListener('pointerup', onEnd);
-                        window.removeEventListener('pointercancel', onEnd);
-                        setPegmanDrag(null);
-                        const moved = Math.hypot(ev.clientX - startX, ev.clientY - startY);
-                        if (moved > 8) {
-                          v.dropPegmanAt(ev.clientX, ev.clientY);
-                        } else if (host.current) {
-                          const r = host.current.getBoundingClientRect();
-                          v.dropPegmanAt(r.left + r.width * 0.5, r.top + r.height * 0.5);
-                        }
-                      };
-                      window.addEventListener('pointermove', onMove);
-                      window.addEventListener('pointerup', onEnd);
-                      window.addEventListener('pointercancel', onEnd);
-                    }}
-                  >
-                    <IconPegman />
-                  </button>
-                )}
-              </div>
-            </>
-          )}
-
-          {/* Bottom-Left Compact Status Pill with OSM Credit (A15) */}
-          <footer className="status-pill ui-surface" onPointerDown={e => e.stopPropagation()}>
-            <span className="fps-badge">{s.fps} fps</span>
-            <span className="read">
-              {currentShowcase
-                ? `${t('footer.diorama', undefined, loc)} · ${currentShowcase.name}`
-                : v.city.cityName ?? t('footer.cityMap', undefined, loc)}{' '}
-              · {s.povMode !== 'map' ? `${t(POV_MODE_I18N[s.povMode].label, undefined, loc)} · ${s.povSpeedKmh} km/h` : `${s.mode.toUpperCase()} · ${t(`cam.dir.${s.view}` as TranslationKey, undefined, loc)} (${s.heading}°)`} · L{s.detail} · {t('footer.litWindows', undefined, loc)}{' '}
-              {lightOn(s.lights.house, s.night) ? Math.round(s.lights.share * 100) : 0}%
-              {s.lit ? ` + ${s.lit} ${t('footer.floors', undefined, loc)}` : ''}
-              {!currentShowcase
-                ? ` · ${s.vehicles} ${t('footer.vehicles', undefined, loc)} · X:${signalLabel[s.signals.x]}${s.signals.xLeft}s Y:${signalLabel[s.signals.y]}${s.signals.yLeft}s`
-                : ''}
-            </span>
-            <span className="credit">© OpenStreetMap contributors</span>
-          </footer>
+          {item && s.povMode === 'map' && <ShowcaseBar v={v} item={item} locale={loc} />}
+          {s.povMode !== 'map' && <PovBar v={v} s={s} />}
+          {s.povMode === 'map' && <MapDock v={v} s={s} host={host} onHint={setHint} />}
+          {hint && <div className="toast ui-surface" role="status" onPointerDown={e => e.stopPropagation()}>{hint}</div>}
+          <StatusBar v={v} s={s} item={item} />
         </div>
       </main>
     </div>

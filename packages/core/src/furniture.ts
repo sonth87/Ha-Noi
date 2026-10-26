@@ -21,6 +21,7 @@ import type { City } from './city';
 import { closestOnPath, dist, pointInRing, polylineLength, type Vec2 } from './geom';
 import { roadNetwork, type Network } from './network';
 import { hash, rng } from './rng';
+import { signalClusters } from './traffic';
 
 export type PropKind = 'pole' | 'lamp' | 'lamp-on-pole' | 'tree' | 'signal' | 'park-lamp';
 
@@ -33,8 +34,9 @@ export interface Prop {
   /** direction it faces (radians, atan2 in x/y): toward the road for lamps, toward traffic for signals */
   heading: number;
   size?: 'small' | 'medium' | 'large';
-  /** signals: which phase group */
+  /** signals: which phase group, and which junction's clock (signalClusters) */
   group?: 'x' | 'y';
+  junction?: string;
   road: string;
 }
 
@@ -231,6 +233,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
 
   // signals: one post per approach, outside the cluster of signalled nodes
   const lit = net.nodes.filter(n => n.signals);
+  const junctionOf = signalClusters(net);
   for (const n of lit) for (const a of n.arms) {
     const r = roadOf.get(a.road)!;
     if (r.layer > 0 || a.half < 2.5) continue;
@@ -242,7 +245,7 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     const left: Vec2 = [a.u[1], -a.u[0]];
     const p: Vec2 = [n.at[0] + a.u[0] * back + left[0] * off, n.at[1] + a.u[1] * back + left[1] * off];
     if (onRoad(p)) continue;
-    props.push({ id: `s-${n.id}-${a.road}-${a.dir}`, kind: 'signal', at: p, z0: WALK_Z, heading: Math.atan2(a.u[1], a.u[0]), group: Math.abs(a.u[0]) >= Math.abs(a.u[1]) ? 'x' : 'y', road: r.id });
+    props.push({ id: `s-${n.id}-${a.road}-${a.dir}`, kind: 'signal', at: p, z0: WALK_Z, heading: Math.atan2(a.u[1], a.u[0]), group: Math.abs(a.u[0]) >= Math.abs(a.u[1]) ? 'x' : 'y', junction: junctionOf.get(n.id) ?? n.id, road: r.id });
   }
 
   const res: Furniture = { props: props.sort((a, b) => (a.id < b.id ? -1 : 1)), wires: wires.sort((a, b) => (a.id < b.id ? -1 : 1)) };

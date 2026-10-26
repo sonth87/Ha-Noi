@@ -28,9 +28,10 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 2. [../plan/roadmap.md](../plan/roadmap.md): mục tiêu và DoD của bước hiện tại.
 3. [../architecture/decisions.md](../architecture/decisions.md): đã chốt gì (ADR-032 trở đi; ADR-001…031 ở `apps/svg/docs/architecture/decisions.md`). **Không làm ngược ADR đã chốt** khi chưa hỏi người dùng.
 4. [conventions.md](conventions.md) và [workflow.md](workflow.md).
-5. **[case-studies](../architecture/case-studies.md)**: các sự cố đã gặp, nguyên nhân gốc và luật A17–A26. Đọc trước khi sửa dữ liệu bản đồ, công trình, cầu.
-6. Khi đụng tới dữ liệu: [city-model](../architecture/city-model.md), [osm-import](../architecture/osm-import.md), [house-spec](../architecture/house-spec.md). Bộ phận nhà của app cũ (`apps/svg/docs/architecture/components.md`) là cơ sở cho nhà 3D ở M4.
-7. `.claude/skills/iso-glow/SKILL.md`: luật thẩm mỹ; phần **3D mode** là nguồn tham khảo cho app mới. Chỉ dùng làm tham khảo; không nhúng template vào app.
+5. **[case-studies](../architecture/case-studies.md)**: các sự cố đã gặp, nguyên nhân gốc và luật A17–A37. Đọc trước khi sửa dữ liệu bản đồ, công trình, cầu.
+6. **[guidelines](guidelines.md)**: cách làm cụ thể theo từng mảng (dữ liệu, streaming, GPU, hiệu năng, cài đặt, input, giao diện, nội dung, tài liệu, kiểm thử) và danh sách kiểm trước khi báo xong. Đọc trước khi viết code đụng tới vòng lặp khung hình, cache, tài nguyên GPU, dữ liệu phụ hay nội dung chữ.
+7. Khi đụng tới dữ liệu: [city-model](../architecture/city-model.md), [osm-import](../architecture/osm-import.md), [house-spec](../architecture/house-spec.md). Bộ phận nhà của app cũ (`apps/svg/docs/architecture/components.md`) là cơ sở cho nhà 3D ở M4.
+8. `.claude/skills/iso-glow/SKILL.md`: luật thẩm mỹ; phần **3D mode** là nguồn tham khảo cho app mới. Chỉ dùng làm tham khảo; không nhúng template vào app.
 
 ## 3. Luật bắt buộc
 
@@ -62,6 +63,17 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A24 | **Mọi lỗi vị trí/hình học phải có rào chắn**: một test chạy trên dữ liệu thật (không WebGL) và một ảnh mặt bằng SVG tự kiểm (`qlmanage -t`, không trình duyệt tự động, A7) trước khi nhờ người dùng xem. Một sự cố chỉ xong khi có case study ([case-studies](../architecture/case-studies.md)) và luật. |
 | A25 | **Đo bằng profiler trước khi tối ưu hiệu năng**: không đoán điểm nghẽn. Ghi số trước/sau vào case study. Thuật toán chạy trên toàn bộ dữ liệu phải không quá tuyến tính theo số phần tử (dùng lưới ô / bbox, không duyệt mọi cặp). Xem CS-07. |
 | A26 | **Không chép dán điều kiện hay công thức**: các bộ lọc, phép tính giống nhau dùng một hàm chung (một lỗi dấu trong bản chép ẩn nhiều tháng, CS-08). Hàm quá dài thì tách phần thuần ra và viết test từng cạnh. |
+| A27 | **Lọc theo vị trí thật của đối tượng**: culling / LOD / tầm nhìn dùng vị trí hiện tại hoặc bbox đầy đủ của chính đối tượng, không dùng một điểm đại diện (điểm đầu làn, tâm nhóm) của đối tượng dài. Có test với đối tượng dài. Xem CS-09, [guidelines](guidelines.md) §2.2. |
+| A28 | **Một chủ, một đường giải phóng cho tài nguyên GPU**: gỡ một layer / geometry khỏi cảnh thì phải qua hàm giải phóng của nó (`disposeLayerObj`, `dropTileCut`); thay thế = giải phóng cái cũ trước. `hygiene.test.ts` kiểm. Xem CS-09, guidelines §3. |
+| A29 | **Dữ liệu phụ khớp OSM bằng id, một mục là một phần tử**: catalog / sửa tay ghi `osmSource`; khớp theo tên chỉ là phương án cuối và chỉ một phần tử thắng. Test bất biến chạy cả trên đường stream (skeleton + từng chunk). Xem CS-09, guidelines §1.2, §1.4. |
+| A30 | **Tùy chọn phải có hiệu lực thật**: tùy chọn chỉ đặt được lúc tạo tài nguyên thì đổi nó phải tạo lại tài nguyên, hoặc giao diện nói rõ cần tải lại. Xem CS-09, guidelines §5. |
+| A31 | **Dữ liệu stream tới phải tới mọi chỉ mục**: mọi chỉ mục / cache dựng từ `city` được cập nhật trong `ingestCityChunk`, và có tên trong bảng ở guidelines §2.1, kèm test "dữ liệu tới sau vẫn dùng được". Xem CS-09. |
+| A32 | **Việc mỗi khung tỉ lệ theo phần nhìn thấy**: trong đường gọi của `tick` không duyệt toàn bộ ô / tòa / làn của thành phố; dùng lưới không gian. Vòng lặp toàn bộ chỉ lúc khởi tạo, lúc rảnh hoặc khi dữ liệu đổi. Xem CS-09, guidelines §4.2. |
+| A33 | **Input từ ngoài không làm sập app**: URL, localStorage, mạng, extension đều parse an toàn (`try/catch`, kiểm khoảng, mặc định) và có test với input hỏng. Xem CS-09, guidelines §6. |
+| A34 | **Nội dung chữ phải sạch và có nguồn**: tên, mô tả, địa chỉ không dán nguyên văn từ máy sinh; năm, số liệu, sự kiện ghi nguồn; test chặn ký tự Hán / Hàn / kana / Kirin. Xem CS-10, guidelines §8. |
+| A35 | **Số liệu trong tài liệu được test giữ khớp code** (bảng chất lượng, ngưỡng, hằng số), hoặc ghi rõ "chưa kiểm". Xem CS-09, guidelines §9. |
+| A36 | **Đánh giá / báo cáo phải kiểm trước khi kết luận**: mỗi nhận định về code hay dữ liệu được đối chiếu lại với nguồn; tách rõ "đã xác minh", "nghi vấn", "chưa kiểm bằng mắt". Xem CS-11, guidelines §11. |
+| A37 | **Thay đổi lớn cần thao tác chủ ý**: vào chế độ nhập vai hay bất cứ gì đổi cả màn hình chỉ từ một mục menu có tên hoặc kéo-thả, không từ phím đơn hay một chạm dễ nhầm; vùng bấm ≥ 44 px trên cảm ứng; menu là `Sheet` (nút đóng, Esc, chạm ra ngoài). Xem CS-12, guidelines §7. |
 
 ## 4. Lệnh (ở thư mục gốc)
 
@@ -95,7 +107,7 @@ Bản đồ 3D f4map (`demo.f4map.com/#lat=21.0096812&lon=105.8237414&zoom=20`) 
 6. **Đối chiếu** với ảnh của người dùng hoặc f4map. Số tầng OSM khác số liệu chính thức thì theo số chính thức và ghi chỗ lệch (ví dụ Novotel: OSM 26 tầng, khách sạn công bố 27).
 7. **Cấu trúc thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình Bắt buộc (ADR-055, ADR-057)**:
    - Dữ liệu đô thị và danh mục công trình của mỗi thành phố đặt tại `packages/osm-import/src/cities/<country>/<city>/` (`districts.ts`, `places.ts`, `heritage-notes.ts`, `overrides.ts`, `catalog-part1.ts`, `catalog-part2.ts`, `landmarks-catalog.ts`, `index.ts`).
-   - Bộ dựng 3D chuyên biệt đặt tại `apps/city3d/src/render/landmarks/<country>/<city>/` (dùng chung helper hình học tại `apps/city3d/src/render/landmarks/shared.ts`).
+   - Bộ dựng 3D chuyên biệt đặt tại `apps/city3d/src/render/landmarks/<country>/<city>/` (dùng chung helper hình học tại `apps/city3d/src/render/landmarks/shared.ts`). Thành phố xuất một `CityLandmarks` (`index.ts`), và `render/landmarks.ts` chỉ ghép các thành phố (ADR-060; test: không file nào khác import từ thư mục thành phố).
    - Mỗi khi thêm bất kỳ **vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã** mới nào, bắt buộc rà soát và lập hồ sơ dữ liệu + mô hình 3D riêng cho đủ **13 nhóm**:
      1. *Cửa Ô, Cổng Thành & Thành Quách Cổ*
      2. *Toà nhà Chính phủ, Cơ quan Trung ương Đảng & Nhà khách Nhà nước*

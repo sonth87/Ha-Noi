@@ -24,8 +24,8 @@ import { LineMaterial } from 'three/addons/lines/LineMaterial.js';
 import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
-  METRO, buildingHeight, centroid, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
-  type City, type Lane, type Signals, type Street, type Track, type TrainPhase, type Vehicle, type VehicleKind,
+  METRO, buildingHeight, centroid, metroTracks, roadNetwork, signalsAt, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
+  type Building, type City, type Lane, type SignalSource, type Signals, type Street, type Track, type TrainPhase, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { Batch, type Surface } from '@render/batch';
 import {
@@ -33,20 +33,22 @@ import {
 } from '@render/buildings';
 import {
   TILE, beaconsOf, buildLandmarkOverviewLayer, isMajorLandmarkBuilding, buildLocalStreetTile, buildMapBaseLayers, buildTile, cityFloors, layerOf, localStreetTilesOf, tilesOf,
-  type Detail, type Layer, type LocalStreetTile, type MapBaseLayers, type Tile,
+  type Detail, type Layer, type MapBaseLayers, type Tile,
 } from '@render/city';
-import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets, signalLamp, type FurnitureBucket, type FurnitureCell } from '@render/furniture';
-import { isHouseLamp, windowRank, windowShade, type Shade } from '@render/lights';
+import { STREET_LAMPS, buildFurnitureCell, furnitureBuckets } from '@render/furniture';
 import { at as pathAt, carModel, stationLamp, type CarModel } from '@render/metro';
 import { buildShowcase, showcasesOf, type BuiltShowcase, type ShowcaseItem } from '@render/showcase';
-import { placeVehicle, vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
+import { vehicleModel, type VehicleModel, type VehiclePart } from '@render/vehicles';
+import { TrafficArea, placeVisibleVehicles, placedFrom, playerAhead, type PlacedVehicle } from './trafficView';
+import { SignalClock } from './signalClock';
+import { pegmanPreview, type PegmanDropPreview } from './pegman';
+import { attachMapInput } from './mapInput';
 import {
   HANOI_OUTER_BOUNDARY, WARD_BOUNDARIES, buildDashedBoundarySegments, mapZoomStage,
   type MapZoomStage,
 } from '@render/adminBoundaries';
 import {
-  CELL_R, FLY_DURATION_MS, FRUSTUM, HOVER_MIN_PX_PER_METRE, HOVER_REGULAR_BLDG_MIN_PX_PER_METRE,
-  HOVER_THROTTLE_MS, ISO_EL, MIN_ZOOM_TO_CURSOR_EL, MOVE_KEYS, ORBIT_RADIUS, PAN_BOUNDS_MARGIN,
+  CELL_R, FLY_DURATION_MS, FRUSTUM, ISO_EL, MIN_ZOOM_TO_CURSOR_EL, MOVE_KEYS, ORBIT_RADIUS, PAN_BOUNDS_MARGIN,
   POV_CONFIG, POV_MODES, SEE_THROUGH, SHELL_VERT, STORAGE_KEYS, SURFACE_TOKEN, TURN_DURATION_MS, VEHICLE_KINDS,
   azFromHeading, azOf, headingFromAz, type PovMode,
 } from './constants';
@@ -57,37 +59,41 @@ import {
   renderHoverBannerDom, renderPopupCardDom, syncPopupBulbDom,
 } from './overlayDom';
 import {
-  PLACE_INFO_MODES, buildPlaceCatalog,
+  PLACE_INFO_MODES, addBuildingsToCatalog, buildPlaceCatalog, quickPlaces, type QuickPlace,
   type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
 } from './placeInfo';
 import { PovController, type DriveControlKey } from './povController';
 import type { PrebuiltBase } from './prebuild';
 import { OverlayLabels } from './overlayLabels';
 import { chunkBounds, chunkSubCity, mergeChunk } from './chunkMerge';
-import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
+import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality, type TreeLook } from './quality';
+import { WindowPainter } from './windowPainter';
+import { ChunkStreamer, MAX_TRIES } from './chunkStreamer';
+import { ChunkClient } from './chunkClient';
+import { IdleQueue } from './idleQueue';
+import { BvhBuilder, withFastRaycast } from './picking';
+import { TileIndex, lruEvictions, type CellState, type LocalTileState, type TileState } from './tileIndex';
 import { CityEventBus, createCitySDK, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
-import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
+import { buildBuildingBoundsIndex, buildingBounds, computeForegroundCut, type BldgBounds } from './seeThrough';
 import {
-  STREET_LABEL_MODES, buildStreetCatalog,
+  STREET_LABEL_MODES, buildStreetCatalog, updateStreetCatalog,
   type StreetEntry, type StreetLabelMode,
 } from './streetLabels';
 import { formatUrlState, frameForCity, parseUrlState } from './urlState';
-import { getCityManifest, loadCityChunkCityAsync, projector } from '@my-city/osm-import';
+import { UrlSync } from './urlSync';
+import { getCityManifest, projector } from '@my-city/osm-import';
 import type { MapPaletteId } from '@my-city/theme';
 
-const MAX_CHUNK_TRIES = 4;
+/** POV culling measures from the camera on the ground, the grid query from the car or train: room for the gap */
+const POV_REACH_MARGIN = 160;
+/** entering POV builds tiles this close to the car / train at once; the rest within the frame budget */
+const POV_SYNC_BUILD_M = 180;
 
 export type Mode = '2d' | '3d';
 export type Theme = 'dark' | 'light';
 
-export interface PegmanDropPreview {
-  kind: 'metro' | 'car';
-  world: [number, number, number];
-  screenX: number;
-  screenY: number;
-  trainIndex: number;
-  label: string;
-}
+export type { PegmanDropPreview } from './pegman';
+export type { ShowcaseItem } from '@render/showcase';
 
 export interface Snapshot {
   mode: Mode;
@@ -141,33 +147,6 @@ export interface Snapshot {
   povLocationName: string;
 }
 
-interface TileState {
-  tile: Tile;
-  layers: Map<Detail, { layer: Layer; group: THREE.Group | null }>;
-  shown: Detail | -1;
-  cutKey: string;
-  cutLayer: Layer | null;
-  cutGroup: THREE.Group | null;
-  lastUsed: number;
-}
-
-interface LocalTileState {
-  tile: LocalStreetTile;
-  layer: Layer | null;
-  group: THREE.Group | null;
-  lastUsed: number;
-}
-
-interface CellState {
-  bucket: FurnitureBucket;
-  cell: FurnitureCell | null;
-  groups: { poles: THREE.Group; fixtures: THREE.Group; trees: THREE.Group; simple: THREE.Group } | null;
-  wires: LineSegments2 | null;
-  pulses: LineSegments2 | null;
-  pools: THREE.Mesh | null;
-  lastUsed: number;
-}
-
 interface Fleet {
   model: VehicleModel;
   meshes: THREE.InstancedMesh[];
@@ -182,17 +161,6 @@ interface Train {
   stopping: boolean;
 }
 
-const MAX_ACTIVE_VEHICLES = 900;
-function spawnBoundedTraffic(lanes: readonly Lane[], density: number): Vehicle[] {
-  const all = spawnTraffic(lanes, density);
-  if (all.length <= MAX_ACTIVE_VEHICLES) return all;
-  const stride = all.length / MAX_ACTIVE_VEHICLES;
-  const out: Vehicle[] = [];
-  for (let i = 0; i < MAX_ACTIVE_VEHICLES; i++) {
-    out.push(all[Math.min(all.length - 1, Math.floor(i * stride))]!);
-  }
-  return out;
-}
 
 export class CityView {
   readonly baseLayers: MapBaseLayers;
@@ -206,6 +174,12 @@ export class CityView {
   readonly tiles: TileState[];
   readonly localTiles: LocalTileState[];
   private readonly landmarkTileSet = new Set<TileState>();
+  /** grids and live sets of the streamed pieces, so per-frame work walks what is around the view (A32) */
+  private readonly idx = new TileIndex();
+  /** lamps on, window shades, and the lazy repaint of what is off screen (view/windowPainter.ts) */
+  private readonly painter = new WindowPainter();
+  /** BVHs for the big pickable geometries, built while idle (view/picking.ts) */
+  private readonly bvh = new BvhBuilder(() => this.layers, () => this.interacting || performance.now() < this.interactCooldown);
   private readonly bldgBounds: BldgBounds[];
   readonly cells: CellState[];
   private readonly tileById = new Map<string, TileState>();
@@ -215,10 +189,9 @@ export class CityView {
   private readonly streetIdSet = new Set<string>();
   private readonly featureIdSet = new Set<string>();
   private readonly skeletonStreets: Street[];
-  private readonly availableChunks = new Set<string>();
-  private readonly loadedChunks = new Set<string>();
-  private readonly loadingChunks = new Set<string>();
-  private readonly chunkFailures = new Map<string, { tries: number; retryAt: number }>();
+  private readonly chunks = new ChunkStreamer();
+  private chunkClient: ChunkClient | null = null;
+  private readonly idle = new IdleQueue(() => this.interacting || performance.now() < this.interactCooldown || this.fly !== null);
   private cacheTick = 0;
   private readonly projScreenMatrix = new THREE.Matrix4();
   private readonly camFrustum = new THREE.Frustum();
@@ -243,12 +216,15 @@ export class CityView {
   private activeShowcase: { built: BuiltShowcase; beacons: THREE.Mesh[]; flags: WavingFlagInstance[]; doors: THREE.MeshBasicMaterial; shellGroup: THREE.Group | null } | null = null;
   private savedMapCam: { target: THREE.Vector3; zoom: number } | null = null;
   private trains: Train[] = [];
+  private readonly traffic: TrafficArea;
+  private readonly signals: SignalClock;
+  /** traffic vehicles near the player's car last frame */
+  private nearCar = new Map<Vehicle, PlacedVehicle>();
   private vehicles: Vehicle[] = [];
   /** every layer built so far: a lamp is painted wherever it appears */
   private readonly layers = new Set<Layer>();
   private snap: Snapshot;
   private readonly listeners = new Set<() => void>();
-  private lit = new Set<string>();
   private timers: ReturnType<typeof setTimeout>[] = [];
   private readonly overlays = new OverlayLabels({
     view: () => this.mounted,
@@ -275,11 +251,8 @@ export class CityView {
   private hoveredPlaceId: string | null = null;
   private readonly frame;
   private readonly northAz: number;
+  private readonly urlSync = new UrlSync();
   private savedCam: { x: number; z: number; zoom: number; az: number; el: number; place: string | null };
-  private urlCandidateSig = '';
-  private urlSyncedSig = '';
-  private urlDirtyAt = 0;
-  private lastUrlWrite = 0;
   private mounted: {
     host: HTMLElement;
     renderer: THREE.WebGLRenderer;
@@ -309,7 +282,7 @@ export class CityView {
     stop: () => void;
   } | null = null;
   private turn: { a0: number; a1: number; e0: number; e1: number; t0: number } | null = null;
-  private sim = { t: 0, prev: null as Signals | null, phase: -1, slow: 0 };
+  private sim = { t: 0, prev: null as SignalSource | null, slow: 0 };
   private readonly mats = {
     surface: new Map<Surface, THREE.MeshBasicMaterial>(),
     shell: new THREE.ShaderMaterial({
@@ -346,8 +319,6 @@ export class CityView {
   })();
   private farF = 0;
   private carModels: CarModel[] = [];
-  private colors: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
-  private outline: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
 
   constructor(readonly city: City, initialLoadedChunks?: readonly string[], prebuilt?: PrebuiltBase | null) {
     this.frame = frameForCity(city.id);
@@ -358,11 +329,11 @@ export class CityView {
     for (const f of city.features) this.featureIdSet.add(f.id);
     try {
       const manifest = getCityManifest(city.id);
-      for (const c of manifest.chunks) this.availableChunks.add(c.key);
+      for (const c of manifest.chunks) this.chunks.available.add(c.key);
       if (initialLoadedChunks) {
-        for (const k of initialLoadedChunks) this.loadedChunks.add(k);
+        for (const k of initialLoadedChunks) this.chunks.loaded.add(k);
       } else {
-        for (const c of manifest.chunks) this.loadedChunks.add(c.key);
+        for (const c of manifest.chunks) this.chunks.loaded.add(c.key);
       }
     } catch {
       // Custom or synthetic test city without a world-manifest entry
@@ -398,10 +369,15 @@ export class CityView {
     }
     this.bldgBounds = buildBuildingBoundsIndex(this.tiles);
     const net = roadNetwork(city);
+    this.signals = new SignalClock(net);
     this.cells = furnitureBuckets(streetFurniture(city, net)).map(bucket => ({ bucket, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 }));
     for (const c of this.cells) {
       this.cellByKey.set(`${Math.floor(c.bucket.center[0] / TILE)},${Math.floor(c.bucket.center[1] / TILE)}`, c);
     }
+    for (const t of this.tiles) this.idx.fileTile(t, this.landmarkTileSet.has(t));
+    for (const lt of this.localTiles) this.idx.fileLocal(lt);
+    for (const c of this.cells) this.idx.fileCell(c);
+    this.idx.fileBuildings(this.bldgBounds);
     this.lanes = trafficLanes(net);
     this.tracks = metroTracks(city);
     this.showcases = showcasesOf(city);
@@ -458,7 +434,7 @@ export class CityView {
     const initView = (((Math.round(initHeading / 90) % 4) + 4) % 4) as Snapshot['view'];
     const initAz = initUrl?.heading !== undefined ? azFromHeading(initUrl.heading, this.northAz) : azOf(initView, this.northAz);
     const initEl = initUrl?.tilt !== undefined ? Math.max(0.05, Math.min(1.43, (initUrl.tilt * Math.PI) / 180)) : ISO_EL;
-    const validShowcase = initUrl?.showcase && this.showcases.some(s => s.id === initUrl.showcase) ? initUrl.showcase : null;
+    const validShowcase = initUrl?.showcase && this.isShowcaseId(initUrl.showcase) ? initUrl.showcase : null;
 
     this.savedCam = {
       x: initUrl?.x ?? 0,
@@ -470,7 +446,8 @@ export class CityView {
     };
 
     const quality = loadQuality();
-    this.vehicles = spawnBoundedTraffic(this.lanes, quality.traffic);
+    this.traffic = new TrafficArea(this.lanes);
+    this.vehicles = this.traffic.around(this.savedCam.x, this.savedCam.z, quality.traffic, []);
     const sig = signalsAt(0);
     const totalTrains = this.tracks.reduce((acc, tr) => acc + trainCount(tr), 0);
     this.snap = {
@@ -501,7 +478,8 @@ export class CityView {
   mount(host: HTMLElement) {
     if (this.mounted) this.unmount();
     const q = this.snap.quality;
-    const renderer = new THREE.WebGLRenderer({ antialias: !isMobileDevice() || q.msaa, powerPreference: 'high-performance' });
+    // antialias can only be chosen when the context is made: setQuality remounts when MSAA changes (CS-09)
+    const renderer = new THREE.WebGLRenderer({ antialias: q.msaa, powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(devicePixelRatio, q.pixelRatio));
     renderer.domElement.style.display = 'block';
     renderer.domElement.style.position = 'absolute';
@@ -596,6 +574,7 @@ export class CityView {
     }
     for (const lt of this.localTiles) lt.group = null;
     for (const c of this.cells) { c.groups = null; c.wires = null; c.pulses = null; c.pools = null; }
+    this.idx.resetShown();
     const beacons = beaconsOf(this.city).map(p => { const b = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 8), this.mats.beaconOff); b.position.copy(p); mapGroup.add(b); return b; });
     const flags = flagpolesOf(this.city).map(spec => {
       const f = createWavingFlagGroup(spec);
@@ -618,241 +597,15 @@ export class CityView {
     mapGroup.add(vehicleLines);
     this.pov.mountPlayerCar(mapGroup, this.mats.vehicle, this.mats.beam, this.vehicleShell, this.mats.crease);
 
-    // Helper to raycast against buildings, stations, parks, lakes, and monuments
-    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2();
-    const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hitPt = new THREE.Vector3();
-    const flyToClient = (clientX: number, clientY: number) => {
-      if (this.pov.isActive()) return;
-      const r = renderer.domElement.getBoundingClientRect();
-      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, this.activeCamera());
-      if (ray.ray.intersectPlane(ground, hitPt)) this.flyTo([hitPt.x, hitPt.z], false);
-    };
-    const pickAtClient = (clientX: number, clientY: number): { owner: string; floor?: string; point: THREE.Vector3 } | null => {
-      const r = renderer.domElement.getBoundingClientRect();
-      ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
-      ray.setFromCamera(ndc, this.activeCamera());
-      const pickable: THREE.Object3D[] = [];
-      if (this.snap.showcase) {
-        showcaseGroup.traverse(o => { if (o.userData.surface && o.visible && o.parent?.visible !== false) pickable.push(o); });
-      } else {
-        if (tilesGroup.visible) {
-          for (const t of this.tiles) {
-            const g = t.cutGroup?.visible ? t.cutGroup : (t.shown >= 0 ? t.layers.get(t.shown as Detail)?.group : null);
-            if (g?.visible) for (const o of g.children) if (o.userData.surface) pickable.push(o);
-          }
-        }
-        if (landmarkOverviewGroup.visible) {
-          landmarkOverviewGroup.traverse(o => { if (o.userData.surface && o.visible) pickable.push(o); });
-        }
-        if (stationShellGroup.visible) for (const o of stationShellGroup.children) if (o.userData.surface) pickable.push(o);
-        if (localStreetsGroup.visible) {
-          for (const lt of this.localTiles) {
-            if (lt.group?.visible) for (const o of lt.group.children) if (o.userData.surface) pickable.push(o);
-          }
-        }
-        for (const grp of [metroBaseGroup, terrainGroup, majorStreetsGroup]) {
-          if (grp.visible) for (const o of grp.children) if (o.userData.surface) pickable.push(o);
-        }
-      }
-      const hits = ray.intersectObjects(pickable, false);
-      for (const hit of hits) {
-        if (hit.faceIndex == null) continue;
-        const surface = hit.object.userData.surface as Surface;
-        const layer = hit.object.userData.layer as Layer;
-        const owner = layer.ownerOf(surface, hit.faceIndex);
-        if (owner) {
-          const floor = layer.floorAt(owner, hit.point);
-          return { owner, ...(floor ? { floor } : {}), point: hit.point };
-        }
-      }
-      return null;
-    };
-
-    const onDbl = (e: MouseEvent) => {
-      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
-      if (pinHit) {
-        if (pinHit.kind === 'place') {
-          this.openPopup(pinHit.entry);
-          if (!this.pov.isActive()) this.flyTo(pinHit.entry.ground, false);
-        } else {
-          this.openStreetPopup(pinHit.street, pinHit.item.world);
-        }
-        return;
-      }
-      if (!this.snap.showcase && this.snap.placeInfo !== 'off') {
-        const picked = pickAtClient(e.clientX, e.clientY);
-        if (picked) {
-          const entry = this.placeCatalog.byId.get(picked.owner);
-          if (entry) {
-            this.openPopup(entry, picked.floor);
-            return;
-          }
-        }
-      }
-      flyToClient(e.clientX, e.clientY);
-    };
-
-    let down: [number, number] | null = null;
-    let povDragPrev: [number, number] | null = null;
-    let lastTap: { t: number; x: number; y: number } | null = null;
-    let touchGesture: { ang0: number; dist0: number } | null = null;
-    const onTouchStart = (e: TouchEvent) => {
-      controls.zoomToCursor = false;
-      if (e.touches.length === 2) {
-        const dx = e.touches[1]!.clientX - e.touches[0]!.clientX;
-        const dy = e.touches[1]!.clientY - e.touches[0]!.clientY;
-        touchGesture = { ang0: Math.atan2(dy, dx), dist0: Math.hypot(dx, dy) };
-      } else {
-        touchGesture = null;
-      }
-    };
-    const onTouchMove = (e: TouchEvent) => {
-      if (this.pov.isActive()) return;
-      if (e.touches.length === 2 && touchGesture && this.snap.mode === '2d') {
-        const dx = e.touches[1]!.clientX - e.touches[0]!.clientX;
-        const dy = e.touches[1]!.clientY - e.touches[0]!.clientY;
-        let dAng = Math.atan2(dy, dx) - touchGesture.ang0;
-        while (dAng > Math.PI) dAng -= 2 * Math.PI;
-        while (dAng < -Math.PI) dAng += 2 * Math.PI;
-        if (Math.abs(dAng) > 0.24) {
-          this.setMode('3d');
-          touchGesture = null;
-        }
-      }
-    };
-    const onTouchEnd = () => { touchGesture = null; };
-    const onWheel = () => {
-      controls.zoomToCursor = this.elevation() >= MIN_ZOOM_TO_CURSOR_EL;
-    };
-    const onDown = (e: PointerEvent) => {
-      controls.zoomToCursor = e.pointerType === 'mouse' && this.elevation() >= MIN_ZOOM_TO_CURSOR_EL;
-      down = [e.clientX, e.clientY];
-      if (this.pov.isActive()) {
-        povDragPrev = [e.clientX, e.clientY];
-      }
-    };
-
-    let lastHoverTime = 0;
-    const onMove = (e: PointerEvent) => {
-      if (this.pov.isActive() && povDragPrev && (e.buttons !== 0 || e.pointerType === 'touch')) {
-        const dx = e.clientX - povDragPrev[0];
-        const dy = e.clientY - povDragPrev[1];
-        povDragPrev = [e.clientX, e.clientY];
-        this.pov.addLookDelta(dx, dy);
-        return;
-      }
-      if (e.pointerType !== 'mouse' || this.interacting || (e.buttons & 7) !== 0) return;
-      if (this.snap.showcase) {
-        this.hideHoverBanner();
-        this.overlays.clearHoveredPin();
-        return;
-      }
-      const now = performance.now();
-      if (now - lastHoverTime < HOVER_THROTTLE_MS) return;
-      lastHoverTime = now;
-
-      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
-      if (pinHit) {
-        this.overlays.setHoveredPin(pinHit.key);
-        renderer.domElement.style.cursor = 'pointer';
-        if (pinHit.kind === 'place' && this.snap.placeInfo !== 'off') {
-          const r = host.getBoundingClientRect();
-          this.showHoverBanner(pinHit.entry, e.clientX - r.left, e.clientY - r.top);
-        } else {
-          this.hideHoverBanner();
-        }
-        return;
-      }
-      this.overlays.clearHoveredPin();
-
-      const px = this.pov.isActive() ? 8 : this.pxPerMetre();
-      if (this.snap.placeInfo === 'off' || px < HOVER_MIN_PX_PER_METRE) {
-        this.hideHoverBanner();
-        renderer.domElement.style.cursor = '';
-        return;
-      }
-      const picked = pickAtClient(e.clientX, e.clientY);
-      const entry = picked ? this.placeCatalog.byId.get(picked.owner) : undefined;
-      if (!entry || (entry.category === 'building' && entry.tier > 1 && px < HOVER_REGULAR_BLDG_MIN_PX_PER_METRE)) {
-        this.hideHoverBanner();
-        renderer.domElement.style.cursor = picked?.floor ? 'pointer' : '';
-        return;
-      }
-      renderer.domElement.style.cursor = 'pointer';
-      const r = host.getBoundingClientRect();
-      this.showHoverBanner(entry, e.clientX - r.left, e.clientY - r.top, picked?.floor);
-    };
-    const onLeave = () => {
-      povDragPrev = null;
-      this.hideHoverBanner();
-      this.overlays.clearHoveredPin();
-      renderer.domElement.style.cursor = '';
-    };
-
-    const onUp = (e: PointerEvent) => {
-      povDragPrev = null;
-      const maxMove = e.pointerType === 'touch' ? 12 : 5;
-      if (!down || Math.hypot(e.clientX - down[0], e.clientY - down[1]) > maxMove) return;
-      const pinHit = this.overlays.hitLabelAtClient(e.clientX, e.clientY);
-      if (e.pointerType === 'touch') {
-        const now = performance.now();
-        if (lastTap && now - lastTap.t < 320 && Math.hypot(e.clientX - lastTap.x, e.clientY - lastTap.y) < 30) {
-          lastTap = null;
-          if (pinHit) {
-            if (pinHit.kind === 'place') this.openPopup(pinHit.entry);
-            else this.openStreetPopup(pinHit.street, pinHit.item.world);
-            return;
-          }
-          if (!this.snap.showcase && this.snap.placeInfo !== 'off') {
-            const pickedDbl = pickAtClient(e.clientX, e.clientY);
-            if (pickedDbl) {
-              const entry = this.placeCatalog.byId.get(pickedDbl.owner);
-              if (entry) {
-                this.openPopup(entry, pickedDbl.floor);
-                return;
-              }
-            }
-          }
-          flyToClient(e.clientX, e.clientY);
-          return;
-        }
-        lastTap = { t: now, x: e.clientX, y: e.clientY };
-      }
-      if (pinHit) {
-        if (pinHit.kind === 'place') {
-          this.openPopup(pinHit.entry);
-        } else if (!this.pov.isActive()) {
-          this.flyTo(pinHit.item.world, false);
-        }
-        return;
-      }
-      const picked = pickAtClient(e.clientX, e.clientY);
-      if (!picked) {
-        if (this.activePopup) this.closePopup();
-        return;
-      }
-      if (picked.floor) {
-        this.setLamp(picked.floor, !this.lit.has(picked.floor));
-        this.syncPopupBulb();
-        return;
-      }
-      const st = this.city.stations.find(s => s.id === picked.owner);
-      if (st) {
-        const lid = stationLamp(st);
-        this.setLamp(lid, !this.lit.has(lid));
-        this.syncPopupBulb();
-      }
-    };
-    renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: true });
-    renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: true });
-    renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: true });
-    renderer.domElement.addEventListener('wheel', onWheel, { passive: true });
-    renderer.domElement.addEventListener('pointerdown', onDown);
-    renderer.domElement.addEventListener('pointermove', onMove);
-    renderer.domElement.addEventListener('pointerleave', onLeave);
-    renderer.domElement.addEventListener('pointerup', onUp);
-    renderer.domElement.addEventListener('dblclick', onDbl);
+    const detachInput = attachMapInput({
+      pov: this.pov, overlays: this.overlays, snap: () => this.snap, placeCatalog: () => this.placeCatalog,
+      activeCamera: () => this.activeCamera(), elevation: () => this.elevation(), pxPerMetre: () => this.pxPerMetre(), interacting: () => this.interacting,
+      visibleTiles: () => this.idx.visibleTiles, visibleLocal: () => this.idx.visibleLocal, stations: () => this.city.stations,
+      isLit: id => this.painter.lit.has(id), hasPopup: () => this.activePopup !== null,
+      openPopup: (e, f) => this.openPopup(e, f), openStreetPopup: (st, w) => this.openStreetPopup(st, w), closePopup: () => this.closePopup(),
+      showHoverBanner: (e, x, y, f) => this.showHoverBanner(e, x, y, f), hideHoverBanner: () => this.hideHoverBanner(),
+      flyTo: (p, ex) => this.flyTo(p, ex), setMode: md => this.setMode(md), setLamp: (id, on) => this.setLamp(id, on), syncPopupBulb: () => this.syncPopupBulb(),
+    }, renderer, host, controls, { showcaseGroup, tilesGroup, landmarkOverviewGroup, stationShellGroup, localStreetsGroup, metroBaseGroup, terrainGroup, majorStreetsGroup });
 
     const resize = () => {
       const w = host.clientWidth, h = host.clientHeight, a = w / Math.max(1, h);
@@ -866,7 +619,7 @@ export class CityView {
     const ro = new ResizeObserver(resize);
     ro.observe(host);
 
-    let raf = 0, frames = 0, t0 = performance.now(), last = t0, lastPovTelSync = 0;
+    let raf = 0, frames = 0, t0 = performance.now(), last = t0, lastPovTelSync = 0, lastHeadingSync = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
       const dt = Math.min(0.1, (now - last) / 1000);
@@ -952,7 +705,9 @@ export class CityView {
         const az = Math.atan2(camera.position.z - controls.target.z, camera.position.x - controls.target.x);
         const heading = Math.round(headingFromAz(az, this.northAz)) % 360;
         const view = (((Math.round(heading / 90) % 4) + 4) % 4) as Snapshot['view'];
-        if (heading !== this.snap.heading || view !== this.snap.view) {
+        // the compass needs ~10 updates a second, not one per frame: each update re-renders the React shell
+        if (view !== this.snap.view || (heading !== this.snap.heading && now - lastHeadingSync > 100)) {
+          lastHeadingSync = now;
           this.update({ heading, view });
         }
       }
@@ -1025,15 +780,7 @@ export class CityView {
         controls.removeEventListener('start', onControlStart);
         controls.removeEventListener('change', onControlChange);
         controls.removeEventListener('end', onControlEnd);
-        renderer.domElement.removeEventListener('touchstart', onTouchStart);
-        renderer.domElement.removeEventListener('touchmove', onTouchMove);
-        renderer.domElement.removeEventListener('touchend', onTouchEnd);
-        renderer.domElement.removeEventListener('wheel', onWheel);
-        renderer.domElement.removeEventListener('pointerdown', onDown);
-        renderer.domElement.removeEventListener('pointermove', onMove);
-        renderer.domElement.removeEventListener('pointerleave', onLeave);
-        renderer.domElement.removeEventListener('pointerup', onUp);
-        renderer.domElement.removeEventListener('dblclick', onDbl);
+        detachInput();
         renderer.domElement.removeEventListener('webglcontextlost', onLost);
         renderer.domElement.removeEventListener('webglcontextrestored', onRestored);
       },
@@ -1083,6 +830,7 @@ export class CityView {
     this.overlays.adminBoundariesStep(true);
     this.syncUrlState(performance.now(), true);
     this.scheduleLandmarkOverview(2500);
+    this.bvh.start();
     raf = requestAnimationFrame(tick);
   }
 
@@ -1104,7 +852,9 @@ export class CityView {
       rec.cleanup = undefined;
     }
     m.stop();
+    this.idle.flush();
     this.timers.forEach(clearTimeout); this.timers = [];
+    this.bvh.stop();
     if (this.overviewTimer !== undefined) { clearTimeout(this.overviewTimer); this.overviewTimer = undefined; }
     this.overlays.unmount();
     this.myLocationMarker?.remove();
@@ -1158,6 +908,8 @@ export class CityView {
   /** Full teardown for HMR reload so all cached Layer and CarModel ArrayBuffers are released */
   dispose() {
     this.unmount();
+    this.chunkClient?.dispose();
+    this.idx.clear();
     for (const l of [...this.layers]) this.disposeLayerObj(l);
     this.layers.clear();
     for (const t of this.tiles) {
@@ -1211,21 +963,26 @@ export class CityView {
     if (!this.mounted || !this.pov.isActive()) return;
     this.cacheTick++;
     this.refreshCameraFrustum();
-    for (const t of this.tiles) {
+    // only what is right around the car / train is built now (so the view is never empty); the rest of the cone
+    // and the skyline come in through detailStep within the frame budget (A22: no big synchronous build on a click)
+    const f = this.pov.getFocusPoint(), syncR = POV_SYNC_BUILD_M;
+    const reach = this.tilesInReach();
+    this.hideTilesOutside(reach);
+    for (const t of reach) {
       const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
       if (vis) {
         t.lastUsed = this.cacheTick;
-        if (t.shown < 1) this.show(t, this.ensure(t, 1));
+        const close = Math.hypot(t.tile.center[0] - f.x, t.tile.center[1] - f.z) - t.tile.radius <= syncR;
+        if (t.shown < 1 && (close || t.layers.has(1))) this.show(t, this.ensure(t, 1));
       }
       this.syncTileVisibility(t, vis);
     }
-    for (const lt of this.localTiles) {
-      const vis = this.pov.isTileVisibleInPov(lt.tile.center, lt.tile.radius, false);
-      if (vis) {
-        lt.lastUsed = this.cacheTick;
-        this.ensureLocalTile(lt);
-      }
-      if (lt.group) lt.group.visible = vis;
+    for (const lt of this.idx.local.query(f.x, f.z, syncR)) {
+      if (!this.pov.isTileVisibleInPov(lt.tile.center, lt.tile.radius, false)) continue;
+      lt.lastUsed = this.cacheTick;
+      this.ensureLocalTile(lt);
+      if (lt.group) lt.group.visible = true;
+      this.idx.visibleLocal.add(lt);
     }
   }
 
@@ -1252,7 +1009,9 @@ export class CityView {
       m.controls.enabled = !this.pov.isActive();
       m.railTrackGroup.visible = this.snap.quality.houseDetail >= 3 || this.pov.isActive();
       if (povMode === 'map') {
-        for (const t of this.tiles) this.syncTileVisibility(t, this.nearTile(t) && t.shown >= 0);
+        const reach = this.tilesInReach();
+        this.hideTilesOutside(reach);
+        for (const t of reach) this.syncTileVisibility(t, this.nearTile(t) && t.shown >= 0);
       } else {
         this.pov.step(0, this.sim.t, this.trains, this.nightOn('beam'));
         this.ensurePovVisibleTiles();
@@ -1348,6 +1107,38 @@ export class CityView {
     const idx = LOCALES.indexOf(this.snap.locale);
     const next = LOCALES[(idx + 1) % LOCALES.length]!;
     this.setLocale(next);
+  }
+
+  /** the ground point at the middle of the view (the explorer sorts by distance to it) */
+  viewCentre(): [number, number] {
+    const m = this.mounted;
+    return m ? [m.controls.target.x, m.controls.target.z] : [this.savedCam.x, this.savedCam.z];
+  }
+
+  /** a curated showcase, or any building of the map as `bldg:<id>` (opened from its popup) */
+  isShowcaseId(id: string): boolean {
+    return this.showcaseIdSet.has(id) || (id.startsWith('bldg:') && this.buildingIdSet.has(id.slice('bldg:'.length)));
+  }
+
+  /** what a showcase id shows: from the curated list, or from the plate built for it */
+  showcaseItem(id: string | null): ShowcaseItem | null {
+    if (!id) return null;
+    return this.showcaseCache.get(id)?.item ?? this.showcases.find(x => x.id === id) ?? null;
+  }
+
+  /** leave the diorama (or the list) for the place on the map: fly there, come close, open its popup */
+  showItemOnMap(id: string) {
+    const item = this.showcaseItem(id);
+    if (!item?.at) return;
+    this.setShowcase(null);
+    this.flyTo([item.at[0], item.at[1]]);
+    const m = this.mounted;
+    if (m && m.camera.zoom < 3) { m.camera.zoom = 3; m.camera.updateProjectionMatrix(); }
+    const bId = id.startsWith('bldg:') ? id.slice('bldg:'.length) : null;
+    const src = !bId && id.startsWith('catalog:') ? this.city.landmarksCatalog?.find(e => `catalog:${e.id}` === id)?.osmSource : undefined;
+    const b = bId ? this.city.buildings.find(x => x.id === bId) : src ? this.city.buildings.find(x => x.source === src) : undefined;
+    const entry = b ? this.placeCatalog.byId.get(b.id) : id.startsWith('station:') ? this.placeCatalog.byId.get(id.slice('station:'.length)) : undefined;
+    if (entry) this.openPopup(entry);
   }
 
   /** switch between the full city map (id = null) and a standalone diorama showcase on an iso-glow base plate */
@@ -1537,52 +1328,8 @@ export class CityView {
   previewPegmanDrop(clientX: number, clientY: number): PegmanDropPreview | null {
     const m = this.mounted;
     if (!m || this.snap.showcase) return null;
-    const rect = m.renderer.domElement.getBoundingClientRect();
-    if (
-      clientX < rect.left ||
-      clientX > rect.right ||
-      clientY < rect.top ||
-      clientY > rect.bottom
-    ) {
-      return null;
-    }
-    const ndc = new THREE.Vector2(
-      ((clientX - rect.left) / rect.width) * 2 - 1,
-      -((clientY - rect.top) / rect.height) * 2 + 1,
-    );
-    const ray = new THREE.Raycaster();
-    ray.setFromCamera(ndc, this.activeCamera());
-
-    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-    const viaductPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -10.5);
-    const hitGnd = new THREE.Vector3();
-    const hitVia = new THREE.Vector3();
-    if (!ray.ray.intersectPlane(groundPlane, hitGnd)) return null;
-    if (!ray.ray.intersectPlane(viaductPlane, hitVia)) hitVia.copy(hitGnd);
-
-    const b = this.panBounds;
-    const clampX = (v: number) => Math.max(b.x0, Math.min(b.x1, v));
-    const clampZ = (v: number) => Math.max(b.y0, Math.min(b.y1, v));
-
-    const target = this.pov.findPegmanTarget(
-      [clampX(hitGnd.x), clampZ(hitGnd.z)],
-      [clampX(hitVia.x), clampZ(hitVia.z)],
-      this.trains,
-      this.sim.t,
-    );
-
-    const proj = new THREE.Vector3(target.world[0], target.world[2], target.world[1]).project(this.activeCamera());
-    const screenX = (proj.x * 0.5 + 0.5) * rect.width;
-    const screenY = (-proj.y * 0.5 + 0.5) * rect.height;
-
-    return {
-      kind: target.kind,
-      world: target.world,
-      screenX,
-      screenY,
-      trainIndex: target.trainIndex,
-      label: target.label,
-    };
+    return pegmanPreview(m.renderer.domElement.getBoundingClientRect(), this.activeCamera(), clientX, clientY, this.panBounds,
+      (ground, viaduct) => this.pov.findPegmanTarget(ground, viaduct, this.trains, this.sim.t));
   }
 
   /** Drop Pegman at `(clientX, clientY)`: enters `'metro-cab'` on the nearest train if dropped on Metro, or `'drive-cabin'` on the street */
@@ -1633,9 +1380,18 @@ export class CityView {
 
   setQuality(q: Quality, lowered: string | null = null) {
     const traffic = q.traffic !== this.snap.quality.traffic;
+    // a new WebGL context is the only way to switch MSAA; the automatic lowering keeps the current one
+    // instead of stalling a frame that is already slow
+    const remount = q.msaa !== this.snap.quality.msaa && !lowered && this.mounted;
     this.update({ quality: q, lowered });
     if (!lowered) saveQuality(q);
     if (traffic) this.respawn();
+    if (remount) {
+      const host = this.mounted!.host;
+      this.unmount();
+      this.mount(host);
+      return;
+    }
     this.applyQuality(q);
   }
 
@@ -1740,12 +1496,12 @@ export class CityView {
   private isEntryLit(entry: PlaceEntry): boolean {
     if (entry.buildingId) {
       const prefix = `${entry.buildingId}#`;
-      return this.floors.some(f => f.startsWith(prefix) && this.lit.has(f));
+      return this.floors.some(f => f.startsWith(prefix) && this.painter.lit.has(f));
     }
     if (entry.category === 'station') {
       const stId = entry.id.startsWith('station:') ? entry.id.slice('station:'.length) : entry.id;
       const st = this.city.stations.find(s => s.id === stId);
-      if (st) return this.lit.has(stationLamp(st));
+      if (st) return this.painter.lit.has(stationLamp(st));
     }
     return false;
   }
@@ -1755,7 +1511,7 @@ export class CityView {
       const prefix = `${entry.buildingId}#`;
       const list = this.floors.filter(f => f.startsWith(prefix));
       if (!list.length) return;
-      const turnOn = !list.some(f => this.lit.has(f));
+      const turnOn = !list.some(f => this.painter.lit.has(f));
       for (const f of list) this.setLamp(f, turnOn, false);
       this.update({ lit: this.countLit() });
       return;
@@ -1765,7 +1521,7 @@ export class CityView {
       const st = this.city.stations.find(s => s.id === stId);
       if (st) {
         const lid = stationLamp(st);
-        this.setLamp(lid, !this.lit.has(lid));
+        this.setLamp(lid, !this.painter.lit.has(lid));
       }
     }
   }
@@ -1814,15 +1570,13 @@ export class CityView {
     this.applyBloom();
   }
 
-  private ambient = 0;
-
   private houseLights(ease: boolean) {
     this.timers.forEach(clearTimeout); this.timers = [];
-    const L = this.snap.lights, target = lightOn(L.house, this.snap.night) ? L.share : 0, from = this.ambient;
-    const steps = ease && Math.abs(target - from) > 0.01 ? 10 : 1;
+    const L = this.snap.lights, target = lightOn(L.house, this.snap.night) ? L.share : 0, from = this.painter.ambient;
+    const steps = ease && Math.abs(target - from) > 0.01 ? 5 : 1;
     for (let i = 1; i <= steps; i++) {
-      const go = () => { this.ambient = from + ((target - from) * i) / steps; for (const l of this.layers) this.paintLayer(l); };
-      if (steps === 1) go(); else this.timers.push(setTimeout(go, i * 50));
+      const go = () => { this.painter.ambient = from + ((target - from) * i) / steps; this.repaintShowing(); };
+      if (steps === 1) go(); else this.timers.push(setTimeout(go, i * 100));
     }
   }
 
@@ -1835,11 +1589,11 @@ export class CityView {
 
   private activeFloors() { return this.activeShowcase?.built.floors.length ? this.activeShowcase.built.floors : this.floors; }
 
-  private countLit() { return this.activeFloors().reduce((n, f) => n + (this.lit.has(f) ? 1 : 0), 0); }
+  private countLit() { return this.activeFloors().reduce((n, f) => n + (this.painter.lit.has(f) ? 1 : 0), 0); }
 
   toggleAll() {
     const list = this.activeFloors();
-    const on = !list.some(f => this.lit.has(f));
+    const on = !list.some(f => this.painter.lit.has(f));
     for (const f of list) this.setLamp(f, on, false);
     this.update({ lit: this.countLit() });
     this.syncPopupBulb();
@@ -1865,10 +1619,7 @@ export class CityView {
         return true;
       }
     }
-    if (k === 'p') {
-      this.cyclePovMode();
-      return true;
-    }
+    // P no longer jumps into a train or a car (it did, by accident too): the shell opens the POV menu
     if (this.pov.isActive()) {
       if (k === 'tab' && this.pov.isMetro()) {
         e.preventDefault();
@@ -1906,24 +1657,31 @@ export class CityView {
   }
 
   // ---------- traffic ----------
+  /** the vehicles around the focus (TrafficArea): on a density change, and when the view has moved on */
   private respawn() {
-    this.vehicles = spawnBoundedTraffic(this.lanes, this.snap.quality.traffic);
+    const m0 = this.mounted, f = this.pov.isActive() ? this.pov.getFocusPoint() : m0 ? m0.controls.target : { x: this.savedCam.x, z: this.savedCam.z };
+    this.vehicles = this.traffic.around(f.x, f.z, this.snap.quality.traffic, this.vehicles);
     const m = this.mounted;
     if (m) {
+      let grown = false;
       for (const [kind, f] of m.fleets) {
         f.list = this.vehicles.filter(v => v.kind === kind);
-        if (f.list.length > (f.meshes[0]?.instanceMatrix.count ?? 0)) this.fleetMeshes(f, m.mapGroup);
+        if (f.list.length > (f.meshes[0]?.instanceMatrix.count ?? 0)) { this.fleetMeshes(f, m.mapGroup); grown = true; }
         for (const o of f.meshes) o.count = f.list.length;
       }
-      m.vehicleLines.geometry.dispose();
-      m.vehicleLines.geometry = this.linesFor(m.fleets);
-      this.tiers(m.scene); this.nightThings();
+      const lines = this.linesFor(m.fleets);
+      if (lines.attributes.instanceStart?.count !== m.vehicleLines.geometry.attributes.instanceStart?.count) {
+        m.vehicleLines.geometry.dispose();
+        m.vehicleLines.geometry = lines;
+      } else lines.dispose();
+      if (grown) { this.tiers(m.scene); this.nightThings(); }
     }
+    if (this.vehicles.length !== this.snap.vehicles) this.update({ vehicles: this.vehicles.length });
   }
 
   private fleetMeshes(f: Fleet, parent: THREE.Object3D) {
     for (const o of f.meshes) { parent.remove(o); o.dispose(); }
-    const n = Math.max(1, f.list.length);
+    const n = Math.max(1, Math.ceil(f.list.length * 1.5));   // room to grow when the view moves on
     f.meshes = [];
     for (const [part, geo] of f.model.parts) {
       const mesh = new THREE.InstancedMesh(geo, part === 'beam' ? this.mats.beam : this.mats.vehicle[part], n);
@@ -2019,18 +1777,19 @@ export class CityView {
     this.sim.t += dt;
     this.trainStep();
     const povActive = this.pov.isActive();
+    const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
+    if (this.traffic.stale(focus.x, focus.z)) this.respawn();
     const stage = this.currentZoomStage();
     if (!povActive && (stage !== 'full' || (this.snap.quality.autoDetail && this.pxPerMetre() < FAR.vehicles))) return;
     this.refreshCameraFrustum();
-    const sig = signalsAt(this.sim.t);
-    stepTraffic(this.vehicles, this.lanes, sig, this.sim.prev, dt);
+    const sig = this.signals.source(this.sim.t), main = sig(this.signals.main ?? undefined);
+    // traffic slows down behind the player's car, from where both were last frame
+    const player = this.pov.isDriving() ? this.pov.getFocusPoint() : null, nearCar = this.nearCar;
+    stepTraffic(this.vehicles, this.lanes, sig, this.sim.prev, dt, player && nearCar.size ? v => { const p = nearCar.get(v); return p ? playerAhead(p, player) : Infinity; } : undefined);
     this.sim.prev = sig;
-    if (sig.phase !== this.sim.phase || sig.xLeft !== this.snap.signals.xLeft || sig.yLeft !== this.snap.signals.yLeft) {
-      if (sig.phase !== this.sim.phase) {
-        this.sim.phase = sig.phase;
-        for (const g of ['x', 'y'] as const) for (const l of ['stop', 'wait', 'go'] as const) this.setLamp(signalLamp(g, l), sig[g] === l, false);
-      }
-      this.update({ signals: { x: sig.x, y: sig.y, xLeft: sig.xLeft, yLeft: sig.yLeft } });
+    for (const [id, on] of this.signals.lampChanges(this.sim.t, focus.x, focus.z, povActive ? POV_CONFIG.CULL_FURN_DIST + POV_REACH_MARGIN : this.tileRange() + 64)) this.setLamp(id, on, false);
+    if (main.x !== this.snap.signals.x || main.y !== this.snap.signals.y || main.xLeft !== this.snap.signals.xLeft || main.yLeft !== this.snap.signals.yLeft) {
+      this.update({ signals: { x: main.x, y: main.y, xLeft: main.xLeft, yLeft: main.yLeft } });
     }
     const qFar = this.snap.quality.viewDistance;
     const tFar = this.tileRange();
@@ -2039,23 +1798,17 @@ export class CityView {
     const drawLines = m.vehicleLines.visible;
     const buf = (m.vehicleLines.geometry.attributes.instanceStart as THREE.InterleavedBufferAttribute).data, arr = buf.array as Float32Array, maxLineFloats = arr.length, e = mat.elements;
     let k = 0;
+    const near = new Map<Vehicle, PlacedVehicle>();
+    const inView = (vx: number, vz: number) => povActive
+      ? this.pov.isPointVisibleInPov(vx, vz, 4, POV_CONFIG.CULL_VEHICLE_DIST)
+      : !(far > 0 && Math.hypot(vx - c.x, vz - c.z) > far) && this.inFrustumXZ([vx, vz], 4, 16, 2);
     for (const f of m.fleets.values()) {
       const local = f.model.lines;
-      let vis = 0;
-      for (let i = 0; i < f.list.length; i++) {
-        const v = f.list[i]!;
-        const lane = this.lanes[v.lane]!;
-        const p0 = lane.path[0]!;
-        if (!povActive && far > 0 && (Math.abs(p0[0] - c.x) > far + 650 || Math.abs(p0[1] - c.z) > far + 650)) continue;
-        placeVehicle(v, lane, mat);
-        const vx = e[12]!, vz = e[14]!;
-        const out = povActive
-          ? !this.pov.isPointVisibleInPov(vx, vz, 4, POV_CONFIG.CULL_VEHICLE_DIST)
-          : (far > 0 && Math.hypot(vx - c.x, vz - c.z) > far) || !this.inFrustumXZ([vx, vz], 4, 16, 2);
-        if (out) continue;
-        for (const o of f.meshes) o.setMatrixAt(vis, mat);
-        vis++;
+      const vis = placeVisibleVehicles(f.list, this.lanes, inView, (slot, _m, v) => {
+        if (player) { const p = placedFrom(mat, v.len); if (Math.hypot(p.x - player.x, p.z - player.z) < 30) near.set(v, p); }
+        for (const o of f.meshes) o.setMatrixAt(slot, mat);
         if (drawLines && k + local.length <= maxLineFloats) {
+          const vx = e[12]!, vz = e[14]!;
           for (let j = 0; j < local.length; j += 3, k += 3) {
             const x = local[j]!, y = local[j + 1]!, z = local[j + 2]!;
             arr[k] = e[0]! * x + e[4]! * y + e[8]! * z + vx;
@@ -2063,12 +1816,14 @@ export class CityView {
             arr[k + 2] = e[2]! * x + e[6]! * y + e[10]! * z + vz;
           }
         }
-      }
+      }, mat);
       for (const o of f.meshes) {
         o.count = vis;
         if (vis > 0) o.instanceMatrix.needsUpdate = true;
       }
     }
+    this.nearCar = near;
+    if (player) this.pov.setNearTraffic([...near.values()]);
     if (drawLines) {
       m.vehicleLines.geometry.instanceCount = k / 6;
       buf.needsUpdate = true;
@@ -2111,6 +1866,7 @@ export class CityView {
       // L0: no windows or detail strokes. At L1 the whole-city overview made ~33M floats and ran out of memory on tablets
       this.landmarkOverviewLayer = buildLandmarkOverviewLayer(this.city, 0);
       this.layers.add(this.landmarkOverviewLayer);
+      this.painter.markStreamed(this.landmarkOverviewLayer);
       this.paintLayer(this.landmarkOverviewLayer);
     }
     if (m.landmarkOverviewGroup.children.length === 0) {
@@ -2127,6 +1883,7 @@ export class CityView {
     if (!m) return;
     if (stage === 'landmarks') {
       this.ensureLandmarkOverviewGroup();
+      this.freshen(this.landmarkOverviewLayer);
     }
     m.terrainGroup.visible = true;
     m.majorStreetsGroup.visible = stage !== 'city';
@@ -2167,6 +1924,8 @@ export class CityView {
     if (!lt.layer) {
       lt.layer = buildLocalStreetTile(this.city, lt.tile);
       this.layers.add(lt.layer);
+      this.painter.markStreamed(lt.layer);
+      this.idx.builtLocal.add(lt);
     }
     if (!lt.group && this.mounted) {
       lt.group = this.group(lt.layer, true);
@@ -2178,8 +1937,9 @@ export class CityView {
 
   private ensureCell(s: CellState) {
     if (!s.cell) {
+      this.idx.builtCells.add(s);
       s.cell = buildFurnitureCell(s.bucket);
-      for (const l of [s.cell.poles, s.cell.fixtures, s.cell.trees, s.cell.simpleTrees]) this.layers.add(l);
+      for (const l of [s.cell.poles, s.cell.fixtures, s.cell.trees, s.cell.simpleTrees]) { this.layers.add(l); this.painter.markStreamed(l); }
     }
     if (!s.groups && this.mounted) {
       const cell = s.cell;
@@ -2199,8 +1959,28 @@ export class CityView {
     }
   }
 
+  /** tiles that can be in view this frame (a superset; `nearTile` decides). Map: within the tile range of the
+      target. POV: its cone reach, plus landmark tiles out to the skyline distance. */
+  private tilesInReach(): Set<TileState> {
+    const m = this.mounted;
+    if (this.pov.isActive()) {
+      const f = this.pov.getFocusPoint();
+      const out = this.idx.tiles.query(f.x, f.z, POV_CONFIG.CULL_MAX_DIST + POV_REACH_MARGIN);
+      return this.idx.landmarks.query(f.x, f.z, POV_CONFIG.CULL_LANDMARK_DIST + POV_REACH_MARGIN, out);
+    }
+    const c = m ? m.controls.target : { x: this.savedCam.x, z: this.savedCam.z };
+    return this.idx.tiles.query(c.x, c.z, this.tileRange() + 64);
+  }
+
+  /** hide every tile that was showing and is not a candidate any more */
+  private hideTilesOutside(reach: ReadonlySet<TileState>) {
+    for (const t of this.idx.visibleTiles) if (!reach.has(t)) this.syncTileVisibility(t, false);
+  }
+
   private syncTileVisibility(t: TileState, visible: boolean) {
+    if (visible) this.idx.visibleTiles.add(t); else this.idx.visibleTiles.delete(t);
     const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+    if (visible) { this.freshen(v?.layer); if (t.cutKey) this.freshen(t.cutLayer); }
     if (t.cutKey && t.cutGroup) {
       if (v?.group) v.group.visible = false;
       t.cutGroup.visible = visible;
@@ -2210,7 +1990,47 @@ export class CityView {
     }
   }
 
-  /** Evict offscreen GPU geometries (LRU) when built tiles/cells exceed device memory caps */
+  /** free a tile's built levels and its see-through copy (A28) */
+  private freeTile(t: TileState) {
+    for (const v of t.layers.values()) {
+      if (v.group) this.mounted?.tilesGroup.remove(v.group);
+      this.disposeLayerObj(v.layer);
+    }
+    t.layers.clear();
+    t.shown = -1;
+    this.dropTileCut(t);
+    this.idx.builtTiles.delete(t);
+    this.idx.visibleTiles.delete(t);
+  }
+
+  private freeLocal(lt: LocalTileState) {
+    if (lt.group) this.mounted?.localStreetsGroup.remove(lt.group);
+    if (lt.layer) this.disposeLayerObj(lt.layer);
+    lt.group = null;
+    lt.layer = null;
+    this.idx.builtLocal.delete(lt);
+    this.idx.visibleLocal.delete(lt);
+  }
+
+  private freeCell(c: CellState) {
+    const fg = this.mounted?.furnitureGroup;
+    if (c.groups) fg?.remove(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple);
+    if (c.wires) fg?.remove(c.wires);
+    if (c.pulses) fg?.remove(c.pulses);
+    if (c.pools) fg?.remove(c.pools);
+    c.groups = null; c.wires = null; c.pulses = null; c.pools = null;
+    if (c.cell) {
+      for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) this.disposeLayerObj(l);
+      c.cell.wires.dispose();
+      c.cell.pools.dispose();
+      c.cell = null;
+    }
+    this.idx.builtCells.delete(c);
+    this.idx.visibleCells.delete(c);
+  }
+
+  /** Evict offscreen GPU geometries (LRU) when built tiles/cells exceed device memory caps. The size checks
+      read the built sets, so a frame under the caps costs nothing (A32). */
   private evictFarCaches() {
     const m = this.mounted;
     if (!m || this.interacting) return;
@@ -2218,79 +2038,17 @@ export class CityView {
     const maxTiles = mobile ? 110 : 260;
     const maxLocalTiles = mobile ? 18 : 44;
     const maxCells = mobile ? 36 : 84;
+    if (this.idx.builtTiles.size <= maxTiles && this.idx.builtLocal.size <= maxLocalTiles && this.idx.builtCells.size <= maxCells) return;
     const focus = this.pov.isActive() ? this.pov.getFocusPoint() : m.controls.target;
     const keepRadius = this.tileRange() * 1.35;
-
-    const builtTiles = this.tiles.filter(t => t.layers.size > 0);
-    if (builtTiles.length > maxTiles) {
-      const candidates = builtTiles
-        .filter(t => t.lastUsed < this.cacheTick && Math.hypot(t.tile.center[0] - focus.x, t.tile.center[1] - focus.z) - t.tile.radius > keepRadius)
-        .sort((a, b) => a.lastUsed - b.lastUsed);
-      const toEvict = Math.min(candidates.length, builtTiles.length - maxTiles);
-      for (let i = 0; i < toEvict; i++) {
-        const t = candidates[i]!;
-        for (const v of t.layers.values()) {
-          if (v.group) m.tilesGroup.remove(v.group);
-          this.disposeLayerObj(v.layer);
-        }
-        t.layers.clear();
-        t.shown = -1;
-        if (t.cutGroup) {
-          m.tilesGroup.remove(t.cutGroup);
-          t.cutGroup = null;
-        }
-        if (t.cutLayer) {
-          this.disposeLayerObj(t.cutLayer);
-          t.cutLayer = null;
-        }
-        t.cutKey = '';
-      }
-    }
-
-    const builtLocal = this.localTiles.filter(lt => lt.layer !== null);
-    if (builtLocal.length > maxLocalTiles) {
-      const candidates = builtLocal
-        .filter(lt => lt.lastUsed < this.cacheTick && Math.hypot(lt.tile.center[0] - focus.x, lt.tile.center[1] - focus.z) - lt.tile.radius > keepRadius)
-        .sort((a, b) => a.lastUsed - b.lastUsed);
-      const toEvict = Math.min(candidates.length, builtLocal.length - maxLocalTiles);
-      for (let i = 0; i < toEvict; i++) {
-        const lt = candidates[i]!;
-        if (lt.group) m.localStreetsGroup.remove(lt.group);
-        if (lt.layer) this.disposeLayerObj(lt.layer);
-        lt.group = null;
-        lt.layer = null;
-      }
-    }
-
-    const builtCells = this.cells.filter(c => c.cell !== null);
-    if (builtCells.length > maxCells) {
-      const candidates = builtCells
-        .filter(c => c.lastUsed < this.cacheTick && Math.hypot(c.bucket.center[0] - focus.x, c.bucket.center[1] - focus.z) - CELL_R > keepRadius)
-        .sort((a, b) => a.lastUsed - b.lastUsed);
-      const toEvict = Math.min(candidates.length, builtCells.length - maxCells);
-      for (let i = 0; i < toEvict; i++) {
-        const c = candidates[i]!;
-        if (c.groups) {
-          m.furnitureGroup.remove(c.groups.poles, c.groups.fixtures, c.groups.trees, c.groups.simple);
-          c.groups = null;
-        }
-        if (c.wires) { m.furnitureGroup.remove(c.wires); c.wires = null; }
-        if (c.pulses) { m.furnitureGroup.remove(c.pulses); c.pulses = null; }
-        if (c.pools) { m.furnitureGroup.remove(c.pools); c.pools = null; }
-        if (c.cell) {
-          for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) {
-            this.disposeLayerObj(l);
-          }
-          c.cell.wires.dispose();
-          c.cell.pools.dispose();
-          c.cell = null;
-        }
-      }
-    }
+    const now = this.cacheTick;
+    for (const t of lruEvictions(this.idx.builtTiles, maxTiles, now, focus, keepRadius, t => t.tile.center, t => t.tile.radius)) this.freeTile(t);
+    for (const lt of lruEvictions(this.idx.builtLocal, maxLocalTiles, now, focus, keepRadius, x => x.tile.center, x => x.tile.radius)) this.freeLocal(lt);
+    for (const c of lruEvictions(this.idx.builtCells, maxCells, now, focus, keepRadius, x => x.bucket.center, () => CELL_R)) this.freeCell(c);
   }
 
   hasLoadedChunk(chunkKey: string): boolean {
-    return this.loadedChunks.has(chunkKey);
+    return this.chunks.loaded.has(chunkKey);
   }
 
   /**
@@ -2301,16 +2059,13 @@ export class CityView {
    * - Updates `this.placeCatalog` and `this.streetCatalog` if named buildings/streets were added
    */
   ingestCityChunk(chunkKey: string, chunkCity: City) {
-    this.loadedChunks.add(chunkKey);
-    this.loadingChunks.delete(chunkKey);
-    const { x0: cx0, x1: cx1, y0: cy0, y1: cy1 } = chunkBounds(chunkKey);
+    this.chunks.markLoaded(chunkKey);
     const { newBuildings, newStreets, newFeatures } = mergeChunk(this.city, chunkCity, { buildings: this.buildingIdSet, streets: this.streetIdSet, features: this.featureIdSet });
 
-    const dirtyTiles = new Set<TileState>();
+    const dirtyTiles = new Set<TileState>(), touched = new Set<TileState>();
     for (const b of newBuildings) {
-      const c = centroid(b.footprint);
-      const ti = Math.floor(c[0] / TILE), tj = Math.floor(c[1] / TILE);
-      const tk = `${ti},${tj}`;
+      const tk = tileKeyOf(b);
+      const [ti, tj] = tk.split(',').map(Number) as [number, number];
       let ts = this.tileById.get(tk);
       if (!ts) {
         const center: [number, number] = [(ti + 0.5) * TILE, (tj + 0.5) * TILE];
@@ -2329,7 +2084,10 @@ export class CityView {
       if (b.model != null || buildingHeight(b) >= 28 || (Boolean(b.name) && buildingHeight(b) >= 16)) {
         this.landmarkTileSet.add(ts);
       }
+      touched.add(ts);
     }
+    // file new tiles, and grown ones again with their larger radius (A31: streamed data reaches every index)
+    for (const ts of touched) this.idx.fileTile(ts, this.landmarkTileSet.has(ts));
 
     if (newBuildings.some(isMajorLandmarkBuilding)) {
       this.overviewStale = true;
@@ -2337,106 +2095,32 @@ export class CityView {
       this.scheduleLandmarkOverview(this.mounted?.landmarkOverviewGroup.visible ? 800 : 4000);
     }
 
-    for (const ts of dirtyTiles) {
-      if (ts.layers.size > 0) {
-        for (const v of ts.layers.values()) {
-          if (v.group && this.mounted) this.mounted.tilesGroup.remove(v.group);
-          this.disposeLayerObj(v.layer);
-        }
-        ts.layers.clear();
-        ts.shown = -1;
-      }
-      if (ts.cutGroup && this.mounted) {
-        this.mounted.tilesGroup.remove(ts.cutGroup);
-        ts.cutGroup = null;
-      }
-      if (ts.cutLayer) {
-        this.disposeLayerObj(ts.cutLayer);
-        ts.cutLayer = null;
-      }
-      ts.cutKey = '';
-    }
+    for (const ts of dirtyTiles) this.freeTile(ts);
 
     if (newBuildings.length > 0) {
       const addedFloors = cityFloors({ ...this.city, buildings: newBuildings });
       this.floors.push(...addedFloors);
-      this.bldgBounds.splice(0, this.bldgBounds.length, ...buildBuildingBoundsIndex(this.tiles));
+      // append the new buildings' bounds, not a rebuild over the whole city (35 ms of a chunk, CS-09)
+      const added = newBuildings.map(b => buildingBounds(b, this.tiles.indexOf(this.tileById.get(tileKeyOf(b))!)));
+      this.bldgBounds.push(...added);
+      this.idx.fileBuildings(added);
     }
 
+    // the chunk's street tiles and furniture need its road network (~45 ms): built when the user is idle (A22)
     if (newBuildings.length > 0 || newStreets.length > 0 || newFeatures.length > 0) {
-      const subCity = chunkSubCity(this.city, chunkKey);
-
-      const chunkLocalTiles = localStreetTilesOf(subCity);
-      for (const lt of chunkLocalTiles) {
-        if (lt.center[0] < cx0 || lt.center[0] >= cx1 || lt.center[1] < cy0 || lt.center[1] >= cy1) continue;
-        const existingLt = this.localTileById.get(lt.id);
-        if (existingLt) {
-          if (existingLt.group && this.mounted) {
-            this.mounted.localStreetsGroup.remove(existingLt.group);
-            existingLt.group = null;
-          }
-          if (existingLt.layer) {
-            this.disposeLayerObj(existingLt.layer);
-            existingLt.layer = null;
-          }
-          existingLt.tile = lt;
-        } else {
-          const state: LocalTileState = { tile: lt, layer: null, group: null, lastUsed: 0 };
-          this.localTiles.push(state);
-          this.localTileById.set(lt.id, state);
-        }
-      }
-
-      const subNet = roadNetwork(subCity);
-      const chunkBuckets = furnitureBuckets(streetFurniture(subCity, subNet));
-      for (const fb of chunkBuckets) {
-        if (fb.center[0] < cx0 || fb.center[0] >= cx1 || fb.center[1] < cy0 || fb.center[1] >= cy1) continue;
-        const ck = `${Math.floor(fb.center[0] / TILE)},${Math.floor(fb.center[1] / TILE)}`;
-        const existingCell = this.cellByKey.get(ck);
-        if (existingCell) {
-          if (this.mounted) {
-            if (existingCell.groups) {
-              this.mounted.furnitureGroup.remove(
-                existingCell.groups.poles,
-                existingCell.groups.fixtures,
-                existingCell.groups.trees,
-                existingCell.groups.simple,
-              );
-            }
-            if (existingCell.wires) this.mounted.furnitureGroup.remove(existingCell.wires);
-            if (existingCell.pulses) this.mounted.furnitureGroup.remove(existingCell.pulses);
-            if (existingCell.pools) this.mounted.furnitureGroup.remove(existingCell.pools);
-          }
-          existingCell.groups = null;
-          existingCell.wires = null;
-          existingCell.pulses = null;
-          existingCell.pools = null;
-          if (existingCell.cell) {
-            for (const l of [existingCell.cell.poles, existingCell.cell.fixtures, existingCell.cell.trees, existingCell.cell.simpleTrees]) {
-              this.disposeLayerObj(l);
-            }
-            existingCell.cell.wires.dispose();
-            existingCell.cell.pools.dispose();
-            existingCell.cell = null;
-          }
-          existingCell.bucket = fb;
-        } else {
-          const cs: CellState = { bucket: fb, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 };
-          this.cells.push(cs);
-          this.cellByKey.set(ck, cs);
-        }
-      }
+      if (this.mounted) this.idle.push(() => this.ingestChunkStreets(chunkKey)); else this.ingestChunkStreets(chunkKey);
     }
 
-    if (newStreets.some(s => s.name)) {
-      const sc = buildStreetCatalog(this.city);
+    if (newStreets.length) this.pov.addStreets(newStreets);
+    const touchedNames = new Set(newStreets.map(st => st.name?.trim()).filter((n): n is string => Boolean(n)));
+    if (touchedNames.size) {
+      const sc = updateStreetCatalog(this.streetCatalog, this.city, touchedNames);
       this.streetCatalog.splice(0, this.streetCatalog.length, ...sc);
       this.streetById.clear();
       for (const s of this.streetCatalog) this.streetById.set(s.id, s);
     }
-    if (newBuildings.some(b => b.name)) {
-      this.placeCatalog = buildPlaceCatalog(this.city, this.showcaseIdSet, this.snap.locale);
-    }
+    // every new building, named or not, so hover and popups work on it (they were skipped when a chunk had no names)
+    if (newBuildings.length) addBuildingsToCatalog(this.placeCatalog, newBuildings, this.city, this.showcaseIdSet, this.snap.locale);
 
     this.update({ floors: this.floors.length });
     if (this.mounted) {
@@ -2444,60 +2128,56 @@ export class CityView {
     }
   }
 
-  private streamViewportChunks(centerOverride?: [number, number]) {
-    if (this.availableChunks.size === 0 || this.loadedChunks.size >= this.availableChunks.size) return;
-    if (this.loadingChunks.size >= 2) return;
-    const m = this.mounted;
-    const fx = centerOverride
-      ? centerOverride[0]
-      : this.pov.isActive()
-        ? this.pov.getFocusPoint().x
-        : m
-          ? m.controls.target.x
-          : this.savedCam.x;
-    const fz = centerOverride
-      ? centerOverride[1]
-      : this.pov.isActive()
-        ? this.pov.getFocusPoint().z
-        : m
-          ? m.controls.target.z
-          : this.savedCam.z;
-    const cx = Math.floor(fx / 1024);
-    const cy = Math.floor(fz / 1024);
-    const candidates: { key: string; d2: number }[] = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const key = `${cx + dx},${cy + dy}`;
-        if (!this.availableChunks.has(key) || this.loadedChunks.has(key) || this.loadingChunks.has(key)) continue;
-        const failed = this.chunkFailures.get(key);
-        if (failed && (failed.tries >= MAX_CHUNK_TRIES || performance.now() < failed.retryAt)) continue;
-        const centerX = (cx + dx + 0.5) * 1024;
-        const centerY = (cy + dy + 0.5) * 1024;
-        const d2 = (centerX - fx) ** 2 + (centerY - fz) ** 2;
-        candidates.push({ key, d2 });
+  /** a chunk's local street tiles and furniture cells, from the city around it (chunkSubCity) */
+  private ingestChunkStreets(chunkKey: string) {
+    const { x0: cx0, x1: cx1, y0: cy0, y1: cy1 } = chunkBounds(chunkKey);
+    const subCity = chunkSubCity(this.city, chunkKey);
+
+    const chunkLocalTiles = localStreetTilesOf(subCity);
+    for (const lt of chunkLocalTiles) {
+      if (lt.center[0] < cx0 || lt.center[0] >= cx1 || lt.center[1] < cy0 || lt.center[1] >= cy1) continue;
+      const existingLt = this.localTileById.get(lt.id);
+      if (existingLt) {
+        this.freeLocal(existingLt);
+        existingLt.tile = lt;
+        this.idx.fileLocal(existingLt);
+      } else {
+        const state: LocalTileState = { tile: lt, layer: null, group: null, lastUsed: 0 };
+        this.localTiles.push(state);
+        this.localTileById.set(lt.id, state);
+        this.idx.fileLocal(state);
       }
     }
-    if (!candidates.length) return;
-    candidates.sort((a, b) => a.d2 - b.d2);
-    const slots = Math.max(0, 2 - this.loadingChunks.size);
-    for (let i = 0; i < Math.min(slots, candidates.length); i++) {
-      const key = candidates[i]!.key;
-      this.loadingChunks.add(key);
-      loadCityChunkCityAsync(this.city.id, key, this.skeletonStreets)
-        .then(chunkCity => {
-          if (chunkCity) {
-            this.ingestCityChunk(key, chunkCity);
-          } else {
-            this.loadedChunks.add(key);
-            this.loadingChunks.delete(key);
-          }
-        })
+
+    const subNet = roadNetwork(subCity);
+    const chunkBuckets = furnitureBuckets(streetFurniture(subCity, subNet));
+    for (const fb of chunkBuckets) {
+      if (fb.center[0] < cx0 || fb.center[0] >= cx1 || fb.center[1] < cy0 || fb.center[1] >= cy1) continue;
+      const ck = `${Math.floor(fb.center[0] / TILE)},${Math.floor(fb.center[1] / TILE)}`;
+      const existingCell = this.cellByKey.get(ck);
+      if (existingCell) {
+        this.freeCell(existingCell);
+        existingCell.bucket = fb;
+        this.idx.fileCell(existingCell);
+      } else {
+        const cs: CellState = { bucket: fb, cell: null, groups: null, wires: null, pulses: null, pools: null, lastUsed: 0 };
+        this.cells.push(cs);
+        this.cellByKey.set(ck, cs);
+        this.idx.fileCell(cs);
+      }
+    }
+    if (this.mounted) this.distanceStep();
+  }
+
+  private streamViewportChunks(centerOverride?: [number, number]) {
+    const m = this.mounted;
+    const f = centerOverride ? { x: centerOverride[0], z: centerOverride[1] } : this.pov.isActive() ? this.pov.getFocusPoint() : m ? m.controls.target : { x: this.savedCam.x, z: this.savedCam.z };
+    for (const key of this.chunks.next(f.x, f.z, performance.now())) {
+      (this.chunkClient ??= new ChunkClient(this.city.id, this.skeletonStreets)).load(key)
+        .then(chunkCity => { if (chunkCity) this.ingestCityChunk(key, chunkCity); else this.chunks.markLoaded(key); })
         .catch((err: unknown) => {
-          this.loadingChunks.delete(key);
-          // back off (2 s, 4 s, 8 s…) and give up after a few tries instead of hammering the server
-          const tries = (this.chunkFailures.get(key)?.tries ?? 0) + 1;
-          this.chunkFailures.set(key, { tries, retryAt: performance.now() + 2000 * 2 ** (tries - 1) });
-          if (tries >= MAX_CHUNK_TRIES) console.warn(`[city3d] map chunk ${key} failed ${tries} times, giving up`, err);
+          const tries = this.chunks.markFailed(key, performance.now());
+          if (tries >= MAX_TRIES) console.warn(`[city3d] map chunk ${key} failed ${tries} times, giving up`, err);
         });
     }
   }
@@ -2520,7 +2200,9 @@ export class CityView {
     const near = (p: [number, number], r: number, lim = far, margin = 42, centerY = 18) =>
       (lim <= 0 || Math.hypot(p[0] - c.x, p[1] - c.z) - r <= lim) && this.inFrustumXZ(p, r, margin, centerY);
 
-    for (const t of this.tiles) {
+    const reach = this.tilesInReach();
+    this.hideTilesOutside(reach);
+    for (const t of reach) {
       if (povActive) {
         const vis = this.pov.isTileVisibleInPov(t.tile.center, t.tile.radius, this.landmarkTileSet.has(t));
         if (vis) t.lastUsed = this.cacheTick;
@@ -2534,13 +2216,19 @@ export class CityView {
 
     // Stream 256 m local street tiles (minor alleys, sidewalks, lane markings, footways, forecourts)
     const unbuiltLocal: LocalTileState[] = [];
-    for (const lt of this.localTiles) {
+    const localReach = this.idx.local.query(focus.x, focus.z, povActive ? POV_CONFIG.CULL_MAX_DIST + POV_REACH_MARGIN : tFar + 64);
+    for (const lt of this.idx.visibleLocal) if (!localReach.has(lt)) { if (lt.group) lt.group.visible = false; this.idx.visibleLocal.delete(lt); }
+    for (const lt of localReach) {
       const vis = povActive
         ? this.pov.isTileVisibleInPov(lt.tile.center, lt.tile.radius, false)
         : near(lt.tile.center, lt.tile.radius, tFar, 48, 2);
       if (vis) {
         lt.lastUsed = this.cacheTick;
+        this.idx.visibleLocal.add(lt);
+        this.freshen(lt.layer);
         if (!lt.layer || !lt.group) unbuiltLocal.push(lt);
+      } else {
+        this.idx.visibleLocal.delete(lt);
       }
       if (lt.group) lt.group.visible = vis;
     }
@@ -2551,6 +2239,7 @@ export class CityView {
         const lt = unbuiltLocal[i]!;
         this.ensureLocalTile(lt);
         if (lt.group) lt.group.visible = true;
+        this.idx.visibleLocal.add(lt);
       }
     }
 
@@ -2559,24 +2248,20 @@ export class CityView {
     const needCell = showFurn || trees !== 'off';
     const cellLim = far > 0 ? Math.min(far, tFar) : tFar;
     const unbuiltCells: CellState[] = [];
-    for (const s of this.cells) {
+    const cellReach = this.idx.cells.query(focus.x, focus.z, povActive ? POV_CONFIG.CULL_FURN_DIST + POV_REACH_MARGIN : cellLim + 64);
+    for (const s of this.idx.visibleCells) if (!cellReach.has(s)) { this.setCellVisible(s, false, false, 'off', false); this.idx.visibleCells.delete(s); }
+    for (const s of cellReach) {
       const on = povActive
         ? this.pov.isPointVisibleInPov(s.bucket.center[0], s.bucket.center[1], CELL_R, POV_CONFIG.CULL_FURN_DIST)
         : near(s.bucket.center, CELL_R, cellLim, 32, 8);
       if (on) {
         s.lastUsed = this.cacheTick;
+        this.idx.visibleCells.add(s);
         if (needCell && (!s.cell || !s.groups)) unbuiltCells.push(s);
+      } else {
+        this.idx.visibleCells.delete(s);
       }
-      const g = s.groups;
-      if (g) {
-        g.fixtures.visible = on && showFurn;
-        g.poles.visible = on && showFurn && q.wires;
-        g.trees.visible = on && trees === 'full';
-        g.simple.visible = on && trees === 'simple';
-      }
-      if (s.wires) s.wires.visible = on && showFurn && q.wires;
-      if (s.pulses) s.pulses.visible = on && showFurn && q.wires && this.snap.night;
-      if (s.pools) s.pools.visible = on && showFurn && this.poolsOn();
+      this.setCellVisible(s, on, showFurn, trees, q.wires);
     }
     if (unbuiltCells.length) {
       unbuiltCells.sort((a, b) => dist2XZ(a.bucket.center, focus) - dist2XZ(b.bucket.center, focus));
@@ -2584,19 +2269,25 @@ export class CityView {
       for (let i = 0; i < Math.min(maxBuild, unbuiltCells.length); i++) {
         const s = unbuiltCells[i]!;
         this.ensureCell(s);
-        const g = s.groups;
-        if (g) {
-          g.fixtures.visible = showFurn;
-          g.poles.visible = showFurn && q.wires;
-          g.trees.visible = trees === 'full';
-          g.simple.visible = trees === 'simple';
-        }
-        if (s.wires) s.wires.visible = showFurn && q.wires;
-        if (s.pulses) s.pulses.visible = showFurn && q.wires && this.snap.night;
-        if (s.pools) s.pools.visible = showFurn && this.poolsOn();
+        this.setCellVisible(s, true, showFurn, trees, q.wires);
       }
     }
     this.evictFarCaches();
+  }
+
+  /** one place that decides what of a furniture cell shows (it was written out twice, A26) */
+  private setCellVisible(s: CellState, on: boolean, showFurn: boolean, trees: TreeLook, wires: boolean) {
+    if (on && s.cell) for (const l of [s.cell.poles, s.cell.fixtures, s.cell.trees, s.cell.simpleTrees]) this.freshen(l);
+    const g = s.groups;
+    if (g) {
+      g.fixtures.visible = on && showFurn;
+      g.poles.visible = on && showFurn && wires;
+      g.trees.visible = on && trees === 'full';
+      g.simple.visible = on && trees === 'simple';
+    }
+    if (s.wires) s.wires.visible = on && showFurn && wires;
+    if (s.pulses) s.pulses.visible = on && showFurn && wires && this.snap.night;
+    if (s.pools) s.pools.visible = on && showFurn && this.poolsOn();
   }
 
   private autoQuality(fps: number) {
@@ -2623,6 +2314,8 @@ export class CityView {
       v = { layer: buildTile(this.city, t.tile, level), group: null };
       t.layers.set(level, v);
       this.layers.add(v.layer);
+      this.painter.markStreamed(v.layer);
+      this.idx.builtTiles.add(t);
     }
     if (!v.group && this.mounted) {
       v.group = this.group(v.layer);
@@ -2657,7 +2350,9 @@ export class CityView {
     const want = this.wantedDetail();
     const focus = povActive ? this.pov.getFocusPoint() : m.controls.target;
     const waiting: { t: TileState; level: Detail }[] = [], unbuilt: TileState[] = [];
-    for (const t of this.tiles) {
+    const reach = this.tilesInReach();
+    this.hideTilesOutside(reach);
+    for (const t of reach) {
       if (!this.nearTile(t)) {
         this.syncTileVisibility(t, false);
         continue;
@@ -2711,7 +2406,7 @@ export class CityView {
     const m = this.mounted;
     if (!m || m.majorStreetsGroup.visible) add(this.baseLayers.majorStreets);
     if (!m || m.localStreetsGroup.visible) {
-      for (const lt of this.localTiles) {
+      for (const lt of this.idx.visibleLocal) {
         if (lt.layer && lt.group?.visible) add(lt.layer);
       }
     }
@@ -2722,7 +2417,7 @@ export class CityView {
       add(this.landmarkOverviewLayer);
     }
     if (!m || m.tilesGroup.visible) {
-      for (const t of this.tiles) {
+      for (const t of this.idx.visibleTiles) {
         if (t.cutKey && t.cutLayer && t.cutGroup?.visible) {
           add(t.cutLayer);
           continue;
@@ -2732,7 +2427,7 @@ export class CityView {
       }
     }
     if (!m || m.furnitureGroup.visible) {
-      for (const c of this.cells) if (c.cell && c.groups?.fixtures.visible) {
+      for (const c of this.idx.visibleCells) if (c.cell && c.groups?.fixtures.visible) {
         add(c.cell.fixtures);
         if (this.snap.quality.wires) add(c.cell.poles);
         if (this.snap.quality.trees === 'full') add(c.cell.trees);
@@ -2746,6 +2441,7 @@ export class CityView {
     for (const [s, geo] of layer.surfaces) {
       const mesh = new THREE.Mesh(geo, this.mats.surface.get(s)!);
       mesh.userData = { surface: s, layer };
+      withFastRaycast(mesh);
       g.add(mesh);
     }
     const shell = new THREE.Mesh(layer.shell, this.mats.shell); shell.userData.tier = 'silhouette';
@@ -2800,48 +2496,29 @@ export class CityView {
 
   // ---------- lamps ----------
   private setLamp(id: string, on: boolean, notify = true) {
-    if (on === this.lit.has(id)) return;
-    if (on) this.lit.add(id); else this.lit.delete(id);
-    for (const l of this.layers) this.paint(l, id);
+    if (!this.painter.setLamp(this.layers, id, on)) return;
     if (notify) {
       this.update({ lit: this.countLit() });
       this.events.emit('building:lightToggle', { id, on });
     }
   }
 
-  private paint(layer: Layer, id: string) {
-    const ranges = layer.lamps.get(id);
-    if (!ranges) return;
-    const fill = layer.windows.getAttribute('color') as THREE.BufferAttribute, floor = this.lit.has(id), share = isHouseLamp(id) ? this.ambient : 0;
-    const shade = (k: number): Shade => { const s = windowShade(id, k); return floor ? s : windowRank(id, k) < share ? (s === 'off' ? 'dim' : s) : 'off'; };
-    let k = 0;
-    for (const r of ranges) for (let w = r.start; w < r.start + r.count; w += 6, k++) {
-      const c = this.colors[shade(k)];
-      for (let v = w; v < w + 6; v++) fill.setXYZ(v, c.r, c.g, c.b);
-    }
-    fill.needsUpdate = true;
-    const lines = layer.lampLines.get(id), col = layer.details.attributes.instanceColorStart as THREE.InterleavedBufferAttribute | undefined;
-    if (!lines || !col) return;
-    const arr = col.data.array as Float32Array;
-    k = 0;
-    for (const r of lines) for (let s = r.start; s < r.start + r.count; s += 4, k++) {
-      const c = this.outline[shade(k)];
-      for (let j = s * 6; j < (s + 4) * 6; j += 3) { arr[j] = c.r; arr[j + 1] = c.g; arr[j + 2] = c.b; }
-    }
-    col.data.needsUpdate = true;
-  }
+  private paintLayer(layer: Layer) { this.painter.paintLayer(layer); }
 
-  private paintLayer(layer: Layer) {
-    const fill = layer.windows.getAttribute('color') as THREE.BufferAttribute, off = this.colors.off;
-    for (let v = 0; v < fill.count; v++) fill.setXYZ(v, off.r, off.g, off.b);
-    fill.needsUpdate = true;
-    const col = layer.details.attributes.instanceColorStart as THREE.InterleavedBufferAttribute | undefined;
-    if (col) {
-      const arr = col.data.array as Float32Array, d = this.outline.off;
-      for (let j = 0; j < arr.length; j += 3) { arr[j] = d.r; arr[j + 1] = d.g; arr[j + 2] = d.b; }
-      col.data.needsUpdate = true;
+  private freshen(layer: Layer | null | undefined) { this.painter.freshen(layer); }
+
+  /** a global change: repaint what is on screen now, the rest when it shows */
+  private repaintShowing() {
+    const showing = new Set<Layer>();
+    for (const t of this.idx.visibleTiles) {
+      const v = t.shown >= 0 ? t.layers.get(t.shown as Detail) : undefined;
+      if (v) showing.add(v.layer);
+      if (t.cutLayer) showing.add(t.cutLayer);
     }
-    for (const id of layer.lamps.keys()) if (this.lit.has(id) || (this.ambient > 0 && isHouseLamp(id))) this.paint(layer, id);
+    for (const lt of this.idx.visibleLocal) if (lt.layer) showing.add(lt.layer);
+    for (const c of this.idx.visibleCells) if (c.cell) for (const l of [c.cell.poles, c.cell.fixtures, c.cell.trees, c.cell.simpleTrees]) showing.add(l);
+    if (this.landmarkOverviewLayer && this.mounted?.landmarkOverviewGroup.visible) showing.add(this.landmarkOverviewLayer);
+    this.painter.repaint(this.layers, showing);
   }
 
   // ---------- theme and quality ----------
@@ -2861,17 +2538,17 @@ export class CityView {
     this.mats.pulse.color = tok('--accent');
     this.nightThings();
     const wall = tok('--body');
-    this.colors.off = tok('--recess');
-    this.colors.on = tok('--accent');
-    this.colors.hi = tok('--accent-hi');
-    this.colors.dim = tok('--accent').lerp(wall, 0.55);
-    this.outline.off = tok('--detail');
-    this.outline.on = tok('--accent-hi');
-    this.outline.hi = tok('--accent-hi');
-    this.outline.dim = tok('--accent-hi').lerp(wall, 0.55);
+    this.painter.colors.off = tok('--recess');
+    this.painter.colors.on = tok('--accent');
+    this.painter.colors.hi = tok('--accent-hi');
+    this.painter.colors.dim = tok('--accent').lerp(wall, 0.55);
+    this.painter.outline.off = tok('--detail');
+    this.painter.outline.on = tok('--accent-hi');
+    this.painter.outline.hi = tok('--accent-hi');
+    this.painter.outline.dim = tok('--accent-hi').lerp(wall, 0.55);
     this.mats.beaconOn.color = tok('--accent-hi');
     this.mats.beaconOff.color = tok('--line');
-    for (const l of this.layers) this.paintLayer(l);
+    this.repaintShowing();
     if (this.mounted) this.mounted.scene.background = tok('--bg');
     this.applyBloom();
   }
@@ -2997,22 +2674,7 @@ export class CityView {
 
   // ---------- moving about (ADR-043) ----------
   /** places to fly to: read from `city.places` (defined per AreaConfig) + all metro stations */
-  get places(): { id: string; name: string; group: string; at: [number, number] }[] {
-    const configured = this.city.places ?? [
-      { id: 'home', name: this.city.cityName ?? this.city.name, group: t('top.places.defaultGroup', undefined, this.snap.locale), at: [0, 0] as [number, number] },
-    ];
-    const stationPrefix = this.snap.locale === 'en' ? 'Station' : 'Ga';
-    const metroGroup = t('top.places.metroGroup', undefined, this.snap.locale);
-    return [
-      ...configured,
-      ...this.city.stations.map(s => ({
-        id: s.id,
-        name: `${stationPrefix} ${s.name ?? ''}`.trim(),
-        group: metroGroup,
-        at: [s.at[0], s.at[1]] as [number, number],
-      })),
-    ];
-  }
+  get places(): QuickPlace[] { return quickPlaces(this.city, this.snap.locale); }
 
   private fly: { from: THREE.Vector3; to: THREE.Vector3; t0: number } | null = null;
 
@@ -3082,12 +2744,21 @@ export class CityView {
     }
   }
 
+  /** remove a tile's see-through copy from the scene and free its buffers (it leaked before, CS-09) */
+  private dropTileCut(t: TileState) {
+    if (t.cutGroup) { this.mounted?.tilesGroup.remove(t.cutGroup); t.cutGroup = null; }
+    if (t.cutLayer) { this.disposeLayerObj(t.cutLayer); t.cutLayer = null; }
+    t.cutKey = '';
+    this.idx.cutTiles.delete(t);
+  }
+
   private clearAllTileCuts() {
-    for (const t of this.tiles) {
-      if (!t.cutKey) continue;
+    if (!this.idx.cutTiles.size) return;
+    for (const t of this.idx.cutTiles) {
       t.cutKey = '';
       this.syncTileVisibility(t, this.nearTile(t) && t.shown >= 0);
     }
+    this.idx.cutTiles.clear();
   }
 
   private syncForegroundCut() {
@@ -3115,7 +2786,8 @@ export class CityView {
 
     const { nearStation, hiddenByTile } = computeForegroundCut({
       city: this.city,
-      bldgBounds: this.bldgBounds,
+      // only buildings near the target can stand in the sightline (A32): the cut looks ≤ 52 m behind it
+      bldgBounds: [...this.idx.buildings.query(m.controls.target.x, m.controls.target.z, 70)],
       zoom: m.camera.zoom,
       elevation: this.elevation(),
       targetX: m.controls.target.x,
@@ -3130,27 +2802,33 @@ export class CityView {
       return;
     }
 
-    for (let idx = 0; idx < this.tiles.length; idx++) {
-      const t = this.tiles[idx]!;
-      const hidden = hiddenByTile.get(idx);
+    // a cut tile is a full rebuild: at most one per frame (A22), the rest catch up on the next frames
+    let rebuilt = 0;
+    for (const t of [...this.idx.cutTiles]) {
+      const hidden = hiddenByTile.get(this.tiles.indexOf(t));
       if (!hidden || !hidden.length || t.shown < 0) {
-        if (t.cutKey) {
-          t.cutKey = '';
-          this.syncTileVisibility(t, this.nearTile(t));
-        }
-        continue;
+        t.cutKey = '';
+        this.idx.cutTiles.delete(t);
+        this.syncTileVisibility(t, this.nearTile(t));
       }
+    }
+    for (const [idx, hidden] of hiddenByTile) {
+      const t = this.tiles[idx];
+      if (!t || !hidden.length || t.shown < 0) continue;
       const level = t.shown as Detail;
       const key = `${level}:${hidden.join(',')}`;
       if (t.cutKey !== key) {
-        if (t.cutGroup) m.tilesGroup.remove(t.cutGroup);
-        if (t.cutLayer) this.layers.delete(t.cutLayer);
+        if (rebuilt >= 1) continue;
+        rebuilt++;
+        this.dropTileCut(t);
         t.cutLayer = buildTile(this.city, t.tile, level, new Set(hidden));
         this.layers.add(t.cutLayer);
+        this.painter.markStreamed(t.cutLayer);
         t.cutGroup = this.group(t.cutLayer);
         m.tilesGroup.add(t.cutGroup);
         this.paintLayer(t.cutLayer);
         t.cutKey = key;
+        this.idx.cutTiles.add(t);
       }
       this.syncTileVisibility(t, this.nearTile(t));
     }
@@ -3246,61 +2924,19 @@ export class CityView {
   private syncUrlState(now: number, force = false) {
     const m = this.mounted;
     if (!m || typeof window === 'undefined' || !window.history?.replaceState) return;
-    const mapTarget = this.snap.showcase && this.savedMapCam ? this.savedMapCam.target : m.controls.target;
-    const mapZoom = this.snap.showcase && this.savedMapCam ? this.savedMapCam.zoom : m.camera.zoom;
-    const az = this.azimuth();
-    const heading = headingFromAz(az, this.northAz);
-    const tilt = (this.elevation() * 180) / Math.PI;
-    const placeId = !this.snap.showcase && this.activePopup ? this.activePopup.entry.id : null;
-
-    const sig = `${mapTarget.x.toFixed(1)},${mapTarget.z.toFixed(1)}|${mapZoom.toFixed(2)}|${heading.toFixed(1)}|${tilt.toFixed(1)}|${this.snap.mode}|${this.snap.night ? 1 : 0}|${this.snap.seeThrough ? 1 : 0}|${this.snap.streetLabels}|${this.snap.placeInfo}|${this.snap.showcase ?? ''}|${placeId ?? ''}`;
-    if (sig !== this.urlCandidateSig) {
-      this.urlCandidateSig = sig;
-      this.urlDirtyAt = now;
-    }
+    const target = this.snap.showcase && this.savedMapCam ? this.savedMapCam.target : m.controls.target;
     const busy = this.interacting || this.fly !== null || this.turn !== null || this.held.size > 0;
-    if (!force) {
-      if (sig === this.urlSyncedSig) return;
-      if (busy && now - this.lastUrlWrite < 1200) return;
-      if (!busy && now - this.urlDirtyAt < 300) return;
-      if (now - this.lastUrlWrite < 280) return;
-    }
-    this.urlSyncedSig = sig;
-    this.lastUrlWrite = now;
-
-    this.events.emit('camera:change', {
-      x: mapTarget.x,
-      z: mapTarget.z,
-      zoom: mapZoom,
-      heading,
-      tilt,
-      mode: this.snap.mode,
-    });
-
-    const nextUrl = formatUrlState(
-      {
-        x: mapTarget.x,
-        z: mapTarget.z,
-        zoom: mapZoom,
-        heading,
-        tilt,
-        mode: this.snap.mode,
-        night: this.snap.night,
-        seeThrough: this.snap.seeThrough,
-        streetLabels: this.snap.streetLabels,
-        placeInfo: this.snap.placeInfo,
-        showcase: this.snap.showcase,
-        place: placeId,
-      },
-      this.frame,
-    );
-    const curUrl = `${window.location.pathname}${window.location.search}`;
-    if (nextUrl !== curUrl) {
-      try {
-        window.history.replaceState(null, '', nextUrl);
-      } catch {
-        /* ignore browser history rate limits */
-      }
+    const state = this.urlSync.step({
+      x: target.x, z: target.z, zoom: this.snap.showcase && this.savedMapCam ? this.savedMapCam.zoom : m.camera.zoom,
+      heading: headingFromAz(this.azimuth(), this.northAz), tilt: (this.elevation() * 180) / Math.PI, mode: this.snap.mode,
+      night: this.snap.night, seeThrough: this.snap.seeThrough, streetLabels: this.snap.streetLabels, placeInfo: this.snap.placeInfo,
+      showcase: this.snap.showcase, place: !this.snap.showcase && this.activePopup ? this.activePopup.entry.id : null,
+    }, now, busy, force);
+    if (!state) return;
+    this.events.emit('camera:change', { x: state.x, z: state.z, zoom: state.zoom, heading: state.heading, tilt: state.tilt, mode: state.mode });
+    const nextUrl = formatUrlState(state, this.frame);
+    if (nextUrl !== `${window.location.pathname}${window.location.search}`) {
+      try { window.history.replaceState(null, '', nextUrl); } catch { /* ignore browser history rate limits */ }
     }
   }
 
@@ -3340,6 +2976,8 @@ export class CityView {
   }
 }
 
+/** the 64 m tile a building belongs to, by its centroid (as tilesOf files it) */
+const tileKeyOf = (b: Building) => { const c = centroid(b.footprint); return `${Math.floor(c[0] / TILE)},${Math.floor(c[1] / TILE)}`; };
 const dist2 = (c: [number, number], v: THREE.Vector3) => (c[0] - v.x) ** 2 + (c[1] - v.z) ** 2;
 const dist2XZ = (c: [number, number], v: { x: number; z: number }) => (c[0] - v.x) ** 2 + (c[1] - v.z) ** 2;
 

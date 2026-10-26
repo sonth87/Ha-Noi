@@ -85,6 +85,8 @@ export interface PlaceCatalog {
   labels: PlaceEntry[];
   /** fast lookup by 3D owner id (includes all buildings, areas, monuments, and stations) */
   byId: Map<string, PlaceEntry>;
+  /** label names (and name|place keys) already taken, kept for adding later chunks */
+  seenNames?: Set<string>;
 }
 
 function cleanBuildingName(b: Building, locale: Locale): string {
@@ -130,7 +132,6 @@ export function buildPlaceCatalog(
   const cityName = city.cityName ?? city.name.split(':')[0]?.trim() ?? '';
   const catLabels = CATEGORY_LABELS_I18N[locale];
   const catBadges = CATEGORY_BADGES_I18N[locale];
-  const bldgKinds = BUILDING_KIND_I18N[locale];
 
   // 1. Point Monuments & Archaeological / Heritage Sites (Features)
   for (const f of city.features) {
@@ -263,9 +264,29 @@ export function buildPlaceCatalog(
     labels.push(entry);
   }
 
-  // 4. Buildings & Landmarks (all buildings indexed in byId; named buildings added to labels)
-  const seenLabelNames = new Set<string>(labels.map(l => l.name.toLowerCase()));
-  const sortedBuildings = [...city.buildings].sort((a, b) => buildingHeight(b) - buildingHeight(a));
+  const catalog: PlaceCatalog = { labels, byId };
+  addBuildingsToCatalog(catalog, city.buildings, city, showcaseIds, locale);
+  return catalog;
+}
+
+/** Add buildings to a catalog: every one by id (hover, popup), the named ones to the labels, tallest first,
+    one label per name and place. Used for the whole city and for each streamed chunk (A31: a chunk adds its
+    buildings, it does not rebuild the 16 k entries, CS-09). */
+export function addBuildingsToCatalog(
+  catalog: PlaceCatalog,
+  buildings: readonly Building[],
+  city: Pick<City, 'cityName' | 'name' | 'landmarksCatalog'>,
+  showcaseIds: ReadonlySet<string>,
+  locale: Locale = getLocale(),
+): void {
+  const { labels, byId } = catalog;
+  const catalogBySource = new Map((city.landmarksCatalog ?? []).flatMap(e => (e.osmSource ? [[e.osmSource, e.id] as const] : [])));
+  const seenLabelNames = (catalog.seenNames ??= new Set<string>(labels.map(l => l.name.toLowerCase())));
+  const cityName = city.cityName ?? city.name.split(':')[0]?.trim() ?? '';
+  const catLabels = CATEGORY_LABELS_I18N[locale];
+  const catBadges = CATEGORY_BADGES_I18N[locale];
+  const bldgKinds = BUILDING_KIND_I18N[locale];
+  const sortedBuildings = [...buildings].sort((a, b) => buildingHeight(b) - buildingHeight(a));
 
   for (const b of sortedBuildings) {
     const c = centroid(b.footprint);
@@ -276,9 +297,13 @@ export function buildPlaceCatalog(
     const name = cleanBuildingName(b, locale);
     const address = formatAddress(b.address, b.district, cityName);
     const glass = b.parts.some(p => p.facade === 'glass');
-    const showcaseId = showcaseIds.has(`bldg:${b.id}`) ? `bldg:${b.id}` : undefined;
+    // every building opens on its own plate from its popup: its catalog landmark, its curated entry, or the
+    // generic diorama; being curated is what makes it a signature landmark on the map
+    const curated = showcaseIds.has(`bldg:${b.id}`);
+    const catalogId = catalogBySource.get(b.source);
+    const showcaseId = catalogId && showcaseIds.has(`catalog:${catalogId}`) ? `catalog:${catalogId}` : `bldg:${b.id}`;
     const box = bbox(b.footprint), span = Math.hypot(box.x1 - box.x0, box.y1 - box.y0);
-    const isSignature = Boolean(b.model || b.isSignatureLandmark || showcaseId);
+    const isSignature = Boolean(b.model || b.isSignatureLandmark || curated || catalogId);
     const isSecondaryTwin = Boolean(b.isSecondaryTwin);
 
     let tier: 1 | 2 | 3 | 4 = 4;
@@ -340,7 +365,7 @@ export function buildPlaceCatalog(
       buildingId: b.id,
       levels: lv,
       ...(isSignature ? { isSignatureLandmark: true } : {}),
-      ...(showcaseId ? { showcaseId } : {}),
+      showcaseId,
     };
     byId.set(b.id, entry);
 
@@ -354,8 +379,11 @@ export function buildPlaceCatalog(
     }
   }
 
+  sortPlaceLabels(labels);
+}
+
+function sortPlaceLabels(labels: PlaceEntry[]) {
   labels.sort((a, b) => a.tier - b.tier || (b.isSignatureLandmark ? 1 : 0) - (a.isSignatureLandmark ? 1 : 0) || (b.levels ?? 10) - (a.levels ?? 10) || a.name.localeCompare(b.name, 'vi'));
-  return { labels, byId };
 }
 
 /** Select and de-collide visible place labels for the current viewport and mode */
@@ -449,4 +477,19 @@ export function selectVisiblePlaceLabels(
     }
   }
   return chosen;
+}
+
+export interface QuickPlace { id: string; name: string; group: string; at: [number, number] }
+
+/** places to fly to: the area's curated `city.places` (or the map origin) and every metro station */
+export function quickPlaces(city: Pick<City, 'places' | 'cityName' | 'name' | 'stations'>, locale: Locale): QuickPlace[] {
+  const configured = city.places ?? [
+    { id: 'home', name: city.cityName ?? city.name, group: t('top.places.defaultGroup', undefined, locale), at: [0, 0] as [number, number] },
+  ];
+  const stationPrefix = locale === 'en' ? 'Station' : 'Ga';
+  const metroGroup = t('top.places.metroGroup', undefined, locale);
+  return [
+    ...configured,
+    ...city.stations.map(s => ({ id: s.id, name: `${stationPrefix} ${s.name ?? ''}`.trim(), group: metroGroup, at: [s.at[0], s.at[1]] as [number, number] })),
+  ];
 }
