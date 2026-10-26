@@ -108,6 +108,9 @@ function pointIndex<T>(items: readonly T[], getPt: (item: T) => Vec2) {
 
 const networkCache = new WeakMap<City, Network>();
 
+/** hand over a network worked out elsewhere (a Web Worker) so `roadNetwork(city)` returns it at once */
+export function primeRoadNetwork(city: City, net: Network) { networkCache.set(city, net); }
+
 export function roadNetwork(city: City): Network {
   const cached = networkCache.get(city);
   if (cached) return cached;

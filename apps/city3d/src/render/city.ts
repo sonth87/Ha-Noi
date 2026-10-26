@@ -83,31 +83,54 @@ export function buildBase(city: City, shellB?: Batch, railB?: Batch): Layer {
   return layerOf(B, true, city);
 }
 
-/** Build separated semantic base layers so zoomed-out stages can hide local alleys/sidewalks/forecourts or all streets */
-export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch, skipLocalStreets = false): MapBaseLayers {
-  const terrainB = new Batch();
-  buildGround(terrainB, city);
-  buildAreas(terrainB, city, false);
+/** The six batches of the map base before they become GPU geometry: this is the expensive part (about
+    1.5 s for the whole of Hà Nội) and it is pure data, so it can run in a Web Worker (`baseWorker.ts`). */
+export interface MapBaseBatches {
+  terrain: Batch;
+  major: Batch;
+  local: Batch;
+  metro: Batch;
+  /** metro station shells and rail tracks, drawn by their own groups */
+  shell: Batch;
+  rail: Batch;
+}
 
-  const majorB = new Batch();
-  buildStreets(majorB, city, 'major');
+export function buildMapBaseBatches(city: City, skipLocalStreets = false, shellB?: Batch, railB?: Batch): MapBaseBatches {
+  const terrain = new Batch();
+  buildGround(terrain, city);
+  buildAreas(terrain, city, false);
 
-  const localB = new Batch();
+  const major = new Batch();
+  buildStreets(major, city, 'major');
+
+  const local = new Batch();
   if (!skipLocalStreets) {
-    buildStreets(localB, city, 'local');
-    buildForecourts(localB, city);
+    buildStreets(local, city, 'local');
+    buildForecourts(local, city);
   }
 
-  const metroB = new Batch();
-  buildMonumentFeatures(metroB, city);
-  buildMetro(metroB, city, shellB ?? metroB, railB);
+  const metro = new Batch();
+  buildMonumentFeatures(metro, city);
+  buildMetro(metro, city, shellB ?? metro, railB);
+  return { terrain, major, local, metro, shell: shellB ?? new Batch(), rail: railB ?? new Batch() };
+}
 
+/** the batches as layers (cheap compared with building them) */
+export function layersOfBase(city: City, b: MapBaseBatches): MapBaseLayers & { stationShell: Layer; railTracks: Layer } {
   return {
-    terrain: layerOf(terrainB, true, city),
-    majorStreets: layerOf(majorB, true, city),
-    localStreets: layerOf(localB, true, city),
-    metro: layerOf(metroB, true, city),
+    terrain: layerOf(b.terrain, true, city),
+    majorStreets: layerOf(b.major, true, city),
+    localStreets: layerOf(b.local, true, city),
+    metro: layerOf(b.metro, true, city),
+    stationShell: layerOf(b.shell, true, city),
+    railTracks: layerOf(b.rail, true, city),
   };
+}
+
+/** Build separated semantic base layers so zoomed-out stages can hide local alleys/sidewalks/forecourts or all streets */
+export function buildMapBaseLayers(city: City, shellB?: Batch, railB?: Batch, skipLocalStreets = false): MapBaseLayers {
+  const { terrain, majorStreets, localStreets, metro } = layersOfBase(city, buildMapBaseBatches(city, skipLocalStreets, shellB, railB));
+  return { terrain, majorStreets, localStreets, metro };
 }
 
 /** Build a single 256 m spatial tile of local streets, sidewalks, lane markings, footways, and forecourts on demand */

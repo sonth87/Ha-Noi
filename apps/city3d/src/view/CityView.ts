@@ -61,6 +61,7 @@ import {
   type PlaceCatalog, type PlaceEntry, type PlaceInfoMode,
 } from './placeInfo';
 import { PovController, type DriveControlKey } from './povController';
+import type { PrebuiltBase } from './prebuild';
 import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { CityEventBus, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
@@ -344,7 +345,7 @@ export class CityView {
   private colors: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
   private outline: Record<Shade, THREE.Color> = { off: new THREE.Color(), on: new THREE.Color(), hi: new THREE.Color(), dim: new THREE.Color() };
 
-  constructor(readonly city: City, initialLoadedChunks?: readonly string[]) {
+  constructor(readonly city: City, initialLoadedChunks?: readonly string[], prebuilt?: PrebuiltBase | null) {
     this.frame = frameForCity(city.id);
     this.northAz = Math.PI / 2 + (this.frame.bearing * Math.PI) / 180;
     this.skeletonStreets = [...city.streets];
@@ -362,13 +363,20 @@ export class CityView {
     } catch {
       // Custom or synthetic test city without a world-manifest entry
     }
-    const stationShellB = new Batch();
-    const railTracksB = new Batch();
-    // Skip building global localStreets up-front; local streets/sidewalks/forecourts are streamed in 256m tiles!
-    this.baseLayers = buildMapBaseLayers(city, stationShellB, railTracksB, true);
+    if (prebuilt) {
+      // built off the main thread by the base worker (view/baseWorker.ts)
+      this.baseLayers = prebuilt;
+      this.stationShell = prebuilt.stationShell;
+      this.railTracks = prebuilt.railTracks;
+    } else {
+      const stationShellB = new Batch();
+      const railTracksB = new Batch();
+      // Skip building global localStreets up-front; local streets/sidewalks/forecourts are streamed in 256m tiles!
+      this.baseLayers = buildMapBaseLayers(city, stationShellB, railTracksB, true);
+      this.stationShell = layerOf(stationShellB, true, city);
+      this.railTracks = layerOf(railTracksB, true, city);
+    }
     this.base = this.baseLayers.terrain;
-    this.stationShell = layerOf(stationShellB, true, city);
-    this.railTracks = layerOf(railTracksB, true, city);
     this.layers.add(this.baseLayers.terrain);
     this.layers.add(this.baseLayers.majorStreets);
     this.layers.add(this.baseLayers.metro);

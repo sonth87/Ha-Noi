@@ -390,8 +390,48 @@ const WARD_BOX_BOUNDARIES: readonly AdminBoundaryDef[] = [
 /** Real OSM outlines where we have them (all 43 wards today); the boxes above are only a fallback */
 export const WARD_BOUNDARIES: readonly AdminBoundaryDef[] = WARD_BOX_BOUNDARIES.map(w => ({ ...w, ...HA_NOI_WARD_OUTLINES[w.name] }));
 
+/** The outline of a set of polygons that share borders: the edges that belong to only one polygon, chained
+    into rings; the ring enclosing the most area. Null when the borders do not close up (then use a fallback). */
+export function outerOutline(polygons: readonly (readonly Vec2[])[]): Vec2[] | null {
+  const key = (p: Vec2) => `${Math.round(p[0])},${Math.round(p[1])}`;
+  const edges = new Map<string, { a: Vec2; b: Vec2; n: number }>();
+  for (const poly of polygons) {
+    for (let i = 0; i < poly.length; i++) {
+      const a = poly[i]!, b = poly[(i + 1) % poly.length]!;
+      const ka = key(a), kb = key(b);
+      if (ka === kb) continue;
+      const k = ka < kb ? `${ka}|${kb}` : `${kb}|${ka}`;
+      const e = edges.get(k);
+      if (e) e.n++; else edges.set(k, { a, b, n: 1 });
+    }
+  }
+  const open = [...edges.values()].filter(e => e.n === 1);
+  const at = new Map<string, typeof open>();
+  for (const e of open) for (const p of [e.a, e.b]) { const k = key(p); at.set(k, [...(at.get(k) ?? []), e]); }
+  const used = new Set<typeof open[number]>();
+  const rings: Vec2[][] = [];
+  for (const start of open) {
+    if (used.has(start)) continue;
+    used.add(start);
+    const ring: Vec2[] = [start.a, start.b];
+    let tip = start.b;
+    for (;;) {
+      const next = (at.get(key(tip)) ?? []).find(e => !used.has(e));
+      if (!next) break;
+      used.add(next);
+      tip = key(next.a) === key(tip) ? next.b : next.a;
+      if (key(tip) === key(ring[0]!)) break;
+      ring.push(tip);
+    }
+    if (key(tip) === key(ring[0]!) && ring.length > 2) rings.push(ring);
+  }
+  const area = (r: readonly Vec2[]) => Math.abs(r.reduce((s, p, i) => s + p[0] * r[(i + 1) % r.length]![1] - r[(i + 1) % r.length]![0] * p[1], 0) / 2);
+  rings.sort((a, b) => area(b) - area(a));
+  return rings[0] ?? null;
+}
+
 /** Outer boundary of Hanoi enclosing the 12 urban districts (43 Phường) */
-export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = {
+const HANOI_OUTER_BOX: AdminBoundaryDef = {
   id: 'city:ha-noi',
   name: 'Hà Nội',
   center: [500, -1800],
@@ -501,3 +541,7 @@ export function buildDashedBoundarySegments(
   }
   return out;
 }
+
+/** The outline of the 44 real wards together (the old stepped polygon only if their borders do not close up) */
+const WARD_OUTLINE = outerOutline(Object.values(HA_NOI_WARD_OUTLINES).map(w => w.polygon));
+export const HANOI_OUTER_BOUNDARY: AdminBoundaryDef = WARD_OUTLINE ? { ...HANOI_OUTER_BOX, polygon: WARD_OUTLINE } : HANOI_OUTER_BOX;

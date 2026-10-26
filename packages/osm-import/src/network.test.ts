@@ -58,10 +58,10 @@ describe('road network', () => {
     // the flyover carries cars only, up at its deck
     const fly = lanes.filter(l => l.carsOnly);
     expect(fly.length).toBeGreaterThan(0);
-    // (Cầu Long Biên is a taller river bridge, 9.5 m; every flyover keeps the usual 6 m)
+    // (Cầu Long Biên is a taller river bridge, 9.5 m, Cầu Nhật Tân 15 m; every flyover keeps the usual 6 m)
     const decks = fly.map(l => laneAt(l, l.length / 2).z);
     expect(decks.some(z => Math.abs(z - 6) < 0.05)).toBe(true);
-    expect(Math.max(...decks)).toBeLessThanOrEqual(9.55);
+    expect(Math.max(...decks)).toBeLessThanOrEqual(15.05);   // Cầu Nhật Tân 15 m
     expect(spawnTraffic(lanes, 1).length).toBeGreaterThan(100);
   });
 });

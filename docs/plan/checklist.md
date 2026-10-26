@@ -97,6 +97,12 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 
 - [x] Đánh giá toàn diện `city3d` + lỗi người dùng báo (đường giữa sông, Cầu Long Biên, Tháp Bút / Thê Húc, Hồ Tây, giật trên tablet, `RangeError`) → ADR-058: xoá dữ liệu bịa, dùng OSM thật; neo Ngọc Sơn theo tâm đền; lớp tổng quan L0; ngân sách thời gian dựng ô; ErrorBoundary; CI
 - [x] Góp ý (ảnh): đầu Cầu Long Biên / Chương Dương cụt, cầu nhấp nhô, vòng xuyến lộn xộn → ADR-058 mục 2: cao độ cầu theo cả mạng cầu
+- [x] Yêu cầu: biến sự cố thành case study, bài học và luật cụ thể có rào chắn → `docs/architecture/case-studies.md`, luật A17–A24, `hygiene.test.ts`
+- [x] Góp ý (ảnh vòng xoay Chương Dương): bề rộng mặt cầu nhảy và lan can cắt nhau ở chỗ nối → bề rộng thống nhất tại nút, lan can mở, cầu đường chính ≥ 2 làn
+- [x] Góp ý (ảnh vòng xoay lần 2): lan can bên trong đan thành chữ Y ở chỗ nhánh rẽ/nhập → bỏ lan can nằm trên mặt cầu khác (`onOtherDeck`), test `bridges.test.ts`
+- [x] Góp ý: tải trang đầu lâu kể cả trên máy tính → CS-07: đo bằng profiler, sửa 4 điểm nghẽn, tính toán khởi động ~6,5 s → ~2,4 s
+- [x] Dọn nốt: Web Worker (có đường lùi), cầu Nhật Tân theo đường, vùng hành lang Đông Anh, đoạn cầu cắt ở rìa vùng, viền Hà Nội theo phường thật, chốt chặn kích thước `CityView` (ADR-058 mục 9)
+- [ ] Tách `CityView.ts` theo city3d.md §8 (từng bước, kiểm bằng mắt sau mỗi bước)
 - [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
 
 ## Backlog

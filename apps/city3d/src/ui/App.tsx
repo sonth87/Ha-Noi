@@ -2,9 +2,10 @@
    (A15). React only reads the view's snapshot; the scene itself is three.js, driven by CityView. */
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { roadNetwork, streetFurniture } from '@my-city/core';
-import { loadCitySkeletonAsync, loadCityStreamingInitAsync } from '@my-city/osm-import';
+import { loadCityStreamingInitAsync } from '@my-city/osm-import';
 import { MAP_PALETTES, PALETTES, accentKey } from '@my-city/theme';
 import { CityView, type PegmanDropPreview } from '@view/CityView';
+import { prebuildBase } from '@view/prebuild';
 import { DEFAULT_AREA_ID, POV_MODES, type PovMode } from '@view/constants';
 import { LOCALE_LABELS, PLACE_INFO_NAMES_I18N, STREET_LABEL_NAMES_I18N, getLocale, t, type TranslationKey } from '@view/i18n';
 import { lightOn } from '@view/lights';
@@ -64,17 +65,17 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         percent: 22,
         label: isEn ? '1/5 · Loading Hanoi OpenStreetMap data...' : '1/5 · Đang tải dữ liệu khung bản đồ Hà Nội...',
       });
+      // skeleton and the first chunks download together (they used to go one after the other)
+      const initialChunkKeys = computeInitialViewportChunkKeys();
+      const loading = loadCityStreamingInitAsync(DEFAULT_AREA_ID, initialChunkKeys);
+      loading.catch(() => { /* reported by the await below */ });
       await yieldToBrowser();
-      await loadCitySkeletonAsync(DEFAULT_AREA_ID);
-
       onProgress({
         step: 2,
         percent: 48,
         label: isEn ? '2/5 · Decoding buildings, lakes & terrain...' : '2/5 · Đang giải mã công trình, sông hồ & địa hình...',
       });
-      await yieldToBrowser();
-      const initialChunkKeys = computeInitialViewportChunkKeys();
-      const { city, loadedChunks } = await loadCityStreamingInitAsync(DEFAULT_AREA_ID, initialChunkKeys);
+      const { city, loadedChunks } = await loading;
       const counts = {
         buildings: city.buildings.length,
         streets: city.streets.length,
@@ -88,9 +89,6 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         counts,
       });
       await yieldToBrowser();
-      const net = roadNetwork(city);
-      await yieldToBrowser();
-      streetFurniture(city, net);
 
       onProgress({
         step: 4,
@@ -99,7 +97,15 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         counts,
       });
       await yieldToBrowser();
-      const built = new CityView(city, loadedChunks);
+      // road network, street furniture and the map base are built in a worker; if that is not possible the
+      // main thread does them here, one after the other, as it always did
+      const prebuilt = await prebuildBase(city);
+      if (!prebuilt) {
+        const net = roadNetwork(city);
+        await yieldToBrowser();
+        streetFurniture(city, net);
+      }
+      const built = new CityView(city, loadedChunks, prebuilt);
 
       onProgress({
         step: 5,
@@ -107,7 +113,6 @@ function loadSharedViewAsync(onProgress: (p: LoadingProgress) => void): Promise<
         label: isEn ? '5/5 · Entering 3D Hanoi Map...' : '5/5 · Đang hoàn tất khung cảnh 3D...',
         counts,
       });
-      await new Promise<void>(resolve => setTimeout(resolve, 180));
       shared = built;
       return built;
     } catch (err) {

@@ -157,7 +157,7 @@ function densifyTaperedPath(path: readonly Vec2[], taper: RoadTaper): Vec2[] {
   return out;
 }
 
-type RenderNetwork = {
+export type RenderNetwork = {
   roads: Map<string, Road>;
   roadList: Road[];
   nodes: NetNode[];
@@ -168,10 +168,20 @@ type RenderNetwork = {
     laptop: keep the last one per city (streets stream in, so the street count is part of the key). */
 const renderNetworkCache = new WeakMap<City, { streets: number; net: RenderNetwork }>();
 
+/** the render network, for handing to the main thread from a Web Worker (see `primeRenderNetwork`) */
+export function exportRenderNetwork(city: City): RenderNetwork { return prepareRenderNetwork(city); }
+
+/** adopt a render network worked out elsewhere; the per-road bridge data is rebuilt for the copies */
+export function primeRenderNetwork(city: City, net: RenderNetwork) {
+  markBridgeEnds(net.roadList);
+  renderNetworkCache.set(city, { streets: city.streets.length, net });
+}
+
 function prepareRenderNetwork(city: City): RenderNetwork {
   const hit = renderNetworkCache.get(city);
   if (hit && hit.streets === city.streets.length) return hit.net;
   const net = computeRenderNetwork(city);
+  markBridgeEnds(net.roadList);
   renderNetworkCache.set(city, { streets: city.streets.length, net });
   return net;
 }
@@ -462,6 +472,116 @@ function smoothPolyline(path: readonly Vec2[]): Vec2[] {
 /** Cầu Long Biên gets its steel trusses on top of the ordinary deck (which follows its real, ramped height profile) */
 const hasBespokeBridge = (r: { name?: string }) => Boolean(r.name && /cầu long biên/i.test(r.name));
 
+/** Where a bridge piece meets another bridge piece the two decks must agree: same width at the joint (the
+    average of the two) and no parapet across the other's deck. Filled in by `markBridgeEnds`. */
+interface BridgeEnds { wa: number; wb: number; openA: boolean; openB: boolean }
+const bridgeEnds = new WeakMap<object, BridgeEnds>();
+/** the other decks that lie close to a deck: where they overlap (a branch leaving or joining) the parapet
+    between them is dropped, so the two decks read as one wider deck instead of two railings forming a Y */
+const bridgeNeighbours = new WeakMap<object, Road[]>();
+
+/** is this parapet point on the road surface of another deck at about the same height? */
+export function onOtherDeck(p: Vec2, h: number, others: readonly Pick<Road, 'path' | 'width' | 'profile'>[]): boolean {
+  return others.some(o => {
+    const q = nearestAlong(o.path, p);
+    return q.d < o.width / 2 - 0.1 && Math.abs(zAt(o, q.s) - h) < 1.5;
+  });
+}
+
+/** position along `path` of the point nearest to p: distance from it and arc length of the foot */
+function nearestAlong(path: readonly Vec2[], p: Vec2): { d: number; s: number } {
+  let best = { d: Infinity, s: 0 }, acc = 0;
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1]!, b = path[i]!, L = dist(a, b);
+    if (L > 1e-6) {
+      const t = Math.max(0, Math.min(1, ((p[0] - a[0]) * (b[0] - a[0]) + (p[1] - a[1]) * (b[1] - a[1])) / (L * L)));
+      const d = Math.hypot(p[0] - (a[0] + (b[0] - a[0]) * t), p[1] - (a[1] + (b[1] - a[1]) * t));
+      if (d < best.d) best = { d, s: acc + t * L };
+    }
+    acc += L;
+  }
+  return best;
+}
+const TAPER_LEN = 24, OPEN_LEN = 7;
+
+function markBridgeEnds(roads: readonly Road[]) {
+  const key = (p: Vec2) => `${Math.round(p[0] * 2)},${Math.round(p[1] * 2)}`;
+  const at = new Map<string, number[]>();
+  const decks = roads.filter(r => r.layer > 0 && r.profile.length && r.kind !== 'footway' && r.kind !== 'steps');
+  for (const r of decks) for (const p of [r.path[0]!, r.path[r.path.length - 1]!]) { const k = key(p); at.set(k, [...(at.get(k) ?? []), r.width]); }
+  for (const r of decks) {
+    const a = at.get(key(r.path[0]!))!, b = at.get(key(r.path[r.path.length - 1]!))!;
+    const mean = (w: number[]) => w.reduce((x, y) => x + y, 0) / w.length;
+    bridgeEnds.set(r, { wa: mean(a), wb: mean(b), openA: a.length > 1, openB: b.length > 1 });
+  }
+  const box = (r: Road) => { const xs = r.path.map(p => p[0]), ys = r.path.map(p => p[1]), m = r.width + 4; return [Math.min(...xs) - m, Math.min(...ys) - m, Math.max(...xs) + m, Math.max(...ys) + m] as const; };
+  const boxes = new Map(decks.map(r => [r, box(r)]));
+  for (const r of decks) {
+    const [a0, b0, a1, b1] = boxes.get(r)!;
+    bridgeNeighbours.set(r, decks.filter(o => { if (o === r) return false; const [c0, d0, c1, d1] = boxes.get(o)!; return c0 <= a1 && c1 >= a0 && d0 <= b1 && d1 >= b0; }));
+  }
+}
+
+const isNhatTan = (r: { name?: string }) => Boolean(r.name && /^cầu nhật tân$/i.test(r.name.trim()));
+const PYLON_SPACING = 300, PYLON_COUNT = 5;
+
+/** Cầu Nhật Tân: five diamond pylons 300 m apart over the river part of the deck, in the median between the two
+    carriageways, with fans of stay cables to both decks. Drawn along the road (the bridge is curved), not from a box. */
+export function nhatTanPylons(B: Batch, main: Road, partner: Road | undefined, waters: readonly (readonly Vec2[])[]) {
+  const L = polylineLength(main.path);
+  const at = (path: readonly Vec2[], s: number): { p: Vec2; u: Vec2 } => {
+    let acc = 0;
+    for (let i = 1; i < path.length; i++) {
+      const a = path[i - 1]!, b = path[i]!, d = dist(a, b);
+      if (s <= acc + d || i === path.length - 1) {
+        const t = d ? Math.min(1, Math.max(0, (s - acc) / d)) : 0;
+        return { p: [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], u: d ? [(b[0] - a[0]) / d, (b[1] - a[1]) / d] : [1, 0] };
+      }
+      acc += d;
+    }
+    return { p: path[0]!, u: [1, 0] };
+  };
+  // the longest stretch of the deck that is over water
+  let best: [number, number] = [0, 0], run: number | null = null;
+  for (let s = 0; s <= L; s += 10) {
+    const wet = waters.some(w => pointInRing(at(main.path, s).p, w));
+    if (wet && run === null) run = s;
+    if ((!wet || s + 10 > L) && run !== null) { if (s - run > best[1] - best[0]) best = [run, s]; run = null; }
+  }
+  const span = best[1] - best[0];
+  if (span < 400) return;
+  const spacing = Math.min(PYLON_SPACING, span / (PYLON_COUNT + 1)), mid = (best[0] + best[1]) / 2;
+  const deckZ = (s: number) => zAt(main, s);
+  for (let k = 0; k < PYLON_COUNT; k++) {
+    const s = mid + (k - (PYLON_COUNT - 1) / 2) * spacing, a = at(main.path, s);
+    const nearest = partner ? closestOnPath(a.p, partner.path).at : a.p;
+    const c: Vec2 = [(a.p[0] + nearest[0]) / 2, (a.p[1] + nearest[1]) / 2];
+    const v: Vec2 = [-a.u[1], a.u[0]];
+    const sep = partner ? Math.max(dist(a.p, nearest), 8) : 14;
+    const z0 = deckZ(s), box = (cx: number, cy: number, hu: number, hv: number): Vec2[] =>
+      [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => [cx + a.u[0] * x! * hu + v[0] * y! * hv, cy + a.u[1] * x! * hu + v[1] * y! * hv] as Vec2);
+    const out = sep / 2 + 1;   // legs stand just outside the median, as the real diamond tower does
+    for (const sv of [-1, 1] as const) {
+      B.solid(box(c[0] + v[0] * sv * out * 0.9, c[1] + v[1] * sv * out * 0.9, 2.2, 1.6), z0, z0 + 46, () => 'wall', 'roof');
+      B.solid(box(c[0] + v[0] * sv * out * 0.45, c[1] + v[1] * sv * out * 0.45, 2, 1.4), z0 + 46, z0 + 78, () => 'wall', 'roof');
+    }
+    B.solid(box(c[0], c[1], 2.4, out * 0.5), z0 + 40, z0 + 44, () => 'metal', 'metal');   // cross beam
+    B.solid(box(c[0], c[1], 2.4, 2), z0 + 78, z0 + 96, () => 'metal', 'metal');            // apex
+    // fans of stay cables to the carriageways on both sides of the pylon
+    for (let i = 1; i <= 8; i++) {
+      for (const dir of [-1, 1] as const) {
+        const sd = s + dir * i * 34;
+        if (sd < 0 || sd > L) continue;
+        const top = V(c[0], c[1], z0 + 60 + i * 4.2);
+        for (const deck of partner ? [main, partner] : [main]) {
+          const q = deck === main ? at(main.path, sd).p : closestOnPath(at(main.path, sd).p, deck.path).at;
+          B.line(top, V(q[0], q[1], zAt(deck, polylineLength(deck.path) * Math.min(1, sd / L)) + 0.9), 'crease');
+        }
+      }
+    }
+  }
+}
+
 const TRUSS_SPAN = 95, TRUSS_CELLS = 8;
 
 /** Cantilever steel trusses (the "dragon" wave of the real bridge) over the river part of the deck:
@@ -599,9 +719,11 @@ export function buildStreets(B: Batch, city: City, mode: StreetRenderMode = 'all
     const a = r.path[Math.floor(r.path.length / 2) - 1] ?? r.path[0]!, b = r.path[Math.floor(r.path.length / 2)]!, n = rightOf(a, b);
     return [(om[0] - mid[0]) * n[0] + (om[1] - mid[1]) * n[1] > 0 ? -1 : 1];
   };
+  const ntDecks = roadList.filter(r => r.layer > 0 && r.profile.length && isNhatTan(r) && polylineLength(r.path) > 1500).sort((a, b) => (a.id < b.id ? -1 : 1));
   for (const r of roadList) {
     drawRoadGeometry(B, r, tapers.get(r.id)!, cuts.get(r.id) ?? emptyCut, mode);
     if (mode !== 'local' && lbDecks.includes(r)) longBienTruss(B, r, waters, outerSides(r));
+    if (mode !== 'local' && ntDecks[0] === r) nhatTanPylons(B, r, ntDecks[1], waters);
   }
   if (mode === 'major') return;
   const metroStations = city.stations.filter(st => st.kind === 'metro');
@@ -1133,10 +1255,27 @@ export function zAt(r: Pick<Road, 'profile'>, s: number): number {
 /** A deck along the profile: road surface, 0.4 m parapets 0.9 m high, the underside 1 m below
     the deck (walled down to the ground near the ends), piers every 25 m where it is high. */
 function bridge(B: Batch, s: Pick<Road, 'path' | 'profile' | 'width'>) {
-  const S = resample(s.path, 2), W = s.width / 2 + 0.4, P = 0.4, H = 0.9;
+  // every vertex of the path is kept; the step only thins out long straights (a 1.7 km deck at 2 m was 850 sections)
+  const S = resample(s.path, 6), W = s.width / 2 + 0.4, P = 0.4, H = 0.9;
   const z = S.map(q => zAt(s, q.s)), zb = z.map(h => (h > 3 ? h - 1 : 0));
-  const pts = S.map(q => q.p), L = (d: number) => offsetLine(pts, d);
-  const oR = L(W), iR = L(W - P), oL = L(-W), iL = L(-W + P);
+  const pts = S.map(q => q.p);
+  const ends = bridgeEnds.get(s);
+  const total = S[S.length - 1]!.s;
+  // half width along the deck: its own, easing to the shared width over the last TAPER_LEN m at a joint
+  const halfAt = (q: number) => {
+    if (!ends) return W;
+    const ease = (t: number) => t * t * (3 - 2 * t);
+    const wa = ends.wa / 2 + 0.4, wb = ends.wb / 2 + 0.4;
+    const ta = ends.openA ? Math.max(0, 1 - q / TAPER_LEN) : 0, tb = ends.openB ? Math.max(0, 1 - (total - q) / TAPER_LEN) : 0;
+    return W + (wa - W) * ease(ta) + (wb - W) * ease(tb);
+  };
+  const half = S.map(q => halfAt(q.s));
+  const unit = offsetLine(pts, 1);
+  const L = (sign: number, shrink = 0): Vec2[] => pts.map((p, i) => { const d = sign * (half[i]! - shrink), u = unit[i]!; return [p[0] + (u[0] - p[0]) * d, p[1] + (u[1] - p[1]) * d]; });
+  const oR = L(1), iR = L(1, P), oL = L(-1), iL = L(-1, P);
+  const others = bridgeNeighbours.get(s) ?? [];
+  const covR = oR.map((p, i) => onOtherDeck(p, z[i]!, others)), covL = oL.map((p, i) => onOtherDeck(p, z[i]!, others));
+  const gap = (sPos: number) => Boolean(ends && ((ends.openA && sPos < OPEN_LEN) || (ends.openB && sPos > total - OPEN_LEN)));
   const all: number[] = [];
   const up = new THREE.Vector3(0, 1, 0), down = new THREE.Vector3(0, -1, 0);
   const face = (surf: Surface, a: THREE.Vector3, b: THREE.Vector3, c: THREE.Vector3, d: THREE.Vector3, n: THREE.Vector3) => { B.quad(surf, [a, b, c, d], n); B.quad(surf, [a, b, c, d], n, all); };
@@ -1144,7 +1283,9 @@ function bridge(B: Batch, s: Pick<Road, 'path' | 'profile' | 'width'>) {
     const j = i + 1, r = rightOf(pts[i]!, pts[j]!), nR = new THREE.Vector3(r[0], 0, r[1]), nL = nR.clone().negate();
     const v = (l: Vec2[], k: number, h: number) => V(l[k]![0], l[k]![1], h);
     face('road', v(iL, i, z[i]!), v(iR, i, z[i]!), v(iR, j, z[j]!), v(iL, j, z[j]!), up);
-    for (const [o, inn, n, nIn] of [[oR, iR, nR, nL], [oL, iL, nL, nR]] as const) {
+    if (gap(S[i]!.s) || gap(S[j]!.s)) { face('wall', v(oL, i, zb[i]!), v(oR, i, zb[i]!), v(oR, j, zb[j]!), v(oL, j, zb[j]!), down); continue; }
+    for (const [o, inn, n, nIn, cov] of [[oR, iR, nR, nL, covR], [oL, iL, nL, nR, covL]] as const) {
+      if (cov[i] || cov[j]) continue;
       face('roof', v(o, i, z[i]! + H), v(inn, i, z[i]! + H), v(inn, j, z[j]! + H), v(o, j, z[j]! + H), up);
       face('wall', v(o, i, zb[i]!), v(o, j, zb[j]!), v(o, j, z[j]! + H), v(o, i, z[i]! + H), n);
       face('wall', v(inn, i, z[i]!), v(inn, j, z[j]!), v(inn, j, z[j]! + H), v(inn, i, z[i]! + H), nIn);
@@ -1158,7 +1299,7 @@ function bridge(B: Batch, s: Pick<Road, 'path' | 'profile' | 'width'>) {
     if (zb[k]! < 2 || S[k]!.s - last < 25) continue;
     last = S[k]!.s;
     const q = pts[k]!, a = k + 1 < pts.length ? pts[k + 1]! : pts[k - 1]!, r = rightOf(q, a), u: Vec2 = [-r[1], r[0]];
-    const hw = W * 0.6, hl = 0.6;
+    const hw = half[k]! * 0.6, hl = 0.6;
     const ring: Vec2[] = [[-1, -1], [1, -1], [1, 1], [-1, 1]].map(([x, y]) => [q[0] + u[0] * x! * hl + r[0] * y! * hw, q[1] + u[1] * x! * hl + r[1] * y! * hw]);
     B.solid(ring, 0, zb[k]!);
   }

@@ -126,6 +126,8 @@ export const HA_NOI_REGION: Rect[] = [
   { x0: -5250, y0: -9550, x1: -420, y1: -1620 },
   // Bắc Từ Liêm (Phường Xuân Đỉnh, Phường Phú Diễn, Phường Đông Ngạc, Phường Tây Tựu, Phường Thượng Cát)
   { x0: -480, y0: -12650, x1: 6250, y1: -5180 },
+  // Hành lang Cầu Nhật Tân phía Đông Anh: cầu dài ~3,5 km, phần qua sông nằm ngoài các quận nên cần thêm vùng này
+  { x0: 7550, y0: -6300, x1: 10900, y1: -3300 },
   // Hà Đông (Phường Hà Đông, Phường Dương Nội, Phường Yên Nghĩa, Phường Kiến Hưng, Phường Phú Lương)
   { x0: -9850, y0: -5650, x1: -3050, y1: 1900 },
   // Hoàng Mai (Phường Định Công, Phường Tương Mai, Phường Vĩnh Hưng, Phường Hoàng Mai, Phường Hoàng Liệt, Phường Yên Sở, Phường Lĩnh Nam)

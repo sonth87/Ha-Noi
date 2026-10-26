@@ -97,4 +97,22 @@ describe('bridge heights', () => {
     expect(lb.length).toBe(2);   // the two carriageways
     for (const d of lb) expect(Math.max(...d.profile.map(q => q[1]))).toBeCloseTo(9.5, 1);
   });
+
+  it('decks that meet at a joint are about as wide as each other (no 3 m deck feeding a 13 m one)', () => {
+    const at = new Map<string, number[]>();
+    for (const s of bridges) for (const e of [s.path[0]!, s.path[s.path.length - 1]!]) at.set(key(e), [...(at.get(key(e)) ?? []), s.width]);
+    const bad = [...at.entries()].filter(([, w]) => w.length > 1 && Math.max(...w) / Math.min(...w) > 2.1);
+    expect(bad.length).toBe(0);
+  });
+});
+
+describe('bridges cut by the edge of the map', () => {
+  it('keep their deck height at the cut instead of dropping to the ground', () => {
+    const cut = city.streets.filter(s => s.name === 'Cầu Nhật Tân' && s.profile.length && polylineLength(s.path) > 400);
+    expect(cut.length).toBeGreaterThan(0);
+    for (const s of cut) {
+      const ends = [s.profile[0]![1], s.profile[s.profile.length - 1]![1]];
+      expect(Math.max(...ends)).toBeGreaterThan(14);   // the end at the map edge is up at the 15 m deck
+    }
+  });
 });

@@ -28,8 +28,9 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 2. [../plan/roadmap.md](../plan/roadmap.md): mục tiêu và DoD của bước hiện tại.
 3. [../architecture/decisions.md](../architecture/decisions.md): đã chốt gì (ADR-032 trở đi; ADR-001…031 ở `apps/svg/docs/architecture/decisions.md`). **Không làm ngược ADR đã chốt** khi chưa hỏi người dùng.
 4. [conventions.md](conventions.md) và [workflow.md](workflow.md).
-5. Khi đụng tới dữ liệu: [city-model](../architecture/city-model.md), [osm-import](../architecture/osm-import.md), [house-spec](../architecture/house-spec.md). Bộ phận nhà của app cũ (`apps/svg/docs/architecture/components.md`) là cơ sở cho nhà 3D ở M4.
-6. `.claude/skills/iso-glow/SKILL.md`: luật thẩm mỹ; phần **3D mode** là nguồn tham khảo cho app mới. Chỉ dùng làm tham khảo; không nhúng template vào app.
+5. **[case-studies](../architecture/case-studies.md)**: các sự cố đã gặp, nguyên nhân gốc và luật A17–A25. Đọc trước khi sửa dữ liệu bản đồ, công trình, cầu.
+6. Khi đụng tới dữ liệu: [city-model](../architecture/city-model.md), [osm-import](../architecture/osm-import.md), [house-spec](../architecture/house-spec.md). Bộ phận nhà của app cũ (`apps/svg/docs/architecture/components.md`) là cơ sở cho nhà 3D ở M4.
+7. `.claude/skills/iso-glow/SKILL.md`: luật thẩm mỹ; phần **3D mode** là nguồn tham khảo cho app mới. Chỉ dùng làm tham khảo; không nhúng template vào app.
 
 ## 3. Luật bắt buộc
 
@@ -51,6 +52,15 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A14 | **`apps/svg` đóng băng** (ADR-032): không sửa, không thêm tính năng. Chỉ được sửa khi người dùng yêu cầu rõ, hoặc khi đổi cấu trúc repo làm nó không chạy được nữa (sửa tối thiểu để chạy lại, và ghi vào checklist). Script chạy app cũ luôn được giữ. |
 | A15 | Dữ liệu OSM theo giấy phép **ODbL**: app hiển thị "© OpenStreetMap contributors"; gói `osm-data` ghi rõ nguồn và ngày tải. |
 | A16 | **Tổ chức thư mục riêng theo Quốc gia / Thành phố & Quy trình Rà soát 13 Nhóm Công trình + Cầu Biểu tượng + Tượng đài + Hồ/Công viên Bắt buộc khi mở rộng vùng mới (ADR-054, ADR-055, ADR-057)**: (1) Mỗi quốc gia và thành phố **bắt buộc có thư mục lưu trữ riêng** cho dữ liệu di tích/công trình (`packages/osm-import/src/cities/<country>/<city>/`) và bộ dựng 3D chuyên biệt (`apps/city3d/src/render/landmarks/<country>/<city>/`). (2) **Mỗi khi thêm bất kỳ vùng, địa danh, tỉnh, thành phố, quận, huyện, phường, xã mới nào**, bắt buộc phải đi rà soát toàn bộ khu vực đó theo **13 nhóm công trình chuẩn** (Cửa ô/cổng thành/thành cổ, Cơ quan Trung ương Đảng/Chính phủ/Bộ ngành/Nhà khách, Nhà thờ & tôn giáo, **Đài tưởng niệm & tượng đài điêu khắc 3D**, Danh thắng đô thị/phố cổ/chợ cổ, Đền/phủ/đạo quán, Chùa cổ & thiền viện, Đình cổ & cổng làng, Công trình văn hóa/giáo dục/y tế thời kỳ trước, Bảo tàng & trung tâm triển lãm, Cao ốc & trung tâm thương mại, Khách sạn lớn, **Các cây cầu biểu tượng lớn/nhỏ như Cầu Thê Húc, Cầu Long Biên, Cầu Nhật Tân, Cầu Rồng Đà Nẵng, Cầu Trường Tiền Huế…** & công trình thể thao/hội nghị) cùng **hệ thống hồ nước (giữ đúng bờ hồ & đảo trong hồ), công viên và vườn hoa (thảm cỏ xanh + tán cây 3D)** — tuyệt đối không để sót, không vẽ tượng đài thành ngôi nhà hay cái cọc đơn giản, và không vẽ cầu biểu tượng thành dải đường bê tông phẳng. |
+| A17 | **Nguồn gốc dữ liệu**: mọi đường, mặt nước, công trình, ranh giới trên bản đồ phải đến từ OSM (id thật) hoặc từ một script ghi rõ cách tạo. **Cấm tự thêm phần tử toạ độ ước chừng** (id `99…`, hộp tay). Không tìm được trong OSM thì không đưa lên bản đồ (chỉ để ở Diorama). Xem CS-01. |
+| A18 | **Không "sửa cho khớp"**: thấy hình sai thì tìm xem dữ liệu hay code sai, không chỉnh toạ độ/hằng số cho vừa mắt. Sửa nguyên nhân, rồi thêm rào chắn (A24). Xem CS-01, CS-06. |
+| A19 | **Neo theo phần tử, không theo toạ độ tuyệt đối**: code vẽ không chứa cặp toạ độ bản đồ (`hygiene.test.ts` kiểm). Vị trí hạng mục = độ lệch so với tâm một phần tử OSM, kèm test so với dữ liệu. Xem CS-02. |
+| A20 | **Thuộc tính của công trình ghép từ nhiều phần tử OSM (cầu, đường nhiều làn, khuôn viên) tính trên cả nhóm**: cao độ, bề rộng, tên phải liên tục tại chỗ nối. Không gán riêng từng phần tử. Xem CS-03. |
+| A21 | **Sửa ở chỗ chung, không vá riêng**: một lỗi hiện ở một cây cầu/hồ/công trình thì tìm lớp công trình cùng loại và sửa quy tắc chung; chỉ khi quy tắc chung không thể (không có trong OSM) mới làm riêng. Báo cáo phải nêu các chỗ cùng loại đã kiểm. Sửa xong một lớp lỗi thì liệt kê và kiểm các kiểu tương tác còn lại giữa hai phần tử (nối đầu-đầu, rẽ nhánh, nhập, chồng lên, vượt qua). Xem CS-03, CS-05. |
+| A22 | **Ngân sách**: việc dựng lớn có trần bộ nhớ và thời gian (khung hình ≤ 6 ms di động / 10 ms máy tính cho dựng tăng dần; không dựng lớp lớn đồng bộ lần đầu trong thao tác người dùng; không quá ~5 triệu số/lớp). Xem CS-04. |
+| A23 | **Công trình tuyến (cầu, đường, đê) dựng theo đường OSM**, không theo hộp xoay thẳng. Xem CS-05. |
+| A24 | **Mọi lỗi vị trí/hình học phải có rào chắn**: một test chạy trên dữ liệu thật (không WebGL) và một ảnh mặt bằng SVG tự kiểm (`qlmanage -t`, không trình duyệt tự động, A7) trước khi nhờ người dùng xem. Một sự cố chỉ xong khi có case study ([case-studies](../architecture/case-studies.md)) và luật. |
+| A25 | **Đo bằng profiler trước khi tối ưu hiệu năng**: không đoán điểm nghẽn. Ghi số trước/sau vào case study. Thuật toán chạy trên toàn bộ dữ liệu phải không quá tuyến tính theo số phần tử (dùng lưới ô / bbox, không duyệt mọi cặp). Xem CS-07. |
 
 ## 4. Lệnh (ở thư mục gốc)
 
@@ -100,7 +110,7 @@ Bản đồ 3D f4map (`demo.f4map.com/#lat=21.0096812&lon=105.8237414&zoom=20`) 
      12. *Khách sạn Sang trọng & Nổi tiếng*
      13. *Cầu Biểu tượng (Cầu Thê Húc, Cầu Long Biên, Cầu Nhật Tân, Cầu Chương Dương, Cầu Rồng Đà Nẵng, Cầu Trường Tiền Huế…), Hạ tầng, Thể thao & Công trình Văn hoá Quy mô lớn* (**cầu biểu tượng kể cả cầu bộ hành lịch sử như Cầu Thê Húc bắt buộc vẽ 3D riêng đúng vị trí/hướng địa lý thật**)
 
-## 6. Bẫy đã biết
+## 6. Bẫy đã biết (chi tiết và nguyên nhân gốc: [case-studies](../architecture/case-studies.md))
 
 - Thư mục dự án có **dấu cách** ("My City"): trong config dùng `fileURLToPath`, không dùng `URL.pathname`; trong shell luôn đặt đường dẫn trong ngoặc kép.
 - Test của `apps/svg` đọc skill iso-glow theo đường dẫn tương đối (`src/iso/kernel.test.ts`). Chuyển thư mục thì sửa đường dẫn đó.

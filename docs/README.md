@@ -19,6 +19,7 @@ Tầm nhìn và yêu cầu sản phẩm hiện vẫn ở app cũ; sẽ viết l�
 | [architecture/house-spec.md](architecture/house-spec.md) | Đặc tả nhà của generator (mét) |
 | [architecture/city3d.md](architecture/city3d.md) | App 3D: cấu trúc, dựng hình, camera 2D/3D, màu, chất lượng |
 | [user/guide.md](user/guide.md) | Hướng dẫn dùng app 3D: chạy, phím, bảng chất lượng |
+| [architecture/case-studies.md](architecture/case-studies.md) | Sự cố đã gặp → nguyên nhân gốc → luật A17–A24 → rào chắn (test) |
 | [architecture/decisions.md](architecture/decisions.md) | ADR-032 trở đi, câu hỏi mở |
 | [product/glossary.md](product/glossary.md) | Thuật ngữ Việt ↔ code |
 | [plan/roadmap.md](plan/roadmap.md) | M1–M5: mục tiêu, bàn giao, DoD, rủi ro |

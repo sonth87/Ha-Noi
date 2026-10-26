@@ -47,28 +47,41 @@ const MAIN = new Set(['primary', 'secondary', 'tertiary']);
 
 const furnitureCache = new WeakMap<City, Furniture>();
 
+/** hand over a result worked out elsewhere (a Web Worker) so `streetFurniture(city)` returns it at once */
+export function primeFurniture(city: City, f: Furniture) { furnitureCache.set(city, f); }
+
 export function streetFurniture(city: City, net: Network = roadNetwork(city)): Furniture {
   const cached = furnitureCache.get(city);
   if (cached) return cached;
   const props: Prop[] = [], wires: Wire[] = [];
   const atGrade = net.roads.filter(r => r.layer === 0);
-  const roadGrid = new Map<string, typeof atGrade>();
+  // a grid of road *segments* (not whole roads): a query used to walk the full path of every road in its cell
+  type Seg = { ax: number; ay: number; bx: number; by: number; lim2: number };
+  const roadGrid = new Map<string, Seg[]>();
   for (const r of atGrade) {
-    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
-    for (const [x, y] of r.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
-    const pad = r.width / 2 + 1;
-    const gx0 = Math.floor((x0 - pad) / 32), gx1 = Math.floor((x1 + pad) / 32);
-    const gy0 = Math.floor((y0 - pad) / 32), gy1 = Math.floor((y1 + pad) / 32);
-    for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) {
-      const k = `${gx},${gy}`;
-      let cell = roadGrid.get(k);
-      if (!cell) roadGrid.set(k, cell = []);
-      cell.push(r);
+    const pad = r.width / 2 + 1, lim = r.width / 2 + 0.3;
+    for (let k = 1; k < r.path.length; k++) {
+      const [ax, ay] = r.path[k - 1]!, [bx, by] = r.path[k]!;
+      const seg: Seg = { ax, ay, bx, by, lim2: lim * lim };
+      const gx0 = Math.floor((Math.min(ax, bx) - pad) / 32), gx1 = Math.floor((Math.max(ax, bx) + pad) / 32);
+      const gy0 = Math.floor((Math.min(ay, by) - pad) / 32), gy1 = Math.floor((Math.max(ay, by) + pad) / 32);
+      for (let gx = gx0; gx <= gx1; gx++) for (let gy = gy0; gy <= gy1; gy++) {
+        const key = `${gx},${gy}`;
+        const cell = roadGrid.get(key);
+        if (cell) cell.push(seg); else roadGrid.set(key, [seg]);
+      }
     }
   }
   const onRoad = (p: Vec2) => {
     const cell = roadGrid.get(`${Math.floor(p[0] / 32)},${Math.floor(p[1] / 32)}`);
-    return cell ? cell.some(r => closestOnPath(p, r.path).d < r.width / 2 + 0.3) : false;
+    if (!cell) return false;
+    for (const g of cell) {
+      const dx = g.bx - g.ax, dy = g.by - g.ay, L2 = dx * dx + dy * dy;
+      const t = L2 > 1e-12 ? Math.max(0, Math.min(1, ((p[0] - g.ax) * dx + (p[1] - g.ay) * dy) / L2)) : 0;
+      const ex = p[0] - g.ax - dx * t, ey = p[1] - g.ay - dy * t;
+      if (ex * ex + ey * ey < g.lim2) return true;
+    }
+    return false;
   };
 
   const roadOf = new Map(net.roads.map(r => [r.id, r])), nodeOf = new Map(net.nodes.map(n => [n.id, n]));
@@ -145,6 +158,11 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
     for (const [x, y] of fw.path) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
     return { fw, x0: x0 - 4, y0: y0 - 4, x1: x1 + 4, y1: y1 + 4 };
   });
+  const waterBoxes = city.areas.filter(a => a.kind === 'water' || a.kind === 'pool').map(area => {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    for (const [x, y] of area.polygon) { if (x < x0) x0 = x; if (y < y0) y0 = y; if (x > x1) x1 = x; if (y > y1) y1 = y; }
+    return { area, x0, y0, x1, y1 };
+  });
   for (const park of parks) {
     let px0 = Infinity, py0 = Infinity, px1 = -Infinity, py1 = -Infinity;
     for (const [x, y] of park.polygon) { if (x < px0) px0 = x; if (y < py0) py0 = y; if (x > px1) px1 = x; if (y > py1) py1 = y; }
@@ -154,11 +172,17 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
       closestOnPath(p, b.fw.path).d < b.fw.width / 2 + 1.2,
     );
     let n = 0;
-    const parkTrees: Vec2[] = [];
+    const treeGrid = new Map<string, Vec2[]>();   // 7 m cells: spacing test without comparing with every tree
+    const tooClose = (p: Vec2) => {
+      const gx = Math.floor(p[0] / 7), gy = Math.floor(p[1] / 7);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) if (treeGrid.get(`${gx + dx},${gy + dy}`)?.some(q => dist(p, q) < 7)) return true;
+      return false;
+    };
     const addParkTree = (id: string, p: Vec2, large: boolean) => {
       if (p[0] < px0 || p[0] > px1 || p[1] < py0 || p[1] > py1) return;
-      if (!pointInRing(p, park.polygon) || onRoad(p) || onPath(p) || parkTrees.some(q => dist(p, q) < 7)) return;
-      parkTrees.push(p);
+      if (!pointInRing(p, park.polygon) || onRoad(p) || onPath(p) || tooClose(p)) return;
+      const cell = `${Math.floor(p[0] / 7)},${Math.floor(p[1] / 7)}`;
+      treeGrid.set(cell, [...(treeGrid.get(cell) ?? []), p]);
       props.push({ id, kind: 'tree', at: p, z0: 0.03, heading: 0, size: large ? 'large' : 'medium', road: park.id });
     };
     for (const { fw } of parkPaths) {
@@ -172,10 +196,12 @@ export function streetFurniture(city: City, net: Network = roadNetwork(city)): F
       }
     }
     const ring = park.polygon, L = polylineLength([...ring, ring[0]!]), at = sampler([...ring, ring[0]!]);
-    const waterAreas = city.areas.filter(a => a.kind === 'water' || a.kind === 'pool');
+    // only the water that touches this park, and a bounding-box test before each point-in-polygon: the
+    // river and Hồ Tây have thousands of points and used to be tried for every tree of every park
+    const parkWater = waterBoxes.filter(w => w.x1 >= px0 && w.x0 <= px1 && w.y1 >= py0 && w.y0 <= py1);
     const inHoleOrWater = (p: Vec2) => {
       if (park.holes?.some(h => pointInRing(p, h))) return true;
-      return waterAreas.some(w => pointInRing(p, w.polygon) && !(w.holes?.some(h => pointInRing(p, h))));
+      return parkWater.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInRing(p, w.area.polygon) && !(w.area.holes?.some(h => pointInRing(p, h))));
     };
     for (let s = 5; s < L; s += 15) {
       // 3 m inside for lamps (when no paths), 4.8 m inside for park perimeter shade trees

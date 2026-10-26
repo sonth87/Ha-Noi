@@ -96,10 +96,13 @@ export function importArea(
     const full = path(w);
     if (full.length < 2) continue;
     const oneway = t.oneway === 'yes' || t.oneway === '1' || t.junction === 'roundabout';
-    const lanes = Number.parseInt(t.lanes ?? '', 10);
-    const shape = streetShape(kind, Number.isFinite(lanes) ? lanes : undefined, oneway);
     const layer = Number.parseInt(t.layer ?? '0', 10) || 0;
     const bridge = t.bridge && t.bridge !== 'no' && layer > 0;
+    let lanes = Number.parseInt(t.lanes ?? '', 10);
+    // an arterial carriageway on a bridge is never a single lane: OSM often leaves lanes out or says 1 per
+    // way where the bridge is drawn as several parallel ways, which made the decks 3 m wide next to 7–13 m ramps
+    if (bridge && (kind === 'primary' || kind === 'secondary' || kind === 'tertiary') && !(lanes >= 2)) lanes = 2;
+    const shape = streetShape(kind, Number.isFinite(lanes) ? lanes : undefined, oneway);
     const L = polylineLength(full), prof = bridge ? bridgeProfile(kind, L, 1) : [];
     const road = kind !== 'footway' && kind !== 'steps';
     if (road) w.nodes.forEach((nid, i) => degree.set(nid, (degree.get(nid) ?? 0) + (i === 0 || i === w.nodes.length - 1 ? 1 : 2)));
@@ -758,6 +761,7 @@ function rings(r: OsmRelation, ways: Map<number, OsmWay>, path: (w: OsmWay) => V
 /** deck height above the ground (m): the usual flyover height per layer, a tall river bridge for Cầu Long Biên */
 function bridgeDeckHeight(name: string | undefined, layer: number): number {
   if (name && /cầu long biên/i.test(name)) return 9.5;
+  if (name && /^cầu nhật tân/i.test(name)) return 15;   // a high cable-stayed deck over the river
   void layer;   // OSM layer 2 only means "over another bridge"; every flyover keeps the usual 6 m deck as before
   return DECK_H;
 }
@@ -801,12 +805,13 @@ function solveBridgeProfiles(streets: Street[], pieces: { s: Street; H: number; 
   for (const { s, H } of kept) { const c = find(key(s.path[0]!)); total.set(c, (total.get(c) ?? 0) + polylineLength(s.path)); top.set(c, Math.max(top.get(c) ?? 0, H)); }
   const slopeOf = (p: Vec2) => { const c = find(key(p)); return Math.max(RAMP_SLOPE, (3 * (top.get(c) ?? 0)) / (total.get(c) || 1)); };
   const dist = new Map<string, number>();
-  for (const k of cap.keys()) dist.set(k, ground.has(k) || (count.get(k) ?? 0) < 2 ? 0 : Infinity);
-  // a piece cut by the area edge keeps its deck height at the cut
+  // a piece cut by the area edge keeps its deck height at the cut (the bridge goes on beyond the map)
+  const cutEnds = new Map<string, number>();
   for (const { s, H, startCut, endCut } of kept) {
-    if (startCut) dist.set(key(s.path[0]!), Math.min(dist.get(key(s.path[0]!))!, H / slopeOf(s.path[0]!)));
-    if (endCut) dist.set(key(s.path[s.path.length - 1]!), Math.min(dist.get(key(s.path[s.path.length - 1]!))!, H / slopeOf(s.path[s.path.length - 1]!)));
+    if (startCut) cutEnds.set(key(s.path[0]!), H / slopeOf(s.path[0]!));
+    if (endCut) cutEnds.set(key(s.path[s.path.length - 1]!), H / slopeOf(s.path[s.path.length - 1]!));
   }
+  for (const k of cap.keys()) dist.set(k, cutEnds.get(k) ?? (ground.has(k) || (count.get(k) ?? 0) < 2 ? 0 : Infinity));
   for (let changed = true, guard = 0; changed && guard < 500; guard++) {
     changed = false;
     for (const { s } of kept) {
