@@ -61,6 +61,14 @@ Mẫu để thêm case mới ở cuối file. Một sự cố chỉ được coi
 - **Cách đo lại** (không cần trình duyệt): trong một file `*.test.ts` tạm, dùng `node:inspector` `Profiler.start/stop` quanh `streetFurniture(city)` và `buildMapBaseLayers(city)`, cộng thời gian tự thân theo hàm; xoá file sau khi đo.
 - **Còn lại**: ~2,4 s vẫn chạy đồng bộ trên luồng chính; muốn mượt hẳn cần Web Worker (dựng nền + furniture); mạng: skeleton 4,9 MB (0,9 MB nén) + 4 chunk.
 
+## CS-08 · Lỗi chép nhầm nằm trong hàm quá dài (2026-10-26)
+- **Triệu chứng**: không có triệu chứng thấy được; điểm đặc trưng (feature) quanh chunk mới tải gần như không bao giờ vào thành phố con dùng để dựng đồ phố và ô đường.
+- **Nguyên nhân gốc**: trong `ingestCityChunk` (186 dòng) bốn bộ lọc "gần chunk" được chép dán; bộ lọc `features` có `f.at[1] >= cy1 + 64` thay vì `<=`, nên chỉ giữ điểm nằm *phía nam* chunk.
+- **Vì sao tồn tại**: hàm lớn, không test, bốn bộ lọc giống nhau viết tay. Lỗi chỉ lộ ra khi tách hàm thuần ra và viết test cho từng cạnh.
+- **Sửa**: `chunkSubCity` dùng **một** hàm `within(x, y, margin)` cho cả bốn bộ lọc; test kiểm cả bốn phía.
+- **Luật**: A26 (bộ lọc/tính toán lặp lại dùng một hàm chung, không chép dán) và lợi ích phụ của việc tách hàm: tách phần thuần ra *để viết test*, không chỉ để giảm dòng.
+- **Rào chắn**: `view/chunkMerge.test.ts`.
+
 ---
 
 ## Mẫu case mới

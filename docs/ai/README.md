@@ -28,7 +28,7 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 2. [../plan/roadmap.md](../plan/roadmap.md): mục tiêu và DoD của bước hiện tại.
 3. [../architecture/decisions.md](../architecture/decisions.md): đã chốt gì (ADR-032 trở đi; ADR-001…031 ở `apps/svg/docs/architecture/decisions.md`). **Không làm ngược ADR đã chốt** khi chưa hỏi người dùng.
 4. [conventions.md](conventions.md) và [workflow.md](workflow.md).
-5. **[case-studies](../architecture/case-studies.md)**: các sự cố đã gặp, nguyên nhân gốc và luật A17–A25. Đọc trước khi sửa dữ liệu bản đồ, công trình, cầu.
+5. **[case-studies](../architecture/case-studies.md)**: các sự cố đã gặp, nguyên nhân gốc và luật A17–A26. Đọc trước khi sửa dữ liệu bản đồ, công trình, cầu.
 6. Khi đụng tới dữ liệu: [city-model](../architecture/city-model.md), [osm-import](../architecture/osm-import.md), [house-spec](../architecture/house-spec.md). Bộ phận nhà của app cũ (`apps/svg/docs/architecture/components.md`) là cơ sở cho nhà 3D ở M4.
 7. `.claude/skills/iso-glow/SKILL.md`: luật thẩm mỹ; phần **3D mode** là nguồn tham khảo cho app mới. Chỉ dùng làm tham khảo; không nhúng template vào app.
 
@@ -61,6 +61,7 @@ File này dành cho trợ lý AI (Claude Code) làm việc trên dự án. Root 
 | A23 | **Công trình tuyến (cầu, đường, đê) dựng theo đường OSM**, không theo hộp xoay thẳng. Xem CS-05. |
 | A24 | **Mọi lỗi vị trí/hình học phải có rào chắn**: một test chạy trên dữ liệu thật (không WebGL) và một ảnh mặt bằng SVG tự kiểm (`qlmanage -t`, không trình duyệt tự động, A7) trước khi nhờ người dùng xem. Một sự cố chỉ xong khi có case study ([case-studies](../architecture/case-studies.md)) và luật. |
 | A25 | **Đo bằng profiler trước khi tối ưu hiệu năng**: không đoán điểm nghẽn. Ghi số trước/sau vào case study. Thuật toán chạy trên toàn bộ dữ liệu phải không quá tuyến tính theo số phần tử (dùng lưới ô / bbox, không duyệt mọi cặp). Xem CS-07. |
+| A26 | **Không chép dán điều kiện hay công thức**: các bộ lọc, phép tính giống nhau dùng một hàm chung (một lỗi dấu trong bản chép ẩn nhiều tháng, CS-08). Hàm quá dài thì tách phần thuần ra và viết test từng cạnh. |
 
 ## 4. Lệnh (ở thư mục gốc)
 

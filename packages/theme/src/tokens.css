@@ -7,6 +7,8 @@
   --ink:#868b8f; --ink-hi:#e6e8e9; --live:#f4f5f5;
   --glass:#0f1011; --glass-on:#1a1410; --recess:#0e0f10;
   --accent:#ff9a2e; --accent-hi:#ffc77a; --accent-dim:rgba(255,154,46,.10);
+  /* the accent as TEXT: the bright accent on dark, a darkened one on light (bright yellow on near-white is unreadable) */
+  --accent-ink:var(--accent-hi);
   --mono:"DM Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
   --surf-ground:var(--body); --surf-wall:var(--body); --surf-roof:var(--deck);
   --surf-glass:var(--glass); --surf-road:var(--recess); --surf-walk:var(--deck);
@@ -24,6 +26,7 @@
   --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
   --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
   --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+  --accent-ink:color-mix(in srgb, var(--accent) 48%, #000);
 } }
 :root[data-theme="light"] {
   color-scheme: light;
@@ -31,6 +34,7 @@
   --line:#8e9397; --detail:#c3c6c8; --body:#ececeb; --deck:#f3f3f2;
   --ink:#6a6f73; --ink-hi:#16181a; --live:#0c0d0e;
   --glass:#dcdede; --glass-on:#f3e6da; --recess:#e2e4e4;
+  --accent-ink:color-mix(in srgb, var(--accent) 48%, #000);
 }
 
 /* ---------- Map Color Palettes (ADR-056: 0 = Mono default, 1 / 2 / 3 = Distinct Tonal Palettes) ---------- */

@@ -60,7 +60,14 @@ export class OverlayLabels {
 
   /** create the three layers inside the view's host element */
   mount(host: HTMLElement) {
-    const layer = (cls: string) => { const d = document.createElement('div'); d.className = cls; host.appendChild(d); return d; };
+    // the layers sit above the canvas, so the wheel over a label would never reach the map controls: pass it on
+    const toCanvas = (e: WheelEvent) => {
+      const canvas = host.querySelector('canvas');
+      if (!canvas) return;
+      e.preventDefault();
+      canvas.dispatchEvent(new WheelEvent('wheel', { deltaX: e.deltaX, deltaY: e.deltaY, deltaZ: e.deltaZ, deltaMode: e.deltaMode, clientX: e.clientX, clientY: e.clientY, ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey, bubbles: true, cancelable: true }));
+    };
+    const layer = (cls: string) => { const d = document.createElement('div'); d.className = cls; d.addEventListener('wheel', toCanvas, { passive: false }); host.appendChild(d); return d; };
     this.labelLayer = layer('street-labels');
     this.labelNodes.clear(); this.labelItems.clear(); this.labelSig = '';
     this.placeLayer = layer('place-labels');

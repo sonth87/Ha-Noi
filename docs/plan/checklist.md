@@ -104,7 +104,9 @@ Quy ước: `[ ]` chưa làm · `[~]` đang làm · `[x]` xong. Cập nhật fil
 - [x] Dọn nốt: Web Worker (có đường lùi), cầu Nhật Tân theo đường, vùng hành lang Đông Anh, đoạn cầu cắt ở rìa vùng, viền Hà Nội theo phường thật, chốt chặn kích thước `CityView` (ADR-058 mục 9)
 - [x] Tách `CityView.ts` bước 1–2: `OverlayLabels`, `createCitySDK` (3.913 → 3.386 dòng)
 - [ ] Người dùng xem trên dev server: nhãn phố / địa điểm / phường, bấm nhãn bay tới, đổi ngôn ngữ, `window.MyCitySDK`
-- [ ] Tách `CityView.ts` bước 3+: chunk + cache ô, `mount()` (city3d.md §8)
+- [x] Góp ý UI: tên phường / thành phố rõ hơn, bỏ khung vàng nền trắng, cuộn chuột trên nhãn vẫn zoom bản đồ, chữ màu nhấn đọc được trên theme sáng (`--accent-ink`, test tương phản) → ADR-058 mục 10
+- [x] Tách `CityView.ts` bước 3: `chunkMerge.ts` (sửa lỗi lọc feature, CS-08)
+- [ ] Tách `CityView.ts` bước 4+: chunk + cache ô, `mount()` (city3d.md §8)
 - [ ] Người dùng xem lại ADR-058 trên tablet: hết `RangeError`, đường Nguyễn Văn Cừ ven bờ Đông, Cầu Long Biên đúng trục và đủ nhịp, cụm Ngọc Sơn đúng chỗ, mức giật khi zoom
 
 ## Backlog

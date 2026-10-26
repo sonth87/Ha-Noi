@@ -36,9 +36,9 @@ describe('no absolute map coordinates in drawing code', () => {
 });
 
 describe('CityView does not grow', () => {
-  /** A ratchet: CityView.ts is 3.4 k lines (3.9 k before the overlays and the SDK moved out) and `mount()` alone 600. New code goes into its own module (see
+  /** A ratchet: CityView.ts is 3.35 k lines (3.9 k before the overlays, the SDK and the chunk merge moved out) and `mount()` alone 600. New code goes into its own module (see
       the seams in docs/architecture/city3d.md §8). Lower this number whenever a piece is moved out. */
-  const MAX_LINES = 3400;
+  const MAX_LINES = 3360;
   it(`CityView.ts stays under ${MAX_LINES} lines`, () => {
     const lines = readFileSync(join(ROOT, 'view/CityView.ts'), 'utf8').split('\n').length;
     expect(lines).toBeLessThanOrEqual(MAX_LINES);

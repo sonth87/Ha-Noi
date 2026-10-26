@@ -25,7 +25,7 @@ import { LineSegments2 } from 'three/addons/lines/LineSegments2.js';
 import { LineSegmentsGeometry } from 'three/addons/lines/LineSegmentsGeometry.js';
 import {
   METRO, buildingHeight, centroid, metroTracks, roadNetwork, signalsAt, spawnTraffic, stepTraffic, streetFurniture, trafficLanes, trainAt, trainCount,
-  type Building, type City, type Lane, type Signals, type Street, type Track, type TrainPhase, type Vehicle, type VehicleKind,
+  type City, type Lane, type Signals, type Street, type Track, type TrainPhase, type Vehicle, type VehicleKind,
 } from '@my-city/core';
 import { Batch, type Surface } from '@render/batch';
 import {
@@ -63,6 +63,7 @@ import {
 import { PovController, type DriveControlKey } from './povController';
 import type { PrebuiltBase } from './prebuild';
 import { OverlayLabels } from './overlayLabels';
+import { chunkBounds, chunkSubCity, mergeChunk } from './chunkMerge';
 import { FAR, detailFor, farness, isMobileDevice, loadQuality, lowerLevel, saveQuality, type Quality } from './quality';
 import { CityEventBus, createCitySDK, type CityExtension, type CitySDK, type PopupActionDescriptor } from './sdk';
 import { buildBuildingBoundsIndex, computeForegroundCut, type BldgBounds } from './seeThrough';
@@ -2302,18 +2303,11 @@ export class CityView {
   ingestCityChunk(chunkKey: string, chunkCity: City) {
     this.loadedChunks.add(chunkKey);
     this.loadingChunks.delete(chunkKey);
-    const [cx, cy] = chunkKey.split(',').map(Number) as [number, number];
-    const cx0 = cx * 1024, cx1 = (cx + 1) * 1024;
-    const cy0 = cy * 1024, cy1 = (cy + 1) * 1024;
+    const { x0: cx0, x1: cx1, y0: cy0, y1: cy1 } = chunkBounds(chunkKey);
+    const { newBuildings, newStreets, newFeatures } = mergeChunk(this.city, chunkCity, { buildings: this.buildingIdSet, streets: this.streetIdSet, features: this.featureIdSet });
 
-    const newBuildings: Building[] = [];
     const dirtyTiles = new Set<TileState>();
-    for (const b of chunkCity.buildings) {
-      if (this.buildingIdSet.has(b.id)) continue;
-      this.buildingIdSet.add(b.id);
-      this.city.buildings.push(b);
-      newBuildings.push(b);
-
+    for (const b of newBuildings) {
       const c = centroid(b.footprint);
       const ti = Math.floor(c[0] / TILE), tj = Math.floor(c[1] / TILE);
       const tk = `${ti},${tj}`;
@@ -2369,43 +2363,8 @@ export class CityView {
       this.bldgBounds.splice(0, this.bldgBounds.length, ...buildBuildingBoundsIndex(this.tiles));
     }
 
-    const newStreets: Street[] = [];
-    for (const s of chunkCity.streets) {
-      if (this.streetIdSet.has(s.id)) continue;
-      this.streetIdSet.add(s.id);
-      this.city.streets.push(s);
-      newStreets.push(s);
-    }
-
-    let addedFeatures = 0;
-    for (const f of chunkCity.features) {
-      if (this.featureIdSet.has(f.id)) continue;
-      this.featureIdSet.add(f.id);
-      this.city.features.push(f);
-      addedFeatures++;
-    }
-
-    if (newBuildings.length > 0 || newStreets.length > 0 || addedFeatures > 0) {
-      const localStreets = this.city.streets.filter(s =>
-        s.path.some(p => p[0] >= cx0 - 96 && p[0] <= cx1 + 96 && p[1] >= cy0 - 96 && p[1] <= cy1 + 96),
-      );
-      const localBuildings = this.city.buildings.filter(b => {
-        const p = b.footprint[0];
-        return p !== undefined && p[0] >= cx0 - 64 && p[0] <= cx1 + 64 && p[1] >= cy0 - 64 && p[1] <= cy1 + 64;
-      });
-      const localFeatures = this.city.features.filter(
-        f => f.at[0] >= cx0 - 64 && f.at[0] <= cx1 + 64 && f.at[1] >= cy0 - 64 && f.at[1] >= cy1 + 64,
-      );
-      const localAreas = this.city.areas.filter(a =>
-        a.polygon.some(p => p[0] >= cx0 - 128 && p[0] <= cx1 + 128 && p[1] >= cy0 - 128 && p[1] <= cy1 + 128),
-      );
-      const subCity: City = {
-        ...this.city,
-        streets: localStreets,
-        buildings: localBuildings,
-        features: localFeatures,
-        areas: localAreas,
-      };
+    if (newBuildings.length > 0 || newStreets.length > 0 || newFeatures.length > 0) {
+      const subCity = chunkSubCity(this.city, chunkKey);
 
       const chunkLocalTiles = localStreetTilesOf(subCity);
       for (const lt of chunkLocalTiles) {
